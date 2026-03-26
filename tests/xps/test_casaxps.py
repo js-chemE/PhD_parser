@@ -1,11 +1,9 @@
 import pytest
-from parser.xrd.xrd_e1290 import read_xy_e1290
-from parser.xrd.xrd import XRD
 import numpy as np
 import numpy.typing as npt
 import os
 
-from parser.xps.casaxps import read_export, extract_lines, split_lines, parse_metadata_lines, parse_data_lines
+from phd_parser.xps.casaxps import read_export, extract_lines, split_lines, parse_metadata_lines, parse_data_lines
 
 MOCK_FILE_PATH = os.path.join(os.path.dirname(__file__), "casaxps_export_single.txt")
 MOCK_FILE_PATH_DOUBLE = os.path.join(os.path.dirname(__file__), "casaxps_export_double.txt")
@@ -35,6 +33,7 @@ def test_parse_metadata():
     for key in KNOWN_METADATA_KEYS:
         assert key in metadata, f"Metadata should contain '{key}' key"
 
+
 def test_parse_data_lines():
     lines = extract_lines(MOCK_FILE_PATH)
     _, cols, data = split_lines(lines)
@@ -48,17 +47,17 @@ def test_parse_data_lines():
 def test_read_export():
     xps = read_export(MOCK_FILE_PATH)
 
-    assert "metadata" in xps, "Output should contain 'metadata' key"
+    assert "meta" in xps, "Output should contain 'meta' key"
     assert "kinetic energy" in xps, "Output should contain 'kinetic energy' key"
     assert "binding energy" in xps, "Output should contain 'binding energy' key"
 
-    metadata = xps["metadata"]
+    metadata = xps["meta"]
     ke_df = xps["kinetic energy"]
     be_df = xps["binding energy"]
 
     assert isinstance(metadata, dict), "Metadata should be a dictionary"
     assert len(metadata) > 0, "Metadata should not be empty"
     for key in KNOWN_METADATA_KEYS:
-        assert key in metadata, f"Metadata should contain '{key}' key"
+        assert key in metadata, f"Metadata should contain '{key}' key, but it is missing"
     assert not ke_df.empty, "Kinetic energy DataFrame should not be empty"
     assert not be_df.empty, "Binding energy DataFrame should not be empty"

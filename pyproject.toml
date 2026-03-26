@@ -12,6 +12,8 @@ dependencies = [
     "pandas>=3.0.1",
     "pyarrow>=23.0.1",
     "pydantic>=2.12.5",
+    "pytest>=9.0.2",
+    "ramanspy>=0.2.10",
     "scipy>=1.17.1",
 ]
 

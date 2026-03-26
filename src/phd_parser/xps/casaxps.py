@@ -8,8 +8,11 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 def _convert_value(value: str) -> Any:
+    """Convert string to int/float if possible, otherwise return string."""
     try:
-        return float(value)
+        if "." in value or "e" in value.lower():
+            return float(value)
+        return int(value)
     except ValueError:
         return value
     
@@ -62,13 +65,11 @@ def split_lines(
     return metadata_lines, column_line, data_lines
 
 def parse_metadata_lines(lines: List[str]) -> Dict[str, Any]:
-
     metadata: Dict[str, Any] = {}
     info_counter = 0
 
     for line in lines:
         stripped = line.strip()
-
         if not stripped:
             continue
 
@@ -76,27 +77,49 @@ def parse_metadata_lines(lines: List[str]) -> Dict[str, Any]:
 
         # --- free text ---
         if len(parts) == 1:
-            metadata[f"info_{info_counter}"] = [parts[0]]
+            metadata[f"info_{info_counter}"] = parts[0]
             info_counter += 1
             continue
 
-        # --- key + values ---
+        # --- detect alternating key-value pairs (multi-key line) ---
+        if len(parts) > 2 and all(i % 2 == 0 for i in range(len(parts))):
+            # fallback safety (unlikely case)
+            pass
+
+        # better detection: alternating key-value pattern
+        if len(parts) >= 4:
+            is_alternating = True
+            for i in range(1, len(parts), 2):
+                # values should be convertible OR strings
+                _ = _convert_value(parts[i])
+            if is_alternating:
+                for i in range(0, len(parts) - 1, 2):
+                    key = parts[i]
+                    value = _convert_value(parts[i + 1])
+                    metadata.setdefault(key, []).append(value)
+                continue
+
+        # --- normal key + values ---
         key = parts[0]
         values = [_convert_value(v) for v in parts[1:]]
 
-        # --- always accumulate as list ---
-        if key in metadata:
-            metadata[key].extend(values)
-        else:
-            metadata[key] = values
+        metadata.setdefault(key, []).extend(values)
 
-    # --- determine peak count STRICTLY from Name ---
-    peak_count: int | None = None
+    # --- determine peak count from Name ---
+    peak_count = len(metadata["Name"]) if "Name" in metadata else None
 
-    if "Name" in metadata:
-        peak_count = len(metadata["Name"])
-    else:
-        peak_count = None
+    # --- build structured peaks ---
+    peaks = []
+    if peak_count:
+        for i in range(peak_count):
+            peak = {}
+            for key, values in metadata.items():
+                if isinstance(values, list) and len(values) == peak_count:
+                    peak[key] = values[i]
+            peaks.append(peak)
+
+    if peaks:
+        metadata["peaks"] = peaks
 
     # --- assign type ---
     if peak_count == 1:
@@ -107,10 +130,6 @@ def parse_metadata_lines(lines: List[str]) -> Dict[str, Any]:
         metadata["type"] = "triplet"
     else:
         metadata["type"] = "unknown"
-        if peak_count is not None:
-            logger.warning(f"Unsupported number of peaks: {peak_count}")
-        else:
-            logger.warning("Could not determine peak count (missing 'Name')")
 
     return metadata
 
@@ -214,7 +233,7 @@ def read_export(file_path: str | Path) -> Dict[str, Any]:
             ke_df = df
 
     return {
-        "metadata": metadata,
+        "meta": metadata,
         "kinetic energy": ke_df,
         "binding energy": be_df,
     }
