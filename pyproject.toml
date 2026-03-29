@@ -1,5 +1,5 @@
 [project]
-name = "phd-parser"
+name = "phd_parser"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
