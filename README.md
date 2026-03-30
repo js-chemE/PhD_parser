@@ -6,6 +6,10 @@ Helper functions to read and process data from different equipment.
 
 ...
 
+## Setup specific
+
+### Labview
+
 ## Included Equipment
 
 ### Raman
@@ -27,3 +31,8 @@ Helper functions to read and process data from different equipment.
 ### Infrared
 
 ...
+
+### MS
+
+#### Quadstar
+
