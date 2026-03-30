@@ -2,6 +2,7 @@ from pydantic import BaseModel, Field, ConfigDict, model_validator
 
 import numpy as np
 import numpy.typing as npt
+from pathlib import Path
 
 
 class XRD(BaseModel):
@@ -33,8 +34,9 @@ class XRD(BaseModel):
     # Reading in
     # ----------------------------------------------------------------------
     @classmethod
-    def from_e1290(cls, path: str) -> 'XRD':
+    def from_e1290(cls, path: str | Path) -> 'XRD':
         from phd_parser.xrd.xrd_e1290 import read_xy_e1290
+        path = Path(path)
         xrd_data = read_xy_e1290(path)
         xrd = cls(
             angle=xrd_data[0],

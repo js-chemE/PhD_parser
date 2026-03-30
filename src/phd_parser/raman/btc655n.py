@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Tuple, Dict, Any, List, Optional
+from typing import Tuple, Dict, Any, List, Optional, Literal
 import pandas as pd
 
 import logging
@@ -17,6 +17,8 @@ def _convert_value(value: str) -> Any:
 ACCEPTED_FILE_EXTENSIONS = {".txt"}
 COLUME_LINE_START_TOKEN = "Pixel"
 
+X_KEYS = Literal["Pixel", "Wavelength", "Wavenumber", "Raman Shift"]
+Y_KEYS = Literal["Dark", "Reference", "Raw data #1", "Dark Subtracted #1", "%TR #1", "Absorbance #1", "Irradiance (lumen) #1"]
 
 def extract_lines(file_path: str | Path) -> List[str]:
     """
