@@ -34,5 +34,4 @@ Helper functions to read and process data from different equipment.
 
 ### MS
 
-#### Quadstar
-
+#### Quadstar for MS in building 67 - Box 5

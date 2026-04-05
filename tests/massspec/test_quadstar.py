@@ -1,4 +1,3 @@
-import numpy.typing as npt
 import os
 
 from phd_parser.massspec.quadstar import extract_lines, split_lines, parse_metadata_lines, parse_data_lines, read_export

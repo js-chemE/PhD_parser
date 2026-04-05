@@ -2,12 +2,17 @@ from pathlib import Path
 import os
 import contextlib
 
+import logging
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
+
 with open(os.devnull, 'w') as fnull:
     with contextlib.redirect_stdout(fnull), contextlib.redirect_stderr(fnull):
         #import spectrochempy as spcp
         pass
 
-import logging
+
 
 # logger = logging.getLogger(__name__)
 # logger.setLevel(logging.DEBUG)

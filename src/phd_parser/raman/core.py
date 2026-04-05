@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 import pandas as pd
 import numpy as np
 import numpy.typing as npt
@@ -10,10 +10,11 @@ from phd_parser.raman import btc655n
 from typing import Any, Dict, Optional, Literal
 
 class RamanData(BaseModel):
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(
+        arbitrary_types_allowed = True,
         validate_assignment = True
-
+    )
+    
     wavelength_nm: Optional[npt.NDArray] = Field(default=None, description="Wavelength in nanometers")
     wavelength_nm_excitation: Optional[float | int | np.floating | np.integer] = Field(default=None, description="Excitation wavelength in nanometers")
     values: Optional[npt.NDArray] = Field(default=None, description="Raman intensity values")
