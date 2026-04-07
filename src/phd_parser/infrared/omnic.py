@@ -49,12 +49,57 @@ def _read_text(fid: io.BufferedReader, pos: int, size: int) -> str:
     raw = re.sub(b"\x00+", b"\n", raw)
     return raw.decode("latin-1", errors="ignore").strip()
 
+# =========================
+# File Name Processing
+# =========================
 
+def extract_spectrum_id(path: Union[str, Path]) -> Optional[int]:
+    for extractor in [extract_spectrum_id_1]:
+        try:
+            return extractor(path)
+        except Exception as e:
+            logger.warning(f"Failed to extract spectra ID from {path} using {extractor.__name__}: {e}")
+    return None
+
+def extract_spectrum_id_1(path: Union[str, Path]) -> int:
+    name = Path(path).stem
+
+    m = re.search(r"Spectrum Index (\d+)", name)
+    if m:
+        return int(m.group(1))
+
+    return 0
+
+def extract_spectrum_tos(path: Union[str, Path]) -> Optional[int]:
+    for extractor in [extract_spectrum_tos_1]:
+        try:
+            return extractor(path)
+        except Exception as e:
+            logger.warning(f"Failed to extract spectra ID from {path} using {extractor.__name__}: {e}")
+    return None
+
+def extract_spectrum_tos_1(path: Union[str, Path]) -> int:
+    name = Path(path).stem
+    
+    # Match e.g. "2,46 Hours" or "2.46 Hours"
+    m = re.search(r"at\s+([\d.,]+)\s*Hours", name)
+    
+    if m:
+        hours_str = m.group(1).replace(",", ".")  # normalize decimal separator
+        hours = float(hours_str)
+        seconds = int(hours * 3600)
+        return seconds
+    
+    return 0
 # =========================
 # Core SPA reader
 # =========================
 
 def _read_spa_single(path: Union[str, Path]) -> Dict[str, Any]:
+
+    spectrum_id = extract_spectrum_id(path)
+    spectrum_tos = extract_spectrum_tos(path)
+
     with _open_file(path) as fid:
 
         # ---- name ----
@@ -98,11 +143,13 @@ def _read_spa_single(path: Union[str, Path]) -> Dict[str, Any]:
             "name": name,
             "path": str(path),
             "datetime": date,
+            "id": spectrum_id,
+            "tos": spectrum_tos,
             "x": x,
-            "y": intensities,
+            "v": intensities,
             "units": header["units"],
             "xlabel": header["xtitle"],
-            "ylabel": header["title"],
+            "vlabel": header["title"],
         }
 
 
@@ -168,19 +215,38 @@ def _read_intensities(fid: io.BufferedReader, pos: int) -> np.ndarray:
 # =========================
 # Public API
 # =========================
+def smooth_steps(arr):
+    arr = np.asarray(arr, dtype=float)
+    n = len(arr)
 
-def default_sort_key(path: Union[str, Path]) -> int:
-    name = Path(path).stem
+    # Find indices where value changes
+    change_idx = np.where(np.diff(arr) != 0)[0] + 1
 
-    m = re.search(r"Spectrum Index (\d+)", name)
-    if m:
-        return int(m.group(1))
+    # Add boundaries
+    idx = np.concatenate(([0], change_idx, [n]))
 
-    return 0  # fallback
+    result = arr.copy()
+
+    # Process each segment pair
+    for i in range(len(idx) - 2):
+        start = idx[i]
+        mid = idx[i+1]
+        end = idx[i+2]
+
+        y0 = arr[start]
+        y1 = arr[mid]
+
+        length = mid - start
+
+        # Replace flat segment with linear ramp
+        if length > 0:
+            result[start:mid] = np.linspace(y0, y1, length, endpoint=False)
+
+    return result
 
 def read_spa(
     paths: Union[str, Path, Iterable[Union[str, Path]]],
-    sort_key: Optional[Callable[[Union[str, Path]], float]] = default_sort_key,
+    sort_key: Optional[Callable[[Union[str, Path]], float]] = extract_spectrum_id,
 ) -> Dict[str, Any]:
 
     # ---- normalize ----
@@ -195,7 +261,7 @@ def read_spa(
             meta = {
                 "units": r["units"],
                 "xlabel": r["xlabel"],
-                "ylabel": r["ylabel"],
+                "vlabel": r["vlabel"],
                 "n_points": len(r["x"]),
                 "min_x": float(r["x"][0]),
                 "max_x": float(r["x"][-1]),
@@ -207,7 +273,7 @@ def read_spa(
             return {
                 "data": {
                     "x": r["x"],
-                    "y": r["y"], #.reshape(1, -1),
+                    "v": r["v"], #.reshape(1, -1),
                 },
                 "meta": meta,
             }
@@ -232,14 +298,15 @@ def read_spa(
             raise ValueError("X axes do not match between spectra")
 
     # ---- stack ----
-    y = np.vstack([r["y"] for r in results])
+    v = np.vstack([r["v"] for r in results])
+    tos = np.array([r["tos"] for r in results]) if "tos" in results[0] else None
 
     # ---- meta ----
     r0 = results[0]
     meta = {
         "units": r0["units"],
         "xlabel": r0["xlabel"],
-        "ylabel": r0["ylabel"],
+        "vlabel": r0["vlabel"],
         "n_points": len(x),
         "min_x": float(x[0]),
         "max_x": float(x[-1]),
@@ -251,7 +318,8 @@ def read_spa(
     return {
         "data": {
             "x": x,
-            "y": y,
+            "tos": smooth_steps(tos) if tos is not None else None,
+            "v": v,
         },
         "meta": meta,
     }
