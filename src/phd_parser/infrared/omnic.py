@@ -4,6 +4,7 @@ import struct
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
 from typing import Union, Iterable, Tuple, Dict, Any, Callable, Optional
+import pandas as pd
 
 from venv import logger
 
@@ -215,38 +216,11 @@ def _read_intensities(fid: io.BufferedReader, pos: int) -> np.ndarray:
 # =========================
 # Public API
 # =========================
-def smooth_steps(arr):
-    arr = np.asarray(arr, dtype=float)
-    n = len(arr)
-
-    # Find indices where value changes
-    change_idx = np.where(np.diff(arr) != 0)[0] + 1
-
-    # Add boundaries
-    idx = np.concatenate(([0], change_idx, [n]))
-
-    result = arr.copy()
-
-    # Process each segment pair
-    for i in range(len(idx) - 2):
-        start = idx[i]
-        mid = idx[i+1]
-        end = idx[i+2]
-
-        y0 = arr[start]
-        y1 = arr[mid]
-
-        length = mid - start
-
-        # Replace flat segment with linear ramp
-        if length > 0:
-            result[start:mid] = np.linspace(y0, y1, length, endpoint=False)
-
-    return result
 
 def read_spa(
     paths: Union[str, Path, Iterable[Union[str, Path]]],
     sort_key: Optional[Callable[[Union[str, Path]], float]] = extract_spectrum_id,
+    delta_time_seconds: Optional[float] = None
 ) -> Dict[str, Any]:
 
     # ---- normalize ----
@@ -287,6 +261,7 @@ def read_spa(
 
     # ---- read ----
     results = [_read_spa_single(f) for f in files]
+    r0 = results[0]
 
     # ---- x axis ----
     x = results[0]["x"]
@@ -299,10 +274,19 @@ def read_spa(
 
     # ---- stack ----
     v = np.vstack([r["v"] for r in results])
-    tos = np.array([r["tos"] for r in results]) if "tos" in results[0] else None
+
+    if delta_time_seconds is not None:
+        tos = np.arange(v.shape[0]) * delta_time_seconds
+    else:
+        try:
+            tos = np.asarray([
+                pd.to_timedelta(r["datetime"]- r0["datetime"]).total_seconds() for r in results
+            ])
+        except Exception as e:
+            logger.error(f"Error calculating time offsets: {e}")
+            tos = None
 
     # ---- meta ----
-    r0 = results[0]
     meta = {
         "units": r0["units"],
         "xlabel": r0["xlabel"],
@@ -318,7 +302,7 @@ def read_spa(
     return {
         "data": {
             "x": x,
-            "tos": smooth_steps(tos) if tos is not None else None,
+            "tos": tos if tos is not None else None,
             "v": v,
         },
         "meta": meta,
