@@ -1,11 +1,10 @@
 from pathlib import Path
-
+from phd_parser.raman import btc655n, renishaw
 from pydantic import BaseModel, ConfigDict, Field
 import pandas as pd
 import numpy as np
 import numpy.typing as npt
 import ramanspy as rp
-from phd_parser.raman import btc655n
 
 from typing import Any, Dict, Optional, Literal
 
@@ -69,4 +68,22 @@ class RamanData(BaseModel):
         return raman
     
 
+    @classmethod
+    def from_renishaw_export(cls, filepath: str | Path, export_type: Literal["txt"] = "txt", excitation_wavelength_nm: float | int | np.floating | np.integer = None) -> "RamanData":
+
+        if export_type != "txt":
+            raise ValueError(f"Unsupported export type '{export_type}'. Currently only 'txt' is supported for Renishaw exports.")
+        
+        if excitation_wavelength_nm is None:
+            raise ValueError("Excitation wavelength must be provided for Renishaw exports.")
     
+        # Read the data using renishaw module
+        raw_data = renishaw.read_export(filepath)
+
+        raman = cls(
+            wavelength_nm=np.asarray(raw_data["data"]["wavelength"]),
+            wavelength_nm_excitation=excitation_wavelength_nm,
+            values=np.asarray(raw_data["data"]["intensity"]),
+            meta=raw_data["meta"])
+        
+        return raman

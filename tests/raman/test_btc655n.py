@@ -3,7 +3,7 @@ import os
 
 from phd_parser.raman.btc655n import extract_lines, split_lines, parse_metadata_lines, parse_data_lines, read_export
 
-MOCK_FILE_PATH = os.path.join(os.path.dirname(__file__), "test_nat_090.txt")
+MOCK_FILE_PATH = os.path.join(os.path.dirname(__file__), r"btc655n/test_nat_090.txt")
 
 def test_extract_lines():
     lines = extract_lines(MOCK_FILE_PATH)
