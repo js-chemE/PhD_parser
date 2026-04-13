@@ -91,6 +91,7 @@ def parse_metadata_lines(lines: List[str]) -> Dict[str, Any]:
 def parse_data_lines(
     data_lines: List[str],
     header_line: Optional[str] = None,
+    remove_empty: bool = True,
 ) -> pd.DataFrame:
 
     # --- header ---
@@ -104,19 +105,24 @@ def parse_data_lines(
 
     # --- rows ---
     rows = [
-        [cell.strip() for cell in line.strip().split(";") if cell.strip()]
+        [cell.strip() if cell.strip() else None for cell in line.strip().split(";")][:-1] # drop last empty column
         for line in data_lines
         if line.strip()
     ]
+    print(rows[:5])
 
     df = pd.DataFrame(rows, columns=columns)
 
     # --- numeric conversion ---
     df = df.apply(pd.to_numeric, errors="coerce")
 
+    if remove_empty:
+        df.dropna(how="all", subset=["Wavelength"], inplace=True)
+        df.reset_index(drop=True, inplace=True)
+
     return df
 
-def read_export(file_path: str | Path) -> Dict[str, Any]:
+def read_export(file_path: str | Path, remove_empty: bool = True) -> Dict[str, Any]:
 
     path = Path(file_path)
 
@@ -131,7 +137,7 @@ def read_export(file_path: str | Path) -> Dict[str, Any]:
     # --- parse ---
     metadata = parse_metadata_lines(metadata_lines)
     metadata["filename"] = path.name
-    parsed = parse_data_lines(data_lines, header_line)
+    parsed = parse_data_lines(data_lines, header_line, remove_empty=remove_empty)
 
     return {
         "meta": metadata,

@@ -1,4 +1,4 @@
-from phd_parser.tga.tga_e2290 import read_tga_e2290
-from phd_parser.tga.tga import TGA
+import phd_parser.tga.e2290 as e2290
+from phd_parser.tga.core import TGAData
 
-__all__ = ["TGA", "read_tga_e2290"]
+__all__ = ["TGAData", "e2290"]

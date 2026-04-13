@@ -1,25 +1,37 @@
+from pathlib import Path
+
 from pydantic import BaseModel, ConfigDict, Field
 import numpy as np
 import numpy.typing as npt
+import logging
 
-from typing import Union
+from typing import Optional, Union
 
-class TGA(BaseModel):
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
+class TGAData(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
-    temperature: npt.NDArray[np.float64]
-    mass: npt.NDArray[np.float64]
+    temperature: npt.NDArray[np.float64] = Field(
+        default_factory=lambda: np.array([]), description="Temperature data from TGA measurement"
+    )
+    mass: npt.NDArray[np.float64] = Field(
+        default_factory=lambda: np.array([]), description="Mass data from TGA measurement"
+    )
+
     mass_init: float | int | None = Field(
-        default=None,
+        default=None, description="Initial mass of the sample, used for calculating mass fraction"
     )
-    baseline: Union["TGA", None] = Field(
-        default=None,
+    baseline: Union["TGAData", None] = Field(
+        default=None, description="Baseline TGA data used for correction of the main TGA data"
     )
+    
     # Back Up
     backup_temperature: npt.NDArray[np.float64] | None = Field(
-        default=None,
+        default=None, description="Backup of the temperature data"
     )
     backup_mass: npt.NDArray[np.float64] | None = Field(
-        default=None,
+        default=None, description="Backup of the mass data"
     )
 
     # ----------------------------------------------------------------------
@@ -79,12 +91,14 @@ class TGA(BaseModel):
         else:
             raise ValueError("Either index or temperature must be provided.")
 
-    def correct(self, baseline: "TGA", backup: bool = False) -> None:
+    def correct(self, baseline: "TGAData", backup: bool = False) -> None:
         if baseline is None:
             raise ValueError("Baseline TGA must be provided.")
         if backup:
             self.backup()
         self.mass -= np.interp(self.temperature, baseline.temperature, baseline.mass)
+        self.baseline = baseline
+        logger.debug("Baseline correction applied to TGA data.")
     
     def smooth(self, window_length: int = 11, polyorder: int = 2) -> None:
         """Return a smoothed TGA object using Savitzky–Golay filter."""
@@ -97,14 +111,20 @@ class TGA(BaseModel):
     # ----------------------------------------------------------------------
 
     @classmethod
-    def from_e2290(cls, path: str, baseline_path: str | None = None, in_kelvin: bool = True) -> "TGA":
-        from phd_parser.tga.tga_e2290 import read_tga_e2290
+    def from_e2290(cls, path: str | Path, baseline_path: Optional[str | Path] = None, in_kelvin: bool = True) -> "TGAData":
+        from phd_parser.tga.e2290 import read_export
+
+        if not isinstance(path, Path):
+            path = Path(path)
+        
+        if baseline_path is not None and not isinstance(baseline_path, Path):
+            baseline_path = Path(baseline_path)
 
         correction = 0.0
         if in_kelvin:
             correction = 273.15
         
-        e2290 = read_tga_e2290(path)
+        e2290 = read_export(path)
         tga = cls(
             temperature=e2290["data"]["Ts"].values + correction,
             mass=e2290["data"]["Value"].values,
@@ -113,7 +133,7 @@ class TGA(BaseModel):
         tga.backup()
 
         if baseline_path is not None:
-            e2290_baseline = read_tga_e2290(baseline_path)
+            e2290_baseline = read_export(baseline_path)
             baseline = cls(
                 temperature=e2290_baseline["data"]["Ts"].values + correction,
                 mass=e2290_baseline["data"]["Value"].values,

@@ -55,9 +55,9 @@ class RamanData(BaseModel):
     # ================================================
     
     @classmethod
-    def from_btc655n_export(cls, filepath: str | Path, y_key: btc655n.Y_KEYS = "Raw data #1") -> "RamanData":
+    def from_btc655n_export(cls, filepath: str | Path, y_key: btc655n.Y_KEYS = "Raw data #1", remove_empty: bool = True) -> "RamanData":
         # Read the data using btc655n module
-        raw_data = btc655n.read_export(filepath)
+        raw_data = btc655n.read_export(filepath, remove_empty=remove_empty)
 
         raman = cls(
             wavelength_nm=np.asarray(raw_data["data"]["Wavelength"]),
@@ -67,6 +67,9 @@ class RamanData(BaseModel):
         
         return raman
     
+    # ================================================
+    # reading from renishaw export
+    # ================================================
 
     @classmethod
     def from_renishaw_export(cls, filepath: str | Path, export_type: Literal["txt"] = "txt", excitation_wavelength_nm: float | int | np.floating | np.integer = None) -> "RamanData":
