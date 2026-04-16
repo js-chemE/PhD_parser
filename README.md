@@ -14,7 +14,17 @@ Helper functions to read and process data from different equipment.
 
 ### Raman
 
-...
+#### Renishaw
+
+1. TXT export
+
+2. WDF export
+    - Alex Henderson, DOI:10.5281/zenodo.495477
+    - py-wdf-reader (T. Tian, MIT), https://github.com/alchem0x2A/py-wdf-reader
+    - SpectroChemPy wdf reader (CeCILL-B)
+    - gwyddion renishaw.c
+
+#### B&W Tek
 
 ### XRD
 

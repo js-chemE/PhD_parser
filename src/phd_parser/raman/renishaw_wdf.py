@@ -1,31 +1,17 @@
-from pathlib import Path
-from typing import Tuple, Dict, Any, List, Optional, Literal
-import pandas as pd
-import numpy as np
-
 import struct
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from enum import IntEnum
+from pathlib import Path
+from typing import Optional
 
-import logging
+import numpy as np
+import matplotlib.pyplot as plt
 
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
-__all__ = ["read_export_txt", "read_export_wdf", "WDFResult"]
-
-# def _convert_value(value: str) -> Any:
-#     try:
-#         return float(value)
-#     except ValueError:
-#         return value
-
-# ================================================
-# wdf export format (WiRe)
-# ================================================
-
+# =============================================================================
 # Enumerations  (from SpectroChemPy / py-wdf-reader)
+# =============================================================================
 
 class MeasurementType(IntEnum):
     Unspecified = 0
@@ -87,22 +73,6 @@ class UnitType(IntEnum):
             13: "ms", 19: "°", 20: "rad", 21: "°C",
         }
         return _map.get(self.value, self.name)
-    
-    def si_factor(self):
-        _map = {
-            1: 1e2, 2: 1e-9, 3: 1e-9, 4: 1.60218e-19, 5: 1e-6,
-            8: 1e-3, 9: 1, 10: 1, 11: 1, 12: 1,
-            13: 1e-3, 19: 1, 20: 1, 21: 1,
-        }
-        return _map.get(self.value, 1)
-    
-    def dimension(self):
-        _map = {
-            1: "length⁻¹", 2: "length", 3: "length", 4: "energy", 5: "length",
-            8: "length", 9: "length", 10: "temperature", 11: "pressure", 12: "time",
-            13: "time", 19: "angle", 20: "angle", 21: "temperature",
-        }
-        return _map.get(self.value, self.name)
 
 
 class DataType(IntEnum):
@@ -132,8 +102,9 @@ class MapAreaType(IntEnum):
     XYLine            = 128
 
 
-
+# =============================================================================
 # Block-layout constants  (byte offsets within WDF1 header)
+# =============================================================================
 
 class _Off(IntEnum):
     # Generic block header
@@ -160,11 +131,12 @@ class _Off(IntEnum):
     jpeg_header = 0x10
 
 
-
+# =============================================================================
 # Result dataclass
+# =============================================================================
 
 @dataclass
-class WDFResult(BaseException):
+class WDFResult:
     """Container for all data extracted from a .wdf file."""
     # Core spectral data
     wavenumber:       np.ndarray = field(default_factory=lambda: np.array([]))
@@ -297,7 +269,6 @@ def _parse_xlst(fid, blocks: dict, result: WDFResult):
     n = result.meta.get("x_size") or result.meta.get("point_per_spectrum", 0)
     raw = fid.read(n * 4)
     result.wavenumber = np.frombuffer(raw, dtype="<f4").astype(np.float64)
-    result.datatype = datatype
 
 
 def _parse_data(fid, blocks: dict, result: WDFResult):
@@ -419,7 +390,7 @@ def _reshape_data(result: WDFResult):
 # Main entry point
 # =============================================================================
 
-def read_export_wdf(filename: str | Path) -> WDFResult:
+def read_wdf(filename: str | Path) -> WDFResult:
     if not isinstance(filename, Path):
         filename = Path(filename)
 
@@ -443,27 +414,81 @@ def read_export_wdf(filename: str | Path) -> WDFResult:
 
     return result
 
-# ================================================
-# txt export format
-# ================================================
+# =============================================================================
+# Plotting
+# =============================================================================
 
-def read_export_txt(file_path: str | Path) -> Dict[str, Any]:
-    """
-    Main function to read and parse the Renishaw export file.
-    Returns a dictionary with 'meta' and 'data' keys.
-    """
-    data = np.loadtxt(file_path, dtype=str, encoding="utf-8", skiprows=1)
-    
-    df = pd.DataFrame(data[1:], columns=["wavenumber", "intensity"])
-    df["wavenumber"] = df["wavenumber"].astype(float, errors="ignore") # this is actually raman shift in cm-1
-    df["intensity"] = df["intensity"].astype(float, errors="ignore")
+# def plot_wdf(result: WDFResult):
+#     """
+#     Plot a WDFResult.
 
-    meta = {
-        "instrument": "Renishaw",
-        "folder": str(Path(file_path).parent),
-        "filename": Path(file_path).name,
-    }
-    return {
-        "data": df,
-        "meta": meta,
-    }
+#     - Single spectrum   → one line plot
+#     - Series            → overlaid spectra
+#     - Map               → integrated intensity image  +  mean spectrum
+#     """
+#     wn  = result.wavenumber
+#     dat = result.data
+#     lbl = result.x_unit.label()
+
+#     if result.measurement_type == MeasurementType.Mapping and dat.ndim == 3:
+#         fig, axes = plt.subplots(1, 2, figsize=(12, 4))
+#         im = axes[0].imshow(dat.sum(axis=2), aspect="equal", origin="upper")
+#         plt.colorbar(im, ax=axes[0], label="Integrated intensity")
+#         axes[0].set_title("Integrated intensity map")
+#         axes[0].axis("off")
+
+#         mean_spec = dat.mean(axis=(0, 1))
+#         axes[1].plot(wn, mean_spec, linewidth=0.9)
+#         axes[1].set_xlabel(f"Raman shift ({lbl})")
+#         axes[1].set_ylabel("Intensity")
+#         axes[1].set_title("Mean spectrum")
+#         axes[1].margins(x=0)
+
+#     elif dat.ndim == 2:
+#         fig, ax = plt.subplots(figsize=(9, 4))
+#         for row in dat:
+#             ax.plot(wn, row, linewidth=0.7, alpha=0.75)
+#         ax.set_xlabel(f"Raman shift ({lbl})")
+#         ax.set_ylabel("Intensity")
+#         ax.set_title(result.title or Path(result.filename).name)
+#         ax.margins(x=0)
+
+#     else:
+#         fig, ax = plt.subplots(figsize=(9, 4))
+#         ax.plot(wn, dat, linewidth=0.9)
+#         ax.set_xlabel(f"Raman shift ({lbl})")
+#         ax.set_ylabel("Intensity")
+#         ax.set_title(result.title or Path(result.filename).name)
+#         ax.margins(x=0)
+
+#     fig.suptitle(Path(result.filename).name, fontsize=9, color="gray")
+#     plt.tight_layout()
+#     plt.show()m
+
+
+# =============================================================================
+# CLI
+# =============================================================================
+
+if __name__ == "__main__":
+    import sys
+
+    if len(sys.argv) < 2:
+        print("Usage: python wdf_reader.py <file.wdf> [--plot]")
+        sys.exit(1)
+
+    r = read_wdf(sys.argv[1], plot="--plot" in sys.argv)
+
+    print(f"File             : {r.filename}")
+    print(f"Title            : {r.title}")
+    print(f"Measurement type : {r.measurement_type}")
+    print(f"Scan type        : {r.scan_type}")
+    print(f"Laser            : {r.laser_cm1:.2f} cm⁻¹")
+    print(f"Wavenumber range : {r.wavenumber[0]:.1f} – {r.wavenumber[-1]:.1f} cm⁻¹  ({len(r.wavenumber)} pts)")
+    print(f"Data shape       : {r.data.shape}")
+    print(f"Acq. time        : {r.acq_time}")
+    if r.x_pos is not None:
+        print(f"X positions      : {r.x_pos.shape}, range {r.x_pos.min():.3f}–{r.x_pos.max():.3f}")
+    if r.y_pos is not None:
+        print(f"Y positions      : {r.y_pos.shape}, range {r.y_pos.min():.3f}–{r.y_pos.max():.3f}")
+    print(f"\nAll meta keys    : {list(r.meta.keys())}")

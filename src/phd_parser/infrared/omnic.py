@@ -3,6 +3,7 @@ import re
 import struct
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+import zoneinfo
 from typing import Union, Iterable, Tuple, Dict, Any, Callable, Optional
 import pandas as pd
 
@@ -147,9 +148,10 @@ def _read_spa_single(path: Union[str, Path]) -> Dict[str, Any]:
             "id": spectrum_id,
             "tos": spectrum_tos,
             "x": x,
-            "v": intensities,
-            "units": header["units"],
             "xlabel": header["xtitle"],
+            "xunit": header["xunit"],
+            "v": intensities,
+            "vunit": header["units"],
             "vlabel": header["title"],
         }
 
@@ -175,7 +177,7 @@ def _read_header(fid: io.BufferedReader, pos: int) -> Dict[str, Any]:
         4: ("um", "wavelength"),
         32: ("cm^-1", "raman shift"),
     }
-    out["xunits"], out["xtitle"] = xmap.get(xkey, (None, "x"))
+    out["xunit"], out["xtitle"] = xmap.get(xkey, (None, "x"))
 
     # ---- y units ----
     fid.seek(pos + 12)
@@ -220,8 +222,23 @@ def _read_intensities(fid: io.BufferedReader, pos: int) -> np.ndarray:
 def read_spa(
     paths: Union[str, Path, Iterable[Union[str, Path]]],
     sort_key: Optional[Callable[[Union[str, Path]], float]] = extract_spectrum_id,
-    delta_time_seconds: Optional[float] = None
+    delta_time_seconds: Optional[float] = None,
+    tos_start: Optional[pd.Timestamp | str] = None,
 ) -> Dict[str, Any]:
+    
+    if delta_time_seconds is not None and tos_start is not None:
+        raise ValueError("Cannot specify both 'delta_time_seconds' and 'tos_start'. Please choose one method for calculating time of scan data.")
+    
+    if tos_start is not None:
+        if isinstance(tos_start, str):
+            try:
+                tos_start = pd.to_datetime(tos_start)     
+            except Exception as e:
+                logger.error(f"Failed to parse 'tos_start' string '{tos_start}': {e}")
+                raise ValueError(f"Invalid 'tos_start' value: {tos_start}. Must be a pandas Timestamp or a string parseable by pandas.")
+        elif not isinstance(tos_start, pd.Timestamp):
+            raise ValueError(f"'tos_start' must be a pandas Timestamp or a string, but got {type(tos_start)}")
+
 
     # ---- normalize ----
     if isinstance(paths, (str, Path)):
@@ -233,9 +250,10 @@ def read_spa(
             r = _read_spa_single(p)
 
             meta = {
-                "units": r["units"],
-                "xlabel": r["xlabel"],
+                "vunit": r["vunit"],
                 "vlabel": r["vlabel"],
+                "xlabel": r["xlabel"],
+                "xunit": r["xunit"],
                 "n_points": len(r["x"]),
                 "min_x": float(r["x"][0]),
                 "max_x": float(r["x"][-1]),
@@ -277,26 +295,38 @@ def read_spa(
 
     if delta_time_seconds is not None:
         tos = np.arange(v.shape[0]) * delta_time_seconds
+    
+    elif tos_start is not None:
+        try:
+            tos = np.asarray([(r["datetime"] - tos_start).total_seconds() for r in results])
+        except Exception as e:
+            logger.error(f"Error calculating time offsets from 'tos_start': {e}")
+            tos = None
     else:
         try:
+            tos_start = r0["datetime"]
             tos = np.asarray([
-                pd.to_timedelta(r["datetime"]- r0["datetime"]).total_seconds() for r in results
+                pd.to_timedelta(r["datetime"]- tos_start).total_seconds() for r in results
             ])
+
         except Exception as e:
             logger.error(f"Error calculating time offsets: {e}")
             tos = None
+        
 
     # ---- meta ----
     meta = {
-        "units": r0["units"],
-        "xlabel": r0["xlabel"],
+        "vunit": r0["vunit"],
         "vlabel": r0["vlabel"],
+        "xlabel": r0["xlabel"],
+        "xunit": r0["xunit"],
         "n_points": len(x),
         "min_x": float(x[0]),
         "max_x": float(x[-1]),
         "name": [r["name"] for r in results],
         "path": [r["path"] for r in results],
         "datetime": [r["datetime"] for r in results],
+        "tos_start": tos_start,
     }
 
     return {

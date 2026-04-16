@@ -18,5 +18,16 @@ SI_FACTORS = {
         "kHz": 1e3,  # kHz to Hz
         "MHz": 1e6,  # MHz to Hz
         "GHz": 1e9,  # GHz to Hz
-    }
+    },
+    "length": {
+        "A": 1e-10,  # Angstrom to m
+        "nm": 1e-9,  # nm to m
+        "um": 1e-6,  # um to m
+        "mm": 1e-3,  # mm to m
+        "cm": 1e-2,  # cm to m
+        "dm": 1e-1,  # dm to m
+        "m": 1.0,    # m to m
+        "km": 1e3,   # km to m,
+        "mile": 1609.34,  # mile to m
+    },
 }

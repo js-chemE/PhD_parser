@@ -185,7 +185,7 @@ def parse_metadata_lines(
 
     return meta
 
-def parse_data_lines(data: List[str], drop_threshold_cols: bool = False) -> pd.DataFrame:
+def parse_data_lines(data: List[str], drop_threshold_cols: bool = False, tz_str: str = "Europe/Amsterdam") -> pd.DataFrame:
     if not data:
         logger.error("No data lines to parse")
         raise ValueError("data is empty")
@@ -200,7 +200,11 @@ def parse_data_lines(data: List[str], drop_threshold_cols: bool = False) -> pd.D
     df["Timestamp"] = pd.to_datetime(
         df["Date"] + " " + df["Time"],
         format="%d-%m-%Y %H:%M:%S:%f",
+        utc = False,
+        errors = "coerce",
     )
+    df["Timestamp"] = df["Timestamp"].dt.tz_localize(tz_str, ambiguous="NaT")
+
 
     # Threshold columns to category
     
@@ -273,11 +277,11 @@ def _build_column_map(meta: Dict[str, Any], current_columns: List[str]) -> Dict[
     }
 
 
-def read_export(file_path: str | Path, drop_threshold_cols: bool = True) -> Tuple[Dict[str, Any], pd.DataFrame]:
+def read_export(file_path: str | Path, drop_threshold_cols: bool = True, tz_str: str = "Europe/Amsterdam") -> Tuple[Dict[str, Any], pd.DataFrame]:
     lines = extract_lines(file_path)
     meta_0, meta_1, meta_blocks, data = split_lines(lines)
     meta = parse_metadata_lines(meta_0, meta_1, meta_blocks)
-    df = parse_data_lines(data, drop_threshold_cols=drop_threshold_cols)
+    df = parse_data_lines(data, drop_threshold_cols=drop_threshold_cols, tz_str=tz_str)
 
     column_map = _build_column_map(meta, list(df.columns))
     df = df.rename(columns=dict(zip(
