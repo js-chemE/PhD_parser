@@ -7,7 +7,9 @@ import zoneinfo
 from typing import Union, Iterable, Tuple, Dict, Any, Callable, Optional
 import pandas as pd
 
-from venv import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 import numpy as np
 import requests
@@ -293,21 +295,26 @@ def read_spa(
     # ---- stack ----
     v = np.vstack([r["v"] for r in results])
 
-    if delta_time_seconds is not None:
-        tos = np.arange(v.shape[0]) * delta_time_seconds
-    
-    elif tos_start is not None:
+    logger.debug("Started reading TOS data for spectra.")
+    if tos_start is not None:
         try:
             tos = np.asarray([(r["datetime"] - tos_start).total_seconds() for r in results])
+            logger.debug(f"Calculated time offsets (tos) from 'tos_start'. tos_start={tos_start}, tos[0]={tos[0]}, tos[-1]={tos[-1]}")
         except Exception as e:
             logger.error(f"Error calculating time offsets from 'tos_start': {e}")
             tos = None
+
+    elif delta_time_seconds is not None:
+        tos = np.arange(v.shape[0]) * delta_time_seconds
+        logger.debug(f"Calculated time offsets (tos) from 'delta_time_seconds'. delta_time_seconds={delta_time_seconds}, tos[0]={tos[0]}, tos[-1]={tos[-1]}")
+   
     else:
         try:
             tos_start = r0["datetime"]
             tos = np.asarray([
                 pd.to_timedelta(r["datetime"]- tos_start).total_seconds() for r in results
             ])
+            logger.debug(f"Calculated time offsets (tos) from datetimes and first timestamp. tos_start={tos_start}, tos[0]={tos[0]}, tos[-1]={tos[-1]}")
 
         except Exception as e:
             logger.error(f"Error calculating time offsets: {e}")
@@ -329,6 +336,7 @@ def read_spa(
         "tos_start": tos_start,
     }
 
+    logger.info(f"Successfully read {len(results)} spectra from {len(files)} files. x points={len(x)}, v shape={v.shape}, tos shape={tos.shape if tos is not None else None}")
     return {
         "data": {
             "x": x,

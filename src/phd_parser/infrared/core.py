@@ -1,62 +1,54 @@
-
 import logging
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Literal, Optional, Union
- 
+from typing import Any, Literal, Optional, Sequence, Union, List, Tuple
+
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import xarray as xr
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from scipy import constants as const
- 
+
 from phd_parser.infrared import omnic
 from phd_parser.units import (
     transform_matching_dimensions,
     transform_wavenumber_frequency,
 )
- 
-logger = logging.getLogger(__name__)  # caller configures level / handlers
 
-# ---------------------------------------------------------------------------
-# Type aliases
-# ---------------------------------------------------------------------------
+logger = logging.getLogger(__name__)
+
 XLabel = Literal["wavenumber", "frequency", "energy"]
 VLabel = Literal["absorbance", "transmittance", "reflectance"]
 
 
-
-class IRData(BaseModel): 
+class IRData(BaseModel):
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         validate_assignment=True,
-        ignored_types=(cached_property,),  # keeps cached_property working alongside Pydantic
+        ignored_types=(cached_property,),
     )
- 
+
     # ----------------------------------------------------------------
     # Fields
     # ----------------------------------------------------------------
- 
-    # Core data — stored in SI units (cm-1), normalised on ingestion
+
+    # Core data — SI units (m⁻¹). Coords: 'wavenumber' always, 'scan'+'tos' for 2-D.
+    # 'timestamp' is not stored — derived on demand from tos + metadata['tos_start'].
     da: xr.DataArray = Field(
         description=(
             "xarray DataArray with dims ('wavenumber',) or ('scan', 'wavenumber'). "
-            "Wavenumber coordinate is in SI units (cm-1). "
-            "Optional coords: 'tos' (seconds), 'timestamp' (datetime)."
+            "Wavenumber in m⁻¹. Optional coord: 'tos' (seconds)."
         )
     )
- 
-    # Metadata
-    metadata: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Raw metadata extracted from the source file.",
-    )
- 
+
+    # 'tos_start' lives here as an ISO string so it survives all transformations.
+    metadata: dict[str, Any] = Field(default_factory=dict)
+
     # ----------------------------------------------------------------
     # Validators
     # ----------------------------------------------------------------
- 
+
     @field_validator("da", mode="before")
     @classmethod
     def validate_da(cls, v: Any) -> xr.DataArray:
@@ -69,90 +61,97 @@ class IRData(BaseModel):
         if v.ndim == 2 and v.dims[0] != "scan":
             raise ValueError("2-D DataArray must have dims ('scan', 'wavenumber')")
         return v
- 
+
     @model_validator(mode="after")
     def validate_attrs(self) -> "IRData":
         self.da.attrs.setdefault("values_label", "absorbance")
         self.da.attrs.setdefault("wavenumber_units", "m^-1")
         return self
- 
+
     # ----------------------------------------------------------------
     # Core properties
     # ----------------------------------------------------------------
- 
+
     @property
     def ndim(self) -> int:
         return self.da.ndim
- 
+
     @property
     def shape(self) -> tuple[int, ...]:
         return tuple(self.da.shape)
- 
+
     @property
     def values(self) -> npt.NDArray:
         return self.da.values
- 
+
     @property
     def values_label(self) -> str:
         return self.da.attrs["values_label"]
- 
+
     @property
     def wavenumber(self) -> npt.NDArray:
-        """Wavenumber in SI units (m⁻¹)."""
+        # SI units (m⁻¹)
         return self.da.coords["wavenumber"].values
- 
+
     @property
     def wavenumber_per_cm(self) -> npt.NDArray:
-        """Wavenumber in conventional cm⁻¹."""
         return self.wavenumber / 100.0
- 
+
     @property
     def tos(self) -> Optional[npt.NDArray]:
-        """Time-of-scan in seconds, or None."""
+        # Elapsed seconds since first scan
         if "tos" in self.da.coords:
             return self.da.coords["tos"].values
         return None
- 
+
+    @property
+    def tos_start(self) -> Optional[pd.Timestamp]:
+        # Parsed on demand from metadata ISO string — survives all transformations
+        raw = self.metadata.get("tos_start")
+        if raw is None:
+            return None
+        return pd.Timestamp(raw)
+
     @property
     def timestamps(self) -> Optional[pd.DatetimeIndex]:
-        """Absolute timestamps per scan, or None."""
-        if "timestamp" in self.da.coords:
-            return pd.DatetimeIndex(self.da.coords["timestamp"].values)
-        return None
-    
+        # Derived from tos + tos_start; not stored as a coordinate
+        if self.tos is None or self.tos_start is None:
+            return None
+        return pd.DatetimeIndex([
+            self.tos_start + pd.Timedelta(seconds=float(t)) for t in self.tos
+        ])
+
     # ----------------------------------------------------------------
     # Cached unit-conversion properties
     # ----------------------------------------------------------------
- 
+
     @cached_property
     def wavelength(self) -> npt.NDArray:
-        """Wavelength in metres."""
+        # metres
         return 1.0 / self.wavenumber
- 
+
     @cached_property
     def wavelength_nm(self) -> npt.NDArray:
-        """Wavelength in nanometres."""
         return self.wavelength * 1e9
- 
+
     @cached_property
     def frequency(self) -> npt.NDArray:
-        """Frequency in Hz."""
+        # Hz
         return self.wavenumber * const.c
- 
+
     @cached_property
     def energy(self) -> npt.NDArray:
-        """Photon energy in Joules."""
+        # Joules
         return self.wavenumber * const.Planck * const.c
- 
+
     @cached_property
     def energy_eV(self) -> npt.NDArray:
-        """Photon energy in electronvolts."""
         return self.energy / const.electron_volt
-    
+
     # ----------------------------------------------------------------
-    # Spectral indexing
+    # Get
     # ----------------------------------------------------------------
- 
+
     def get_scan(self, scan_index: int) -> npt.NDArray:
         if self.ndim == 1:
             raise ValueError("get_scan requires 2-D data")
@@ -161,19 +160,125 @@ class IRData(BaseModel):
                 f"scan_index {scan_index} out of bounds for {self.shape[0]} scans"
             )
         return self.da.isel(scan=scan_index).values
- 
+    
+    def get_scan_by_tos(
+        self,
+        target_tos: Union[float, Sequence[float]],
+        method: Literal["nearest", "linear"] = "nearest",
+        tolerance_seconds: Optional[float] = 10,
+    ) -> Union[npt.NDArray]:
+        if self.ndim == 1:
+            raise ValueError("get_scan_by_tos requires 2-D data")
+        if self.tos is None:
+            raise ValueError("get_scan_by_tos requires 'tos' coordinate")
+
+        scalar_input = np.ndim(target_tos) == 0
+        targets = [float(target_tos)] if scalar_input else [float(t) for t in target_tos]
+
+        def _fetch_one(t: float) -> npt.NDArray:
+            if tolerance_seconds is not None:
+                nearest_dist = float(np.abs(self.tos - t).min())
+                if nearest_dist > tolerance_seconds:
+                    raise ValueError(
+                        f"Requested tos {t:.1f}s is {nearest_dist:.1f}s from the nearest scan "
+                        f"(tolerance: {tolerance_seconds:.1f}s)"
+                    )
+            return self.da.sel(tos=t, method=method).values
+
+        results = np.vstack([_fetch_one(t) for t in targets])
+        return results[0] if scalar_input else results
+
+
+    def get_scan_by_tos_average(
+        self,
+        target_tos: Union[float, Sequence[float]],
+        method: Literal["nearest", "linear"] = "nearest",
+        tolerance_seconds: Optional[float] = 10,
+        number_of_scans: Optional[int] = None,
+        time_window: Optional[float] = None,
+        direction: Literal["forward", "backward", "center"] = "center",
+    ) -> Union[npt.NDArray]:
+        if self.ndim == 1:
+            raise ValueError("get_scan_by_tos_average requires 2-D data")
+        if self.tos is None:
+            raise ValueError("get_scan_by_tos_average requires 'tos' coordinate")
+        if (number_of_scans is None) == (time_window is None):
+            return self.get_scan_by_tos(target_tos, method=method, tolerance_seconds=tolerance_seconds)
+            raise ValueError("Provide exactly one of: number_of_scans or time_window")
+
+        scalar_input = np.ndim(target_tos) == 0
+        targets = [float(target_tos)] if scalar_input else [float(t) for t in target_tos]
+        tos_values = self.tos  # sorted 1-D array
+
+        def _anchor_index(t: float) -> int:
+            """Index of the scan nearest to t, with tolerance check."""
+            dists = np.abs(tos_values - t)
+            idx = int(dists.argmin())
+            if tolerance_seconds is not None and dists[idx] > tolerance_seconds:
+                raise ValueError(
+                    f"Requested tos {t:.1f}s is {dists[idx]:.1f}s from the nearest scan "
+                    f"(tolerance: {tolerance_seconds:.1f}s)"
+                )
+            return idx
+
+        def _window_indices(anchor_idx: int) -> slice:
+            """Return the index slice for the averaging window."""
+            n = len(tos_values)
+
+            if number_of_scans is not None:
+                half = number_of_scans // 2
+                if direction == "center":
+                    i0 = anchor_idx - half
+                    i1 = anchor_idx + (number_of_scans - half)  # handles odd counts correctly
+                elif direction == "forward":
+                    i0 = anchor_idx
+                    i1 = anchor_idx + number_of_scans
+                else:  # backward
+                    i0 = anchor_idx - number_of_scans + 1
+                    i1 = anchor_idx + 1
+
+            else:  # time_window
+                t_anchor = tos_values[anchor_idx]
+                half_w = time_window / 2.0
+                if direction == "center":
+                    t0, t1 = t_anchor - half_w, t_anchor + half_w
+                elif direction == "forward":
+                    t0, t1 = t_anchor, t_anchor + time_window
+                else:  # backward
+                    t0, t1 = t_anchor - time_window, t_anchor
+                i0 = int(np.searchsorted(tos_values, t0, side="left"))
+                i1 = int(np.searchsorted(tos_values, t1, side="right"))
+
+            i0 = max(i0, 0)
+            i1 = min(i1, n)
+
+            if i0 >= i1:
+                raise ValueError(
+                    f"Window [{i0}:{i1}] is empty for anchor index {anchor_idx}. "
+                    "Check number_of_scans / time_window against the data range."
+                )
+            return slice(i0, i1)
+
+        def _average_one(t: float) -> npt.NDArray:
+            anchor_idx = _anchor_index(t)
+            win = _window_indices(anchor_idx)
+            window_data = self.da.isel(scan=win).values  # shape: (n_scans_in_window, n_masses)
+            return window_data.mean(axis=0)
+
+        results = np.vstack([_average_one(t) for t in targets])
+        return results[0] if scalar_input else results
+
     def get_evolution(
         self,
         wavenumber_per_cm: Union[float, list[float], npt.NDArray],
         method: Literal["nearest", "linear"] = "nearest",
         tolerance_per_cm: Optional[float] = None,
     ) -> xr.DataArray:
-        
         if self.ndim == 1:
             raise ValueError("get_evolution requires 2-D data")
- 
+
         targets_si = np.atleast_1d(np.asarray(wavenumber_per_cm, dtype=float)) * 100.0
- 
+
         if tolerance_per_cm is not None:
             tol_si = tolerance_per_cm * 100.0
             for t in targets_si:
@@ -184,13 +289,13 @@ class IRData(BaseModel):
                         f"{nearest_dist / 100:.1f} cm⁻¹ from the nearest grid point "
                         f"(tolerance: {tolerance_per_cm:.1f} cm⁻¹)"
                     )
- 
+
         return self.da.sel(wavenumber=targets_si, method=method)
-    
+
     # ----------------------------------------------------------------
-    # Immutable transformations
+    # Immutable — selection and sorting
     # ----------------------------------------------------------------
- 
+
     def sort(self, ascending: bool = True) -> "IRData":
         da_sorted = self.da.sortby("wavenumber", ascending=ascending)
         return IRData(da=da_sorted, metadata=self.metadata)
@@ -201,168 +306,355 @@ class IRData(BaseModel):
         max_cm: Optional[float] = None,
     ) -> "IRData":
         da = self.da
-
         if min_cm is not None:
-            wn = da.coords["wavenumber"].values          # read from current da
+            wn = da.coords["wavenumber"].values
             da = da.sel(wavenumber=wn >= min_cm * 100.0)
-
         if max_cm is not None:
-            wn = da.coords["wavenumber"].values          # re-read after potential slice
+            wn = da.coords["wavenumber"].values
             da = da.sel(wavenumber=wn <= max_cm * 100.0)
 
-        da_selected = self._build_da(
+        da_new = self._build_da(
             wavenumber_si=da.coords["wavenumber"].values,
             values=da.values,
             values_label=self.values_label,
             tos=da.coords["tos"].values if "tos" in da.coords else None,
-            tos_start=None,
             metadata=self.metadata,
         )
-        return IRData(da=da_selected, metadata=self.metadata)
-    
+        return IRData(da=da_new, metadata=self.metadata)
+
     def select_tos_range(
         self,
         min_s: Optional[float] = None,
         max_s: Optional[float] = None,
     ) -> "IRData":
+        if self.tos is None:
+            raise ValueError("select_tos_range requires a 'tos' coordinate")
+
         da = self.da
         if min_s is not None:
-            tos = da.coords.get("tos")
-            da = da.sel(tos=tos >= min_s)
+            tos = da.coords["tos"].values
+            if not np.any(tos >= min_s):
+                min_s = tos[0]
+                logger.warning(f"min_s {min_s:.1f}s is greater than all 'tos' values; using min_s={min_s:.1f}s instead")
+            da = da.isel(scan=tos >= min_s)
         if max_s is not None:
-            tos = da.coords.get("tos")
-            da = da.sel(tos=tos <= max_s)
+            tos = da.coords["tos"].values
+            if not np.any(tos <= max_s):
+                max_s = tos[-1]
+                logger.warning(f"max_s {max_s:.1f}s is less than all 'tos' values; using max_s={max_s:.1f}s instead")
+            da = da.isel(scan=tos <= max_s)
 
-        da_selected = self._build_da(
-            wavenumber_si=self.wavenumber,
+        # tos values are absolute elapsed seconds, so tos_start + tos[i] remains valid
+        da_new = self._build_da(
+            wavenumber_si=da.coords["wavenumber"].values,
             values=da.values,
             values_label=self.values_label,
-            tos=da.coords["tos"].values if "tos" in da.coords else None,
-            tos_start=None,  # can't determine a single tos_start for a subset of scans
+            tos=da.coords["tos"].values,
             metadata=self.metadata,
         )
-        return IRData(da=da_selected, metadata=self.metadata)
-    
-    def smooth(self, method: Literal["moving", "savgol", "gaussian"], **kwargs: Any) -> "IRData":
-        if method == "moving":
-            return self.smooth_moving(**kwargs)
-        elif method == "savgol":
-            return self.smooth_savgol(**kwargs)
-        elif method == "gaussian":
-            return self.smooth_gaussian(**kwargs)
-        else:
-            raise ValueError(f"Unsupported smoothing method: {method}")
-    
+        return IRData(da=da_new, metadata=self.metadata)
+
+    # ----------------------------------------------------------------
+    # Immutable — smoothing
+    # ----------------------------------------------------------------
+
     def smooth_savgol(self, window_length: int = 21, polyorder: int = 3) -> "IRData":
         from scipy.signal import savgol_filter
 
         if self.ndim == 1:
-            smoothed_values = savgol_filter(self.values, window_length, polyorder)
+            smoothed = savgol_filter(self.values, window_length, polyorder)
         else:
-            smoothed_values = np.apply_along_axis(
-                lambda m: savgol_filter(m, window_length, polyorder),
-                axis=1,
-                arr=self.values,
+            smoothed = np.apply_along_axis(
+                lambda m: savgol_filter(m, window_length, polyorder), axis=1, arr=self.values
             )
+        da_new = self._build_da(self.wavenumber, smoothed, self.values_label, self.tos, self.metadata)
+        return IRData(da=da_new, metadata=self.metadata)
 
-        da_smoothed = self._build_da(
-            wavenumber_si=self.wavenumber,
-            values=smoothed_values,
-            values_label=self.values_label + "_smoothed",
-            tos=self.tos,
-            tos_start=None,  # can't determine a single tos_start for smoothed scans
-            metadata=self.metadata,
-        )
-        return IRData(da=da_smoothed, metadata=self.metadata)
-    
     def smooth_gaussian(self, sigma_cm: float) -> "IRData":
         from scipy.ndimage import gaussian_filter1d
 
         sigma_si = sigma_cm * 100.0
         if self.ndim == 1:
-            smoothed_values = gaussian_filter1d(self.values, sigma=sigma_si)
+            smoothed = gaussian_filter1d(self.values, sigma=sigma_si)
         else:
-            smoothed_values = np.apply_along_axis(
-                lambda m: gaussian_filter1d(m, sigma=sigma_si),
-                axis=1,
-                arr=self.values,
+            smoothed = np.apply_along_axis(
+                lambda m: gaussian_filter1d(m, sigma=sigma_si), axis=1, arr=self.values
             )
+        da_new = self._build_da(self.wavenumber, smoothed, self.values_label, self.tos, self.metadata)
+        return IRData(da=da_new, metadata=self.metadata)
 
-        da_smoothed = self._build_da(
-            wavenumber_si=self.wavenumber,
-            values=smoothed_values,
-            values_label=self.values_label + "_smoothed",
-            tos=self.tos,
-            tos_start=None,  # can't determine a single tos_start for smoothed scans
-            metadata=self.metadata,
-        )
-        return IRData(da=da_smoothed, metadata=self.metadata)
-        
     def smooth_moving(self, window_size: int = 5) -> "IRData":
         if window_size < 1:
             raise ValueError("window_size must be >= 1")
+
+        kernel = np.ones(window_size) / window_size
         if self.ndim == 1:
-            smoothed_values = np.convolve(
-                self.values, np.ones(window_size) / window_size, mode="same"
-            )
+            smoothed = np.convolve(self.values, kernel, mode="same")
         else:
-            smoothed_values = np.apply_along_axis(
-                lambda m: np.convolve(m, np.ones(window_size) / window_size, mode="same"),
-                axis=1,
-                arr=self.values,
+            smoothed = np.apply_along_axis(
+                lambda m: np.convolve(m, kernel, mode="same"), axis=1, arr=self.values
+            )
+        da_new = self._build_da(self.wavenumber, smoothed, self.values_label, self.tos, self.metadata)
+        return IRData(da=da_new, metadata=self.metadata)
+
+    # ----------------------------------------------------------------
+    # Immutable — baseline correction
+    # ----------------------------------------------------------------
+
+    def correct_offset(
+        self,
+        anchor_range_cm: Tuple[float, float] = (2500, 2600),
+    ) -> "IRData":
+        lo_si = min(anchor_range_cm) * 100.0
+        hi_si = max(anchor_range_cm) * 100.0
+        wn = self.wavenumber
+        mask = (wn >= lo_si) & (wn <= hi_si)
+        if not mask.any():
+            raise ValueError(
+                f"No wavenumber points in anchor range "
+                f"{min(anchor_range_cm):.0f}–{max(anchor_range_cm):.0f} cm⁻¹"
             )
 
-        da_smoothed = self._build_da(
-            wavenumber_si=self.wavenumber,
-            values=smoothed_values,
-            values_label=self.values_label + "_smoothed",
-            tos=self.tos,
-            tos_start=None,  # can't determine a single tos_start for smoothed scans
-            metadata=self.metadata,
+        if self.ndim == 1:
+            corrected = self.values - self.values[mask].mean()
+        else:
+            corrected = self.values - self.values[:, mask].mean(axis=1, keepdims=True)
+
+        new_metadata = {**self.metadata, "baseline_anchor_range_cm": list(anchor_range_cm)}
+        da_new = self._build_da(wn, corrected, self.values_label, self.tos, new_metadata)
+        return IRData(da=da_new, metadata=new_metadata)
+
+    def correct_pchip(
+        self,
+        control_points_cm: List[float],
+        point_avg_half_width: int = 0,
+    ) -> "IRData":
+        from scipy.interpolate import PchipInterpolator
+
+        wn_si = self.wavenumber
+        wn_cm = wn_si / 100.0
+        cps = np.asarray(sorted(control_points_cm), dtype=float)
+
+        def _subtract_pchip(spectrum_1d: np.ndarray) -> np.ndarray:
+            x_knots = np.empty(len(cps))
+            y_knots = np.empty(len(cps))
+            for j, cp_cm in enumerate(cps):
+                idx = int(np.abs(wn_cm - cp_cm).argmin())
+                lo = max(0, idx - point_avg_half_width)
+                hi = min(len(spectrum_1d), idx + point_avg_half_width + 1)
+                x_knots[j] = wn_cm[idx]
+                y_knots[j] = spectrum_1d[lo:hi].mean()
+            return spectrum_1d - PchipInterpolator(x_knots, y_knots)(wn_cm)
+
+        if self.ndim == 1:
+            corrected = _subtract_pchip(self.values)
+        else:
+            corrected = np.apply_along_axis(_subtract_pchip, axis=1, arr=self.values)
+
+        new_metadata = {
+            **self.metadata,
+            "baseline_pchip_control_points_cm": sorted(control_points_cm),
+            "baseline_pchip_half_width": point_avg_half_width,
+        }
+        da_new = self._build_da(wn_si, corrected, self.values_label, self.tos, new_metadata)
+        return IRData(da=da_new, metadata=new_metadata)
+
+    def correct_baseline(
+        self,
+        anchor_range_cm: Tuple[float, float] = (2500, 2600),
+        control_points_cm: Optional[List[float]] = None,
+        point_avg_half_width: int = 0,
+        double_offset: bool = True,
+    ) -> "IRData":
+        # Step 1: offset, step 2: PCHIP, step 3: optional second offset (mirrors DRIFTS behaviour)
+        result = self.correct_offset(anchor_range_cm)
+        if control_points_cm:
+            result = result.correct_pchip(control_points_cm, point_avg_half_width)
+            if double_offset:
+                result = result.correct_offset(anchor_range_cm)
+        return result
+
+    def reapply_baseline(self) -> "IRData":
+        # Re-runs correction using parameters stored in metadata (e.g. after average_scans)
+        anchor = self.metadata.get("baseline_anchor_range_cm")
+        if anchor is None:
+            raise ValueError("No baseline parameters found in metadata.")
+        return self.correct_baseline(
+            anchor_range_cm=tuple(anchor),
+            control_points_cm=self.metadata.get("baseline_pchip_control_points_cm"),
+            point_avg_half_width=self.metadata.get("baseline_pchip_half_width", 0),
         )
-        return IRData(da=da_smoothed, metadata=self.metadata)
-    
-    def average_scans(self, number_of_scans: int, tos_method: Literal["mean", "median", "first", "last"] = "first") -> "IRData":
+
+    # ----------------------------------------------------------------
+    # Immutable — averaging
+    # ----------------------------------------------------------------
+
+    def average_scans(
+        self,
+        number_of_scans: int,
+        tos_method: Literal["mean", "median", "first", "last"] = "first",
+    ) -> "IRData":
         if self.ndim == 1:
             raise ValueError("average_scans requires 2-D data")
         if number_of_scans < 1:
             raise ValueError("number_of_scans must be >= 1")
 
-        n_scans = self.shape[0]
-        n_averaged = n_scans // number_of_scans
-        new_values = self.values[:n_averaged * number_of_scans].reshape(
-            n_averaged, number_of_scans, -1
-        ).mean(axis=1)
+        n_averaged = self.shape[0] // number_of_scans
+        new_values = (
+            self.values[: n_averaged * number_of_scans]
+            .reshape(n_averaged, number_of_scans, -1)
+            .mean(axis=1)
+        )
 
         new_tos = None
         if self.tos is not None:
-            new_tos = self.tos[:n_averaged * number_of_scans].reshape(
-                n_averaged, number_of_scans
-            )
+            tos_blocks = self.tos[: n_averaged * number_of_scans].reshape(n_averaged, number_of_scans)
             if tos_method == "mean":
-                new_tos = new_tos.mean(axis=1)
+                new_tos = tos_blocks.mean(axis=1)
             elif tos_method == "median":
-                new_tos = np.median(new_tos, axis=1)
+                new_tos = np.median(tos_blocks, axis=1)
             elif tos_method == "first":
-                new_tos = new_tos[:, 0]
+                new_tos = tos_blocks[:, 0]
             elif tos_method == "last":
-                new_tos = new_tos[:, -1]
+                new_tos = tos_blocks[:, -1]
 
-        da_averaged = self._build_da(
+        # tos values remain absolute elapsed seconds, so tos_start stays valid
+        da_new = self._build_da(self.wavenumber, new_values, self.values_label, new_tos, self.metadata)
+        return IRData(da=da_new, metadata=self.metadata)
+
+    def average_scans_by_tos(
+        self,
+        target_tos: Union[float, Sequence[float]],
+        method: Literal["nearest", "linear"] = "nearest",
+        tolerance_seconds: Optional[float] = 10,
+        number_of_scans: Optional[int] = None,
+        time_window: Optional[float] = None,
+        direction: Literal["forward", "backward", "center"] = "center",
+    ) -> "IRData":
+        
+        if self.ndim == 1:
+            raise ValueError("average_scans_by_tos requires 2-D data")
+
+        scalar_input = np.ndim(target_tos) == 0
+        targets = [float(target_tos)] if scalar_input else [float(t) for t in target_tos]
+
+        # Reuse the averaging logic — returns list of 1-D arrays (or one array if scalar)
+        averaged = self.get_scan_by_tos_average(
+            target_tos=target_tos,
+            method=method,
+            tolerance_seconds=tolerance_seconds,
+            number_of_scans=number_of_scans,
+            time_window=time_window,
+            direction=direction,
+        )
+
+        # Normalise to list of 1-D arrays regardless of scalar/array input
+        if scalar_input:
+            averaged_list = [averaged]
+        else:
+            averaged_list = averaged  # already a list
+
+        new_values = np.vstack(averaged_list)  # (n_targets, n_wavenumber)
+
+        # Anchor tos: the nearest actual tos to each target becomes the new coord
+        tos_values = self.tos
+        new_tos = np.array(targets)
+
+        new_metadata = {
+            **self.metadata,
+            "averaged_target_tos": [float(t) for t in targets],
+            "averaged_anchor_tos": [
+                float(tos_values[int(np.abs(tos_values - t).argmin())])
+                for t in targets
+            ],
+            "averaged_direction": direction,
+            "averaged_number_of_scans": number_of_scans,
+            "averaged_time_window": time_window,
+        }
+
+        da_new = self._build_da(
             wavenumber_si=self.wavenumber,
             values=new_values,
             values_label=self.values_label,
             tos=new_tos,
-            tos_start=None,  # can't determine a single tos_start for averaged scans
-            metadata=self.metadata,
+            metadata=new_metadata,
         )
+        return IRData(da=da_new, metadata=new_metadata)
+    
+    # ----------------------------------------------------------------
+    # Immutable - Normalisation
+    # ----------------------------------------------------------------
 
-        return IRData(da=da_averaged, metadata=self.metadata)
+    def normalise_max(self) -> "IRData":
+        max_val = self.values.max()
+        if max_val == 0:
+            logger.warning("Maximum value is zero; returning original data without normalisation")
+            return self
+        new_values = self.values / max_val
+        da_new = self._build_da(self.wavenumber, new_values, self.values_label, self.tos, self.metadata)
+        return IRData(da=da_new, metadata=self.metadata)
+
+    def normalise_integral(self) -> "IRData":
+        integral = np.trapz(self.values, x=self.wavenumber, axis=-1)
+        if np.any(integral == 0):
+            logger.warning("Integral is zero for some scans; returning original data without normalisation")
+            return self
+        new_values = self.values / integral[..., np.newaxis]
+        da_new = self._build_da(self.wavenumber, new_values, self.values_label, self.tos, self.metadata)
+        return IRData(da=da_new, metadata=self.metadata)
+    
+    def normalise_reference(self, reference: npt.NDArray) -> "IRData":
+        if reference.ndim != 1:
+            raise ValueError("Reference spectrum must be 1-D")
+        if reference.size != self.wavenumber.size:
+            raise ValueError(f"Reference size ({reference.size}) does not match wavenumber size ({self.wavenumber.size})")
+        if np.any(reference == 0):
+            logger.warning("Reference spectrum contains zero values; returning original data without normalisation")
+            return self
+
+        new_values = self.values / reference
+        da_new = self._build_da(self.wavenumber, new_values, self.values_label, self.tos, self.metadata)
+        return IRData(da=da_new, metadata=self.metadata)
+    
+    def normalise_reference_scan(self, scan_index: int) -> "IRData":
+        if self.ndim == 1:
+            raise ValueError("normalise_reference_scan requires 2-D data")
+        reference = self.get_scan(scan_index)
+        return self.normalise_reference(reference)
+    
+    def normalise_reference_by_tos(
+        self,
+        target_tos: float,
+        method: Literal["nearest", "linear"] = "nearest",
+        tolerance_seconds: Optional[float] = 10,
+    ) -> "IRData":
+        if self.ndim == 1:
+            raise ValueError("normalise_reference_by_tos requires 2-D data")
+        reference = self.get_scan_by_tos(target_tos, method=method, tolerance_seconds=tolerance_seconds)
+        return self.normalise_reference(reference)
+    
+    def normalise_value_range(self, new_min: float = 0.0, new_max: float = 1.0) -> "IRData":
+        old_min = self.values.min()
+        old_max = self.values.max()
+        if old_max == old_min:
+            logger.warning("All values are the same; returning original data without normalisation")
+            return self
+        new_values = (self.values - old_min) / (old_max - old_min) * (new_max - new_min) + new_min
+        da_new = self._build_da(self.wavenumber, new_values, self.values_label, self.tos, self.metadata)
+        return IRData(da=da_new, metadata=self.metadata)
+    
+    def normalise_value(self, factor: float) -> "IRData":
+        if factor == 0:
+            logger.warning("Normalisation factor is zero; returning original data without normalisation")
+            return self
+        new_values = self.values / factor
+        da_new = self._build_da(self.wavenumber, new_values, self.values_label, self.tos, self.metadata)
+        return IRData(da=da_new, metadata=self.metadata)
 
     # ----------------------------------------------------------------
     # Export
     # ----------------------------------------------------------------
- 
+
     def to_csv(
         self,
         filepath: Union[str, Path],
@@ -371,7 +663,7 @@ class IRData(BaseModel):
         filepath = Path(filepath)
         wn = self.wavenumber_per_cm if wavenumber_units == "cm-1" else self.wavenumber
         wn_label = f"wavenumber [{wavenumber_units}]"
- 
+
         if self.ndim == 1:
             df = pd.DataFrame(
                 {self.values_label: self.values},
@@ -384,24 +676,17 @@ class IRData(BaseModel):
                 if tos is not None
                 else [f"scan_{i}" for i in range(self.shape[0])]
             )
-            df = pd.DataFrame(
-                self.values.T,
-                index=pd.Index(wn, name=wn_label),
-                columns=col_labels,
-            )
- 
+            df = pd.DataFrame(self.values.T, index=pd.Index(wn, name=wn_label), columns=col_labels)
+
         df.to_csv(filepath)
         logger.debug("Saved CSV → %s", filepath)
- 
+
     def to_netcdf(self, filepath: Union[str, Path]) -> None:
-        """
-        Save to NetCDF4 via xarray. Preserves all coordinates and metadata.
- 
-        Reload with ``IRData.from_netcdf(filepath)``.
-        """
+        # tos_start in da.attrs (via metadata) round-trips automatically
         self.da.to_netcdf(filepath)
         logger.debug("Saved NetCDF → %s", filepath)
-
+    
+    
     # ----------------------------------------------------------------
     # Constructors
     # ----------------------------------------------------------------
@@ -418,37 +703,35 @@ class IRData(BaseModel):
     ) -> "IRData":
         wavenumber_si = np.asarray(wavenumber_per_cm, dtype=float) * 100.0
         values = np.asarray(values, dtype=float)
- 
+
         if wavenumber_si.ndim != 1:
             raise ValueError("wavenumber_per_cm must be 1-D")
         if values.ndim == 1:
             if values.size != wavenumber_si.size:
-                raise ValueError(
-                    f"values size ({values.size}) != wavenumber size ({wavenumber_si.size})"
-                )
+                raise ValueError(f"values size ({values.size}) != wavenumber size ({wavenumber_si.size})")
         elif values.ndim == 2:
             n_scans, n_pts = values.shape
             if n_pts != wavenumber_si.size:
-                raise ValueError(
-                    f"values.shape[1] ({n_pts}) != wavenumber size ({wavenumber_si.size})"
-                )
+                raise ValueError(f"values.shape[1] ({n_pts}) != wavenumber size ({wavenumber_si.size})")
             if tos is not None:
                 tos = np.asarray(tos, dtype=float)
                 if tos.ndim != 1 or tos.size != n_scans:
-                    raise ValueError(
-                        f"tos size ({tos.size}) != values.shape[0] ({n_scans})"
-                    )
+                    raise ValueError(f"tos size ({tos.size}) != values.shape[0] ({n_scans})")
         else:
             raise ValueError(f"values must be 1-D or 2-D, got shape {values.shape}")
- 
-        da = cls._build_da(wavenumber_si, values, values_label, tos, tos_start, metadata)
-        return cls(da=da, metadata=metadata or {})
- 
+
+        meta = dict(metadata or {})
+        if tos_start is not None:
+            meta["tos_start"] = pd.Timestamp(tos_start).isoformat()
+
+        da = cls._build_da(wavenumber_si, values, values_label, tos, meta)
+        return cls(da=da, metadata=meta)
+
     @classmethod
     def from_netcdf(cls, filepath: Union[str, Path]) -> "IRData":
         da = xr.open_dataarray(filepath)
         return cls(da=da, metadata=dict(da.attrs))
- 
+
     @classmethod
     def from_xarray(
         cls,
@@ -471,114 +754,110 @@ class IRData(BaseModel):
         tos_start: Optional[Union[pd.Timestamp, str]] = None,
         strict_tos_start: bool = True,
     ) -> "IRData":
-        
         if delta_time_seconds is not None and tos_start is not None:
-            raise ValueError(
-                "Specify either 'delta_time_seconds' or 'tos_start', not both."
-            )
- 
-        raw = omnic.read_spa(
-            filepath,
-            delta_time_seconds=delta_time_seconds,
-            tos_start=tos_start,
-        )
- 
+            raise ValueError("Specify either 'delta_time_seconds' or 'tos_start', not both.")
+
+        raw = omnic.read_spa(filepath, delta_time_seconds=delta_time_seconds, tos_start=tos_start)
+
         wavenumber_si = np.asarray(
-            transform_matching_dimensions(
-                raw["data"]["x"],
-                from_2SI_factor=wavenumber_2SI_factor,
-                to_2SI_factor=1,
-            ),
+            transform_matching_dimensions(raw["data"]["x"], from_2SI_factor=wavenumber_2SI_factor, to_2SI_factor=1),
             dtype=float,
         )
         values = np.asarray(raw["data"]["v"], dtype=float)
- 
-        raw_tos_start = raw["meta"].get("tos_start")
-        parsed_tos_start: Optional[pd.Timestamp] = None
+        tos = np.asarray(raw["data"].get("tos"), dtype=float) if "tos" in raw["data"] else None
         
-        if raw_tos_start is not None:
+        # Caller-supplied tos_start takes precedence over file metadata
+        parsed_tos_start: Optional[pd.Timestamp] = None
+        if tos_start is not None:
+            parsed_tos_start = pd.Timestamp(tos_start)
+        elif (raw_ts := raw["meta"].get("tos_start")) is not None:
             try:
-                parsed_tos_start = pd.Timestamp(raw_tos_start)
+                parsed_tos_start = pd.Timestamp(raw_ts)
             except Exception as exc:
                 if strict_tos_start:
-                    raise ValueError(
-                        f"Could not parse tos_start '{raw_tos_start}': {exc}"
-                    ) from exc
-                logger.warning(
-                    "Ignoring unparseable tos_start '%s': %s", raw_tos_start, exc
-                )
- 
-        da = cls._build_da(
-            wavenumber_si,
-            values,
-            values_label,
-            tos=raw["data"].get("tos"),
-            tos_start=parsed_tos_start,
-            metadata=raw["meta"],
-        )
-        return cls(da=da, metadata=raw["meta"])
-    
+                    raise ValueError(f"Could not parse tos_start '{raw_ts}': {exc}") from exc
+                logger.warning("Ignoring unparseable tos_start '%s': %s", raw_ts, exc)
+
+        meta = dict(raw["meta"])
+        if parsed_tos_start is not None:
+            meta["tos_start"] = parsed_tos_start.isoformat()
+
+        da = cls._build_da(wavenumber_si, values, values_label, tos=tos, metadata=meta)
+        return cls(da=da, metadata=meta)
 
     # ----------------------------------------------------------------
     # Dunder helpers
     # ----------------------------------------------------------------
- 
+
     def __repr__(self) -> str:
         wn = self.wavenumber_per_cm
         wn_range = f"{wn.min():.1f}–{wn.max():.1f} cm⁻¹" if wn.size else "empty"
         dims = dict(zip(self.da.dims, self.da.shape))
-        return (
-            f"IRData("
-            f"label={self.values_label!r}, "
-            f"shape={dims}, "
-            f"wavenumber={wn_range}"
-            f")"
-        )
- 
+        tos_info = f", tos={self.tos[0]:.1f}–{self.tos[-1]:.1f}s" if self.tos is not None else ""
+        ts_info = f", tos_start={self.tos_start}" if self.tos_start is not None else ""
+        return f"IRData(label={self.values_label!r}, shape={dims}, wavenumber={wn_range}{tos_info}{ts_info})"
+
     def __len__(self) -> int:
         return self.da.sizes.get("scan", 1)
+    
+    def __add__(self, other: "IRData") -> "IRData":
+        if not isinstance(other, IRData):
+            return NotImplemented
+        self._check_compatible(other, "add")
+        new_metadata = {**self.metadata, **other.metadata}
+        da_new = self._build_da(self.wavenumber, self.values + other.values, self.values_label, self.tos, new_metadata)
+        return IRData(da=da_new, metadata=new_metadata)
+
+    def __sub__(self, other: "IRData") -> "IRData":
+        if not isinstance(other, IRData):
+            return NotImplemented
+        self._check_compatible(other, "subtract")
+        new_metadata = {**self.metadata, **other.metadata}
+        da_new = self._build_da(self.wavenumber, self.values - other.values, self.values_label, self.tos, new_metadata)
+        return IRData(da=da_new, metadata=new_metadata)
 
 
     # ----------------------------------------------------------------
     # Private helpers
     # ----------------------------------------------------------------
- 
+    
+    def _check_compatible(self, other: "IRData", op: str) -> None:
+        if self.wavenumber.shape != other.wavenumber.shape or not np.allclose(self.wavenumber, other.wavenumber):
+            raise ValueError(f"Cannot {op} IRData with different wavenumber axes")
+        if self.ndim != other.ndim:
+            raise ValueError(f"Cannot {op} IRData with different number of dimensions")
+        if self.ndim == 2 and self.shape[0] != other.shape[0]:
+            raise ValueError(f"Cannot {op} 2-D IRData with different number of scans")
+        
+
     @staticmethod
     def _build_da(
         wavenumber_si: npt.NDArray,
         values: npt.NDArray,
         values_label: str,
         tos: Optional[npt.NDArray],
-        tos_start: Optional[Union[pd.Timestamp, str]],
         metadata: Optional[dict[str, Any]],
     ) -> xr.DataArray:
-        """Build the canonical DataArray from validated raw arrays."""
+        # tos_start and timestamps are NOT coords — tos_start lives in attrs via metadata,
+        # timestamps derived on demand by IRData.timestamps property.
         coords: dict[str, Any] = {"wavenumber": wavenumber_si}
         dims: list[str]
- 
+
         if values.ndim == 1:
             dims = ["wavenumber"]
         else:
             dims = ["scan", "wavenumber"]
             coords["scan"] = np.arange(values.shape[0])
- 
             if tos is not None:
-                tos = np.asarray(tos, dtype=float)
-                coords["tos"] = ("scan", tos)
- 
-                if tos_start is not None:
-                    ts = pd.Timestamp(tos_start)
-                    timestamps = [ts + pd.Timedelta(seconds=float(t)) for t in tos]
-                    coords["timestamp"] = ("scan", timestamps)
- 
-        return xr.DataArray(
+                coords["tos"] = ("scan", np.asarray(tos, dtype=float))
+
+        da = xr.DataArray(
             data=values,
             coords=coords,
             dims=dims,
-            attrs={
-                "values_label": values_label,
-                "wavenumber_units": "m^-1",
-                **(metadata or {}),
-            },
+            attrs={"values_label": values_label, "wavenumber_units": "m^-1", **(metadata or {})},
             name=values_label,
         )
+
+        logger.debug(f"Built DataArray with dims={da.dims}, coords={list(da.coords)}, shape={da.shape}, values_label={values_label}, tos_start={metadata.get('tos_start') if metadata else None}, tos[0]={tos[0] if tos is not None else None}, tos[-1]={tos[-1] if tos is not None else None}, metadata_keys={list(metadata.keys()) if metadata else None}")
+        return da
