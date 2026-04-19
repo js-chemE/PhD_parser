@@ -3,17 +3,15 @@ import re
 import struct
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
-import zoneinfo
-from typing import Union, Iterable, Tuple, Dict, Any, Callable, Optional
+from typing import Union, Iterable, Dict, Any, Callable, Optional
 import pandas as pd
-
-import logging
-
-logger = logging.getLogger(__name__)
 
 import numpy as np
 import requests
 
+import logging
+
+logger = logging.getLogger(__name__)
 
 # =========================
 # Basic utilities

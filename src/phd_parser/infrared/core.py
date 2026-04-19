@@ -11,10 +11,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from scipy import constants as const
 
 from phd_parser.infrared import omnic
-from phd_parser.units import (
-    transform_matching_dimensions,
-    transform_wavenumber_frequency,
-)
 
 logger = logging.getLogger(__name__)
 
@@ -759,10 +755,7 @@ class IRData(BaseModel):
 
         raw = omnic.read_spa(filepath, delta_time_seconds=delta_time_seconds, tos_start=tos_start)
 
-        wavenumber_si = np.asarray(
-            transform_matching_dimensions(raw["data"]["x"], from_2SI_factor=wavenumber_2SI_factor, to_2SI_factor=1),
-            dtype=float,
-        )
+        wavenumber_si = np.asarray(raw["data"]["x"]) * wavenumber_2SI_factor
         values = np.asarray(raw["data"]["v"], dtype=float)
         tos = np.asarray(raw["data"].get("tos"), dtype=float) if "tos" in raw["data"] else None
         
