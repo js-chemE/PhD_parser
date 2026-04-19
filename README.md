@@ -87,8 +87,14 @@ The `IRData` class is the core container for infrared spectroscopy data. It wrap
 
 Parser for `.spa` files via `phd_parser.infrared.omnic`. Supports single-spectrum files and series with optional `delta_time_seconds` or explicit `tos_start`.
 
+Due to the high overhead of SpectroChemPy [^1], this `read_omnic_spa` is a stripped-down version of their parser. For further processing beyond raw file reading, I recommend checking them out.
+
 ### MS
 
 #### Quadstar for MS in building 67 - Box 5
 
 ...
+
+## References
+
+[^1]: Travert, A., & Fernandez, C. (2025). *SpectroChemPy* (Version 0.8.4) [Computer software]. Laboratoire Catalyse and Spectrochemistry (LCS), Normandie Université/CNRS. https://github.com/spectrochempy/spectrochempy (CeCILL-B licence)
