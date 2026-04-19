@@ -85,9 +85,15 @@ The `IRData` class is the core container for infrared spectroscopy data. It wrap
 
 #### OMNIC (Thermo Scientific)
 
-Parser for `.spa` files via `phd_parser.infrared.omnic`. Supports single-spectrum files and series with optional `delta_time_seconds` or explicit `tos_start`.
+Low-level parser for `.spa` files in `phd_parser.infrared.omnic`:
 
-Due to the high overhead of SpectroChemPy [^1], this `read_omnic_spa` is a stripped-down version of their parser. For further processing beyond raw file reading, I recommend checking them out.
+- `read_spa` — reads a single `.spa` file, a directory of `.spa` files, or an iterable of paths; returns a dict with stacked `x`, `v` and `tos` arrays plus metadata
+- Supports local paths and HTTP(S) URLs
+- Time-of-scan (`tos`) derived from: explicit `tos_start`, a fixed `delta_time_seconds` increment, or the embedded file timestamps (default)
+- Optional `sort_key` for ordering series (default extracts the "Spectrum Index N" pattern from filenames)
+- Extracts core header fields (x/y units, number of points, range) and acquisition datetime
+
+Due to the high overhead of SpectroChemPy [^1], this `read_spa` is a stripped-down version of their parser. For further processing beyond raw file reading, I recommend checking them out.
 
 ### MS
 
