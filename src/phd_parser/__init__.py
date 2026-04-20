@@ -6,5 +6,6 @@ import phd_parser.tga as tga
 import phd_parser.massspec as massspec
 import phd_parser.logging as logging
 import phd_parser.units as units
+import phd_parser.labview as labview
 
-__all__ = ["logging", "units", "raman", "xps", "xrd", "infrared", "tga", "massspec"]
+__all__ = ["logging", "units", "raman", "xps", "xrd", "infrared", "tga", "massspec", "labview"]
