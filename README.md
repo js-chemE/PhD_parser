@@ -24,9 +24,13 @@ Each equipment/parser is independently usable.
 
 The idea for each equipment is that there is a core `Data` class which utilises diverse parsers to read in and process the raw files from specific equipment and setups. This repo is partially highly specified for our group's equipment. However, parts of it contain parsers for commercial manufacturers and file formats and are hence universally applicable.
 
+---
+
 ### Labview
 
 ...
+
+---
 
 ### Raman
 
@@ -44,17 +48,25 @@ The idea for each equipment is that there is a core `Data` class which utilises 
 
 ...
 
+---
+
 ### XRD
 
 ...
+
+---
 
 ### XPS
 
 ...
 
+---
+
 ### TGA
 
 ...
+
+---
 
 ### Infrared
 
@@ -94,6 +106,8 @@ Low-level parser for `.spa` files in `phd_parser.infrared.omnic`:
 - Extracts core header fields (x/y units, number of points, range) and acquisition datetime
 
 Due to the high overhead of SpectroChemPy [^1], this `read_spa` is a stripped-down version of their parser. For further processing beyond raw file reading, I recommend checking them out.
+
+---
 
 ### MS
  
