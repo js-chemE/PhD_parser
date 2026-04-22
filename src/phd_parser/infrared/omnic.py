@@ -220,7 +220,7 @@ def _read_intensities(fid: io.BufferedReader, pos: int) -> np.ndarray:
 # =========================
 
 def read_spa(
-    paths: Union[str, Path, Iterable[Union[str, Path]]],
+    path: Union[str, Path, Iterable[Union[str, Path]]],
     sort_key: Optional[Callable[[Union[str, Path]], float]] = extract_spectrum_id,
     delta_time_seconds: Optional[float] = None,
     tos_start: Optional[pd.Timestamp | str] = None,
@@ -241,8 +241,8 @@ def read_spa(
 
 
     # ---- normalize ----
-    if isinstance(paths, (str, Path)):
-        p = Path(paths)
+    if isinstance(path, (str, Path)):
+        p = Path(path)
 
         if p.is_dir():
             files = list({f.resolve() for f in p.glob("*.spa")})
@@ -271,7 +271,7 @@ def read_spa(
             }
 
     else:
-        files = [Path(p).resolve() for p in paths]
+        files = [Path(p).resolve() for p in path]
 
     # ---- optional sorting ----
     if sort_key is not None:

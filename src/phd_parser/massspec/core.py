@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Optional, Union, Sequence
 
 import numpy as np
 import numpy.typing as npt
@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 BlockUnit = Literal["A", "mbar", "arbitrary"]
 
-
 class MSData(BaseModel):
 
     model_config = ConfigDict(
@@ -30,7 +29,7 @@ class MSData(BaseModel):
     # Fields
     # ----------------------------------------------------------------
 
-    dataset: xr.Dataset = Field(
+    ds: xr.Dataset = Field(
         description=(
             "xr.Dataset with one DataArray per datablock named 'block_{id}'. "
             "Each DataArray has dims ('time', 'mz'). "
@@ -51,11 +50,11 @@ class MSData(BaseModel):
     # Validators
     # ----------------------------------------------------------------
 
-    @field_validator("dataset", mode="before")
+    @field_validator("ds", mode="before")
     @classmethod
     def validate_dataset(cls, v: Any) -> xr.Dataset:
         if not isinstance(v, xr.Dataset):
-            raise TypeError(f"'dataset' must be an xr.Dataset, got {type(v)}")
+            raise TypeError(f"'ds' must be an xr.Dataset, got {type(v)}")
         for name, da in v.data_vars.items():
             if "time" not in da.dims or "mz" not in da.dims:
                 raise ValueError(
@@ -65,7 +64,7 @@ class MSData(BaseModel):
 
     @model_validator(mode="after")
     def validate_block_meta_keys(self) -> "MSData":
-        for name in self.dataset.data_vars:
+        for name in self.ds.data_vars:
             block_id = int(name.split("_", 1)[1])
             if block_id not in self.block_meta:
                 logger.warning(
@@ -80,7 +79,7 @@ class MSData(BaseModel):
 
     @property
     def block_ids(self) -> list[int]:
-        return sorted(int(n.split("_", 1)[1]) for n in self.dataset.data_vars)
+        return sorted(int(n.split("_", 1)[1]) for n in self.ds.data_vars)
 
     @property
     def n_blocks(self) -> int:
@@ -89,7 +88,7 @@ class MSData(BaseModel):
     @property
     def time(self) -> npt.NDArray:
         """Elapsed time in seconds (SI)."""
-        return self.dataset.coords["time"].values
+        return self.ds.coords["time"].values
 
     @property
     def n_time(self) -> int:
@@ -97,14 +96,14 @@ class MSData(BaseModel):
 
     @property
     def timestamps(self) -> Optional[pd.DatetimeIndex]:
-        if "timestamp" in self.dataset.coords:
-            return pd.DatetimeIndex(self.dataset.coords["timestamp"].values)
+        if "timestamp" in self.ds.coords:
+            return pd.DatetimeIndex(self.ds.coords["timestamp"].values)
         return None
     
     @property
     def tos_start(self) -> Optional[pd.Timestamp]:
         """Timestamp corresponding to time=0, if available."""
-        for da in self.dataset.data_vars.values():
+        for da in self.ds.data_vars.values():
             if "tos_start" in da.attrs:
                 return pd.to_datetime(da.attrs["tos_start"])
         return None
@@ -120,15 +119,15 @@ class MSData(BaseModel):
 
     @property
     def cycle(self) -> Optional[npt.NDArray]:
-        if "cycle" in self.dataset.coords:
-            return self.dataset.coords["cycle"].values
+        if "cycle" in self.ds.coords:
+            return self.ds.coords["cycle"].values
         return None
 
     def _block(self, block_id: int) -> xr.DataArray:
         name = f"block_{block_id}"
-        if name not in self.dataset:
+        if name not in self.ds:
             raise KeyError(f"Block {block_id} not found. Available: {self.block_ids}")
-        return self.dataset[name]
+        return self.ds[name]
 
     def mz(self, block_id: int = 0) -> npt.NDArray:
         return self._block(block_id).coords["mz"].values
@@ -229,10 +228,151 @@ class MSData(BaseModel):
         if tos_end_seconds is not None:
             mask &= tos <= tos_end_seconds
         return MSData(
-            dataset=self.dataset.isel(time=mask),
+            ds=self.ds.isel(time=mask),
             block_meta=self.block_meta,
             metadata=self.metadata,
         )
+    
+    # ----------------------------------------------------------------
+    # Immutable Baseline Correction
+    # ----------------------------------------------------------------
+
+    def correct_traces(
+        self,
+        mz: Union[None, Literal["all"], float, Sequence[float]] = "all",
+        block_id: int = 0,
+        tolerance: Optional[float] = 0.2,
+    ) -> "MSData":
+        # No-op
+        if mz is None:
+            return MSData(
+                ds=self.ds.copy(deep=True),
+                block_meta=self.block_meta,
+                metadata=self.metadata,
+            )
+
+        new_ds = self.ds.copy(deep=True)
+        shifts_log: dict[int, dict[float, float]] = {}
+
+        # "all": every channel in every block
+        if isinstance(mz, str):
+            if mz != "all":
+                raise ValueError(f"mz string argument must be 'all', got {mz!r}")
+            for bid in self.block_ids:
+                name = f"block_{bid}"
+                arr = new_ds[name].values
+                mins = np.nanmin(arr, axis=0)
+                shift = np.where(mins < 0, mins, 0.0)
+                new_ds[name] = new_ds[name] - shift
+                # Log only channels that actually moved
+                mz_grid = new_ds[name].coords["mz"].values
+                moved = {float(mz_grid[i]): float(-shift[i]) for i in np.where(shift < 0)[0]}
+                if moved:
+                    shifts_log[bid] = moved
+
+        # float or sequence of floats: targeted
+        else:
+            try:
+                targets = np.atleast_1d(np.asarray(mz, dtype=float))
+            except (TypeError, ValueError) as e:
+                raise TypeError(
+                    f"mz must be None, 'all', a float, or a sequence of floats; got {mz!r}"
+                ) from e
+
+            name = f"block_{block_id}"
+            if name not in new_ds:
+                raise KeyError(f"Block {block_id} not found. Available: {self.block_ids}")
+
+            mz_grid = new_ds[name].coords["mz"].values
+            arr = new_ds[name].values
+            block_log: dict[float, float] = {}
+
+            for target in targets:
+                dists = np.abs(mz_grid - target)
+                idx = int(np.argmin(dists))
+                if tolerance is not None and dists[idx] > tolerance:
+                    raise ValueError(
+                        f"Requested m/z {target} is {dists[idx]:.3f} Da from the "
+                        f"nearest grid point (tolerance: {tolerance})"
+                    )
+                trace_min = np.nanmin(arr[:, idx])
+                if trace_min < 0:
+                    arr[:, idx] = arr[:, idx] - trace_min
+                    block_log[float(mz_grid[idx])] = float(-trace_min)
+
+            new_ds[name].values[...] = arr
+            if block_log:
+                shifts_log[block_id] = block_log
+
+        # Audit trail
+        new_metadata = dict(self.metadata)
+        if shifts_log:
+            history = new_metadata.get("trace_corrections", [])
+            history = list(history) + [{"method": "min_shift", "shifts": shifts_log}]
+            new_metadata["trace_corrections"] = history
+
+        return MSData(ds=new_ds, block_meta=self.block_meta, metadata=new_metadata)
+
+
+    def baseline_subtract(
+        self,
+        tos_start_seconds: float,
+        tos_end_seconds: float,
+        block_id: Union[int, Literal["all"], None] = "all",
+    ) -> "MSData":
+        # Compute per-channel mean over the baseline window (requires tos)
+        tos = self.tos
+        if tos is None:
+            raise ValueError(
+                "Cannot baseline-subtract by tos range because tos_start or "
+                "timestamps are not available."
+            )
+
+        mask = (tos >= tos_start_seconds) & (tos <= tos_end_seconds)
+        if not mask.any():
+            raise ValueError(
+                f"Baseline window [{tos_start_seconds}, {tos_end_seconds}] s "
+                f"contains no samples. tos range is "
+                f"[{float(tos.min()):.1f}, {float(tos.max()):.1f}] s."
+            )
+
+        # Resolve which blocks to process
+        if block_id is None or block_id == "all":
+            target_blocks = self.block_ids
+        else:
+            if block_id not in self.block_ids:
+                raise KeyError(f"Block {block_id} not found. Available: {self.block_ids}")
+            target_blocks = [block_id]
+
+        new_ds = self.ds.copy(deep=True)
+        baseline_log: dict[int, dict[str, Any]] = {}
+
+        for bid in target_blocks:
+            name = f"block_{bid}"
+            da = new_ds[name]
+            # Per-channel mean over the masked time window
+            baseline = da.isel(time=mask).mean(dim="time", skipna=True)
+            new_ds[name] = da - baseline
+            baseline_log[bid] = {
+                "mean_per_mz": {
+                    float(m): float(b)
+                    for m, b in zip(da.coords["mz"].values, baseline.values)
+                },
+                "n_samples": int(mask.sum()),
+            }
+
+        new_metadata = dict(self.metadata)
+        history = new_metadata.get("trace_corrections", [])
+        history = list(history) + [
+            {
+                "method": "baseline_subtract",
+                "window_tos_s": [float(tos_start_seconds), float(tos_end_seconds)],
+                "baselines": baseline_log,
+            }
+        ]
+        new_metadata["trace_corrections"] = history
+
+        return MSData(ds=new_ds, block_meta=self.block_meta, metadata=new_metadata)
 
     # ----------------------------------------------------------------
     # Export
@@ -253,7 +393,7 @@ class MSData(BaseModel):
 
     def to_netcdf(self, filepath: Union[str, Path]) -> None:
         """Save full dataset to NetCDF4. Reload with from_netcdf()."""
-        self.dataset.to_netcdf(filepath)
+        self.ds.to_netcdf(filepath)
         logger.debug("Saved NetCDF → %s", filepath)
 
     # ----------------------------------------------------------------
@@ -325,7 +465,7 @@ class MSData(BaseModel):
                 tos_start = pd.to_datetime(tos_start)
 
         ds = cls._build_da(time, mz, values, block_meta, timestamps, tos_start, cycle)
-        return cls(dataset=ds, block_meta=block_meta or {}, metadata=metadata or {})
+        return cls(ds=ds, block_meta=block_meta or {}, metadata=metadata or {})
 
     @classmethod
     def from_quadstar_asc(
@@ -402,7 +542,7 @@ class MSData(BaseModel):
             cycle=cycle_arr,
         )
         return cls(
-            dataset=ds,
+            ds=ds,
             block_meta=meta.get("datablocks", {}),
             metadata={k: v for k, v in meta.items() if k != "datablocks"},
         )
@@ -411,7 +551,7 @@ class MSData(BaseModel):
     def from_netcdf(cls, filepath: Union[str, Path]) -> "MSData":
         """Reload an MSData previously saved with to_netcdf()."""
         ds = xr.open_dataset(filepath)
-        return cls(dataset=ds, metadata=dict(ds.attrs))
+        return cls(ds=ds, metadata=dict(ds.attrs))
 
     # ----------------------------------------------------------------
     # Dunder helpers

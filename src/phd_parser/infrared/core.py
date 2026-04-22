@@ -60,8 +60,6 @@ class IRData(BaseModel):
 
     @model_validator(mode="after")
     def validate_attrs(self) -> "IRData":
-        self.da.attrs.setdefault("values_label", "absorbance")
-        self.da.attrs.setdefault("wavenumber_units", "m^-1")
         return self
 
     # ----------------------------------------------------------------
@@ -312,9 +310,9 @@ class IRData(BaseModel):
         da_new = self._build_da(
             wavenumber_si=da.coords["wavenumber"].values,
             values=da.values,
-            values_label=self.values_label,
             tos=da.coords["tos"].values if "tos" in da.coords else None,
             metadata=self.metadata,
+            name=da.name,
         )
         return IRData(da=da_new, metadata=self.metadata)
 
@@ -344,9 +342,9 @@ class IRData(BaseModel):
         da_new = self._build_da(
             wavenumber_si=da.coords["wavenumber"].values,
             values=da.values,
-            values_label=self.values_label,
             tos=da.coords["tos"].values,
             metadata=self.metadata,
+            name=da.name,
         )
         return IRData(da=da_new, metadata=self.metadata)
 
@@ -363,7 +361,7 @@ class IRData(BaseModel):
             smoothed = np.apply_along_axis(
                 lambda m: savgol_filter(m, window_length, polyorder), axis=1, arr=self.values
             )
-        da_new = self._build_da(self.wavenumber, smoothed, self.values_label, self.tos, self.metadata)
+        da_new = self._build_da(self.wavenumber, smoothed, name=self.da.name, tos=self.tos, metadata=self.metadata)
         return IRData(da=da_new, metadata=self.metadata)
 
     def smooth_gaussian(self, sigma_cm: float) -> "IRData":
@@ -376,7 +374,7 @@ class IRData(BaseModel):
             smoothed = np.apply_along_axis(
                 lambda m: gaussian_filter1d(m, sigma=sigma_si), axis=1, arr=self.values
             )
-        da_new = self._build_da(self.wavenumber, smoothed, self.values_label, self.tos, self.metadata)
+        da_new = self._build_da(self.wavenumber, smoothed, name=self.da.name, tos=self.tos, metadata=self.metadata)
         return IRData(da=da_new, metadata=self.metadata)
 
     def smooth_moving(self, window_size: int = 5) -> "IRData":
@@ -390,7 +388,7 @@ class IRData(BaseModel):
             smoothed = np.apply_along_axis(
                 lambda m: np.convolve(m, kernel, mode="same"), axis=1, arr=self.values
             )
-        da_new = self._build_da(self.wavenumber, smoothed, self.values_label, self.tos, self.metadata)
+        da_new = self._build_da(self.wavenumber, smoothed, name=self.da.name, tos=self.tos, metadata=self.metadata)
         return IRData(da=da_new, metadata=self.metadata)
 
     # ----------------------------------------------------------------
@@ -417,7 +415,7 @@ class IRData(BaseModel):
             corrected = self.values - self.values[:, mask].mean(axis=1, keepdims=True)
 
         new_metadata = {**self.metadata, "baseline_anchor_range_cm": list(anchor_range_cm)}
-        da_new = self._build_da(wn, corrected, self.values_label, self.tos, new_metadata)
+        da_new = self._build_da(wn, corrected, name=self.da.name, tos=self.tos, metadata=new_metadata)
         return IRData(da=da_new, metadata=new_metadata)
 
     def correct_pchip(
@@ -452,7 +450,7 @@ class IRData(BaseModel):
             "baseline_pchip_control_points_cm": sorted(control_points_cm),
             "baseline_pchip_half_width": point_avg_half_width,
         }
-        da_new = self._build_da(wn_si, corrected, self.values_label, self.tos, new_metadata)
+        da_new = self._build_da(wn_si, corrected, name=self.da.name, tos=self.tos, metadata=new_metadata)
         return IRData(da=da_new, metadata=new_metadata)
 
     def correct_baseline(
@@ -515,7 +513,7 @@ class IRData(BaseModel):
                 new_tos = tos_blocks[:, -1]
 
         # tos values remain absolute elapsed seconds, so tos_start stays valid
-        da_new = self._build_da(self.wavenumber, new_values, self.values_label, new_tos, self.metadata)
+        da_new = self._build_da(self.wavenumber, new_values, name=self.da.name, tos=new_tos, metadata=self.metadata)
         return IRData(da=da_new, metadata=self.metadata)
 
     def average_scans_by_tos(
@@ -587,7 +585,7 @@ class IRData(BaseModel):
             logger.warning("Maximum value is zero; returning original data without normalisation")
             return self
         new_values = self.values / max_val
-        da_new = self._build_da(self.wavenumber, new_values, self.values_label, self.tos, self.metadata)
+        da_new = self._build_da(self.wavenumber, new_values, name=self.da.name, tos=self.tos, metadata=self.metadata)
         return IRData(da=da_new, metadata=self.metadata)
 
     def normalise_integral(self) -> "IRData":
@@ -596,7 +594,7 @@ class IRData(BaseModel):
             logger.warning("Integral is zero for some scans; returning original data without normalisation")
             return self
         new_values = self.values / integral[..., np.newaxis]
-        da_new = self._build_da(self.wavenumber, new_values, self.values_label, self.tos, self.metadata)
+        da_new = self._build_da(self.wavenumber, new_values, name=self.da.name, tos=self.tos, metadata=self.metadata)
         return IRData(da=da_new, metadata=self.metadata)
     
     def normalise_reference(self, reference: npt.NDArray) -> "IRData":
@@ -609,7 +607,7 @@ class IRData(BaseModel):
             return self
 
         new_values = self.values / reference
-        da_new = self._build_da(self.wavenumber, new_values, self.values_label, self.tos, self.metadata)
+        da_new = self._build_da(self.wavenumber, new_values, name=self.da.name, tos=self.tos, metadata=self.metadata)
         return IRData(da=da_new, metadata=self.metadata)
     
     def normalise_reference_scan(self, scan_index: int) -> "IRData":
@@ -636,7 +634,7 @@ class IRData(BaseModel):
             logger.warning("All values are the same; returning original data without normalisation")
             return self
         new_values = (self.values - old_min) / (old_max - old_min) * (new_max - new_min) + new_min
-        da_new = self._build_da(self.wavenumber, new_values, self.values_label, self.tos, self.metadata)
+        da_new = self._build_da(self.wavenumber, new_values, name=self.da.name, tos=self.tos, metadata=self.metadata)
         return IRData(da=da_new, metadata=self.metadata)
     
     def normalise_value(self, factor: float) -> "IRData":
@@ -644,38 +642,12 @@ class IRData(BaseModel):
             logger.warning("Normalisation factor is zero; returning original data without normalisation")
             return self
         new_values = self.values / factor
-        da_new = self._build_da(self.wavenumber, new_values, self.values_label, self.tos, self.metadata)
+        da_new = self._build_da(self.wavenumber, new_values, name=self.da.name, tos=self.tos, metadata=self.metadata)
         return IRData(da=da_new, metadata=self.metadata)
 
     # ----------------------------------------------------------------
     # Export
     # ----------------------------------------------------------------
-
-    def to_csv(
-        self,
-        filepath: Union[str, Path],
-        wavenumber_units: Literal["cm-1", "m-1"] = "cm-1",
-    ) -> None:
-        filepath = Path(filepath)
-        wn = self.wavenumber_per_cm if wavenumber_units == "cm-1" else self.wavenumber
-        wn_label = f"wavenumber [{wavenumber_units}]"
-
-        if self.ndim == 1:
-            df = pd.DataFrame(
-                {self.values_label: self.values},
-                index=pd.Index(wn, name=wn_label),
-            )
-        else:
-            tos = self.tos
-            col_labels = (
-                [f"tos_{t:.2f}s" for t in tos]
-                if tos is not None
-                else [f"scan_{i}" for i in range(self.shape[0])]
-            )
-            df = pd.DataFrame(self.values.T, index=pd.Index(wn, name=wn_label), columns=col_labels)
-
-        df.to_csv(filepath)
-        logger.debug("Saved CSV → %s", filepath)
 
     def to_netcdf(self, filepath: Union[str, Path]) -> None:
         # tos_start in da.attrs (via metadata) round-trips automatically
@@ -720,7 +692,7 @@ class IRData(BaseModel):
         if tos_start is not None:
             meta["tos_start"] = pd.Timestamp(tos_start).isoformat()
 
-        da = cls._build_da(wavenumber_si, values, values_label, tos, meta)
+        da = cls._build_da(wavenumber_si, values, name=values_label, tos=tos, metadata=meta)
         return cls(da=da, metadata=meta)
 
     @classmethod
@@ -732,19 +704,15 @@ class IRData(BaseModel):
     def from_xarray(
         cls,
         da: xr.DataArray,
-        values_label: VLabel = "absorbance",
         metadata: Optional[dict[str, Any]] = None,
     ) -> "IRData":
         da = da.copy()
-        da.attrs.setdefault("values_label", values_label)
-        da.attrs.setdefault("wavenumber_units", "m^-1")
         return cls(da=da, metadata=metadata or dict(da.attrs))
 
     @classmethod
     def from_omnic_spa(
         cls,
         filepath: Union[str, Path],
-        values_label: VLabel = "absorbance",
         wavenumber_2SI_factor: float = 100.0,
         delta_time_seconds: Optional[float] = None,
         tos_start: Optional[Union[pd.Timestamp, str]] = None,
@@ -775,7 +743,13 @@ class IRData(BaseModel):
         if parsed_tos_start is not None:
             meta["tos_start"] = parsed_tos_start.isoformat()
 
-        da = cls._build_da(wavenumber_si, values, values_label, tos=tos, metadata=meta)
+        da = cls._build_da(
+            wavenumber_si,
+            values,
+            tos=tos,
+            metadata=meta
+            )
+
         return cls(da=da, metadata=meta)
 
     # ----------------------------------------------------------------
@@ -798,7 +772,7 @@ class IRData(BaseModel):
             return NotImplemented
         self._check_compatible(other, "add")
         new_metadata = {**self.metadata, **other.metadata}
-        da_new = self._build_da(self.wavenumber, self.values + other.values, self.values_label, self.tos, new_metadata)
+        da_new = self._build_da(self.wavenumber, self.values + other.values, name=self.da.name, tos=self.tos, metadata=new_metadata)
         return IRData(da=da_new, metadata=new_metadata)
 
     def __sub__(self, other: "IRData") -> "IRData":
@@ -806,7 +780,7 @@ class IRData(BaseModel):
             return NotImplemented
         self._check_compatible(other, "subtract")
         new_metadata = {**self.metadata, **other.metadata}
-        da_new = self._build_da(self.wavenumber, self.values - other.values, self.values_label, self.tos, new_metadata)
+        da_new = self._build_da(self.wavenumber, self.values - other.values, name=self.da.name, tos=self.tos, metadata=new_metadata)
         return IRData(da=da_new, metadata=new_metadata)
 
 
@@ -827,14 +801,14 @@ class IRData(BaseModel):
     def _build_da(
         wavenumber_si: npt.NDArray,
         values: npt.NDArray,
-        values_label: str,
-        tos: Optional[npt.NDArray],
-        metadata: Optional[dict[str, Any]],
+        tos: Optional[npt.NDArray] = None,
+        metadata: Optional[dict[str, Any]] = None,
+        name: str = 'infrared_data',
     ) -> xr.DataArray:
-        # tos_start and timestamps are NOT coords — tos_start lives in attrs via metadata,
-        # timestamps derived on demand by IRData.timestamps property.
         coords: dict[str, Any] = {"wavenumber": wavenumber_si}
         dims: list[str]
+
+        attrs = {"wavenumber_unit": "m^-1"}
 
         if values.ndim == 1:
             dims = ["wavenumber"]
@@ -843,14 +817,17 @@ class IRData(BaseModel):
             coords["scan"] = np.arange(values.shape[0])
             if tos is not None:
                 coords["tos"] = ("scan", np.asarray(tos, dtype=float))
+                attrs["tos_unit"] = "s"
+            else:
+                logger.warning("No 'tos' provided for 2-D data; 'tos' coordinate will be missing")
 
         da = xr.DataArray(
             data=values,
             coords=coords,
             dims=dims,
-            attrs={"values_label": values_label, "wavenumber_units": "m^-1", **(metadata or {})},
-            name=values_label,
+            attrs=attrs,
+            name=name,
         )
 
-        logger.debug(f"Built DataArray with dims={da.dims}, coords={list(da.coords)}, shape={da.shape}, values_label={values_label}, tos_start={metadata.get('tos_start') if metadata else None}, tos[0]={tos[0] if tos is not None else None}, tos[-1]={tos[-1] if tos is not None else None}, metadata_keys={list(metadata.keys()) if metadata else None}")
+        logger.debug(f"Built DataArray with dims={da.dims}, coords={list(da.coords)}, shape={da.shape}, tos_start={metadata.get('tos_start') if metadata else None}, tos[0]={tos[0] if tos is not None else None}, tos[-1]={tos[-1] if tos is not None else None}, metadata_keys={list(metadata.keys()) if metadata else None}")
         return da
