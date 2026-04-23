@@ -110,36 +110,40 @@ Due to the high overhead of SpectroChemPy [^1], this `read_spa` is a stripped-do
 ---
 
 ### MS
- 
-The `MSData` class is the core container for mass spectrometry data. It wraps an `xarray.Dataset` in which each datablock from the source instrument is stored as a separate `DataArray` named `block_{id}` with dims `(time, mz)`. The `time` coordinate is elapsed seconds (SI); optional coordinates `timestamp` (absolute acquisition datetimes) and `cycle` (integer cycle index) ride along on the time axis. When a `tos_start` is provided, time-on-stream is reconstructed on demand as `timestamps - tos_start` — this survives all transformations. Per-block metadata (type, unit, channel definitions) is kept in a separate `block_meta` dict, and a free-form `metadata` dict carries file-level information and an audit trail of any corrections applied.
- 
+
+The `MSData` class is the core container for mass spectrometry data. It wraps an `xarray.Dataset` that holds one `DataArray` per source datablock, named `block_{id}`. The primary block (`block_0`) carries the m/z channels with dims `(cycle, mz)`; auxiliary blocks (pressure, temperature, analog inputs, …) have their own per-block channel dims `(cycle, ch_N)` so that mixed units are never coerced onto a shared "mz" axis. The `cycle` dim (integer scan index) is shared across all blocks, and an optional `tos` coord (time on stream, seconds) rides along it. All metadata lives on the `Dataset` itself: file-level info and the correction audit trail go in `ds.attrs` (including `tos_start` as an ISO-8601 string), while per-block info (unit, type, original channel labels) lives in each DataArray's `.attrs`. When `tos_start` is set, absolute timestamps are reconstructed on demand as `tos_start + tos` — this survives all transformations and round-trips through NetCDF without a side-car dict.
+
 **Constructors**
-- `from_arrays` — build from raw numpy arrays (time in seconds, per-block `mz` and `values` dicts, optional `timestamps`, `cycle`, `tos_start`)
-- `from_quadstar_asc` — read Pfeiffer Quadstar `.asc` exports (any number of datablocks, auto-assigned m/z columns)
+- `from_arrays` — build from raw numpy arrays (integer `cycle`, per-block `channels` and `values` dicts, optional `tos`, `tos_start`, `block_attrs`, `ds_attrs`)
+- `from_quadstar_asc` — read Pfeiffer Quadstar `.asc` exports (any number of datablocks, auto-routes m/z columns into block 0 and everything else into auxiliary blocks)
 - `from_netcdf` — load a previously saved NetCDF file
+
 **Accessors**
-- Blocks: `block_ids`, `n_blocks`, `mz`, `values`, `unit`, `block_type`
-- Time: `time`, `n_time`, `timestamps`, `tos`, `tos_start`, `cycle`
-- Extraction: `get_trace` (single m/z vs time), `get_traces` (multiple m/z vs time), `get_spectrum` (full m/z at a timepoint)
-- Derived: `tic` (total ion current vs time, NaN-safe, cached per block)
+- Blocks: `block_ids`, `n_blocks`, `channels`, `mz`, `values`, `unit`, `block_type`, `channel_labels`
+- Time: `cycle`, `n_cycle`, `tos`, `tos_start`, `timestamps`
+- Extraction (m/z block): `get_trace` (single m/z vs cycle), `get_traces` (multiple m/z vs cycle), `get_spectrum` (full m/z at a cycle)
+- Extraction (any block): `get_channel` (single-channel trace from an auxiliary block)
+- Derived: `tic` (total ion current vs cycle, NaN-safe, cached)
+
 **Processing (all immutable — return a new `MSData`)**
 - Selection: `select_tos_range`
-- Baseline / offset correction: `correct_traces` (shift negative channels up to zero, targeted or across all blocks), `baseline_subtract` (per-channel mean over a tos window)
-Both correction methods append an entry to `metadata["trace_corrections"]` so the full processing history is preserved on the object.
- 
+- Baseline / offset correction: `correct_traces` (shift negative m/z traces up to zero, targeted or across all channels of the m/z block), `baseline_subtract` (per-channel mean over a tos window, applied to one block or all)
+
+Both correction methods append an entry to `ds.attrs["trace_corrections"]` so the full processing history is preserved on the object and survives NetCDF round-trips.
+
 **Export**
-- `to_csv` — time-indexed CSV for a single block (one column per m/z, optional timestamp column)
-- `to_netcdf` — round-trippable NetCDF preserving all blocks and coordinates
+- `to_csv` — cycle-indexed CSV for a single block (one column per channel, optional `tos_s` and `timestamp` columns)
+- `to_netcdf` — round-trippable NetCDF preserving all blocks, coords, and metadata
 
 #### Quadstar for MS in building 67 - Box 5
- 
+
 Low-level parser for `.asc` files in `phd_parser.massspec.quadstar`:
- 
+
 - `read_export` — reads a Quadstar ASCII export and returns `(meta, df)`: a metadata dict and a tidy `pandas.DataFrame` with one row per cycle
 - Parses the four blank-line-delimited sections of the file: file header (name, date, time, converted cycles), cycle/datablock counts, per-datablock channel definitions (mass, min/max, thresholds), and the tabular data
-- Builds absolute `Timestamp` column from `Date` + `Time` and localises to a configurable timezone (default `Europe/Amsterdam`)
-- Supports arbitrary numbers of datablocks with mixed units (e.g. `A`, `mbar`) and renames channel columns from raw `'b/c'` identifiers to `m{mass}` form
-- Builds a `column_map` (original → new name, unit, source datablock) stored on the metadata dict so downstream code (e.g. `MSData.from_quadstar_asc`) can route columns to the correct block
+- Builds an absolute `Timestamp` column from `Date` + `Time` and localises to a configurable timezone (default `Europe/Amsterdam`)
+- Supports arbitrary numbers of datablocks with mixed units (e.g. `A`, `mbar`) and renames m/z channel columns from raw `'b/c'` identifiers to `m{mass}` form
+- Builds a `column_map` (original → new name, unit, source datablock) stored on the metadata dict so downstream code (e.g. `MSData.from_quadstar_asc`) can route columns to the correct block — m/z columns go to `block_0`, everything else to `block_N` auxiliary blocks
 - Optionally drops per-channel `Threshold` columns (`drop_threshold_cols=True` by default at the `MSData` constructor level)
 
 ## References
