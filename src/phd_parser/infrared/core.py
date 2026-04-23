@@ -30,16 +30,13 @@ class IRData(BaseModel):
     # ----------------------------------------------------------------
 
     # Core data — SI units (m⁻¹). Coords: 'wavenumber' always, 'scan'+'tos' for 2-D.
-    # 'timestamp' is not stored — derived on demand from tos + metadata['tos_start'].
+    # 'timestamp' is not stored — derived on demand from tos + da.attrs['tos_start'].
     da: xr.DataArray = Field(
         description=(
             "xarray DataArray with dims ('wavenumber',) or ('scan', 'wavenumber'). "
             "Wavenumber in m⁻¹. Optional coord: 'tos' (seconds)."
         )
     )
-
-    # 'tos_start' lives here as an ISO string so it survives all transformations.
-    # metadata: dict[str, Any] = Field(default_factory=dict)
 
     # ----------------------------------------------------------------
     # Validators
@@ -96,7 +93,7 @@ class IRData(BaseModel):
 
     @property
     def tos_start(self) -> Optional[pd.Timestamp]:
-        # Parsed on demand from metadata ISO string — survives all transformations
+        # Parse from attributes; not stored as a coordinate since it's a single value applying to all scans
         raw = self.da.attrs.get("tos_start")
         if raw is None:
             return None
@@ -308,7 +305,7 @@ class IRData(BaseModel):
 
     def sort(self, ascending: bool = True) -> "IRData":
         da_sorted = self.da.sortby("wavenumber", ascending=ascending)
-        return IRData(da=da_sorted, metadata=self.metadata)
+        return IRData(da=da_sorted)
 
     def select_wavenumber_range(
         self,
@@ -378,7 +375,7 @@ class IRData(BaseModel):
                 lambda m: savgol_filter(m, window_length, polyorder), axis=1, arr=self.values
             )
         da_new = self._build_da(self.wavenumber, smoothed, name=self.da.name, tos=self.tos, attrs=self.da.attrs)
-        return IRData(da=da_new, metadata=self.metadata)
+        return IRData(da=da_new)
 
     def smooth_gaussian(self, sigma_cm: float) -> "IRData":
         from scipy.ndimage import gaussian_filter1d
@@ -391,7 +388,7 @@ class IRData(BaseModel):
                 lambda m: gaussian_filter1d(m, sigma=sigma_si), axis=1, arr=self.values
             )
         da_new = self._build_da(self.wavenumber, smoothed, name=self.da.name, tos=self.tos, attrs=self.da.attrs)
-        return IRData(da=da_new, metadata=self.metadata)
+        return IRData(da=da_new)
 
     def smooth_moving(self, window_size: int = 5) -> "IRData":
         if window_size < 1:
@@ -405,7 +402,7 @@ class IRData(BaseModel):
                 lambda m: np.convolve(m, kernel, mode="same"), axis=1, arr=self.values
             )
         da_new = self._build_da(self.wavenumber, smoothed, name=self.da.name, tos=self.tos, attrs=self.da.attrs)
-        return IRData(da=da_new, metadata=self.metadata)
+        return IRData(da=da_new)
 
     # ----------------------------------------------------------------
     # Immutable — baseline correction
@@ -485,14 +482,14 @@ class IRData(BaseModel):
         return result
 
     def reapply_baseline(self) -> "IRData":
-        # Re-runs correction using parameters stored in metadata (e.g. after average_scans)
-        anchor = self.metadata.get("baseline_anchor_range_cm")
-        if anchor is None:
-            raise ValueError("No baseline parameters found in metadata.")
+        # Re-runs correction using parameters stored in attributes (e.g. after average_scans)
+        anchor_range_cm = self.da.attrs.get("baseline_anchor_range_cm")
+        if anchor_range_cm is None:
+            raise ValueError("No baseline parameters found in attributes.")
         return self.correct_baseline(
-            anchor_range_cm=tuple(anchor),
-            control_points_cm=self.metadata.get("baseline_pchip_control_points_cm"),
-            point_avg_half_width=self.metadata.get("baseline_pchip_half_width", 0),
+            anchor_range_cm=tuple(anchor_range_cm),
+            control_points_cm=self.da.attrs.get("baseline_pchip_control_points_cm"),
+            point_avg_half_width=self.da.attrs.get("baseline_pchip_half_width", 0),
         )
 
     # ----------------------------------------------------------------
@@ -570,8 +567,8 @@ class IRData(BaseModel):
         tos_values = self.tos
         new_tos = np.array(targets)
 
-        new_metadata = {
-            **self.metadata,
+        new_attrs = {
+            **self.da.attrs,
             "averaged_target_tos": [float(t) for t in targets],
             "averaged_anchor_tos": [
                 float(tos_values[int(np.abs(tos_values - t).argmin())])
@@ -587,7 +584,7 @@ class IRData(BaseModel):
             values=new_values,
             name=self.da.name,
             tos=new_tos,
-            attrs=new_metadata,
+            attrs=new_attrs,
         )
         return IRData(da=da_new)
     # ----------------------------------------------------------------
@@ -665,7 +662,7 @@ class IRData(BaseModel):
     # ----------------------------------------------------------------
 
     def to_netcdf(self, filepath: Union[str, Path]) -> None:
-        # tos_start in da.attrs (via metadata) round-trips automatically
+        # tos_start in da.attrs (via attributes) round-trips automatically
         self.da.to_netcdf(filepath)
         logger.debug("Saved NetCDF → %s", filepath)
     
@@ -681,7 +678,6 @@ class IRData(BaseModel):
         values: npt.NDArray,
         tos: Optional[npt.NDArray] = None,
         tos_start: Optional[Union[pd.Timestamp, str]] = None,
-        metadata: Optional[dict[str, Any]] = None,
         name: Optional[str] = None,
     ) -> "IRData":
         wavenumber_si = np.asarray(wavenumber_per_cm, dtype=float) * 100.0
@@ -703,11 +699,11 @@ class IRData(BaseModel):
         else:
             raise ValueError(f"values must be 1-D or 2-D, got shape {values.shape}")
 
-        meta = dict(metadata or {})
+        attrs = {}
         if tos_start is not None:
-            meta["tos_start"] = pd.Timestamp(tos_start).isoformat()
+            attrs["tos_start"] = pd.Timestamp(tos_start).isoformat()
 
-        da = cls._build_da(wavenumber_si, values, name = name, tos=tos, attrs=meta)
+        da = cls._build_da(wavenumber_si, values, name = name, tos=tos, attrs=attrs)
         return cls(da=da)
 
     @classmethod
@@ -719,7 +715,6 @@ class IRData(BaseModel):
     def from_xarray(
         cls,
         da: xr.DataArray,
-        metadata: Optional[dict[str, Any]] = None,
     ) -> "IRData":
         da = da.copy()
         return cls(da=da)
@@ -742,7 +737,7 @@ class IRData(BaseModel):
         values = np.asarray(raw["data"]["v"], dtype=float)
         tos = np.asarray(raw["data"].get("tos"), dtype=float) if "tos" in raw["data"] else None
         
-        # Caller-supplied tos_start takes precedence over file metadata
+        # Parse tos_start from argument or attributes, with optional strictness
         parsed_tos_start: Optional[pd.Timestamp] = None
         if tos_start is not None:
             parsed_tos_start = pd.Timestamp(tos_start)
@@ -754,10 +749,6 @@ class IRData(BaseModel):
                     raise ValueError(f"Could not parse tos_start '{raw_ts}': {exc}") from exc
                 logger.warning("Ignoring unparseable tos_start '%s': %s", raw_ts, exc)
 
-        # meta = dict(raw["meta"])
-        # if parsed_tos_start is not None:
-        #     meta["tos_start"] = parsed_tos_start.isoformat()
-        
         attrs = {}
         if parsed_tos_start is not None:
             attrs["tos_start"] = parsed_tos_start.isoformat()
@@ -777,11 +768,11 @@ class IRData(BaseModel):
 
     def __repr__(self) -> str:
         wn = self.wavenumber_per_cm
-        wn_range = f"{wn.min():.1f}–{wn.max():.1f} cm⁻¹" if wn.size else "empty"
+        wn_range = f"{wn.min():.1f}–{wn.max():.1f} cm-1" if wn.size else "empty"
         dims = dict(zip(self.da.dims, self.da.shape))
         tos_info = f", tos={self.tos[0]:.1f}–{self.tos[-1]:.1f}s" if self.tos is not None else ""
         ts_info = f", tos_start={self.tos_start}" if self.tos_start is not None else ""
-        return f"IRData(shape={self.shape}, wavenumber={wn_range}{tos_info}{ts_info}, metadata_keys={list(self.metadata.keys())})"
+        return f"IRData(shape={self.shape}, wavenumber={wn_range}{tos_info}{ts_info}, attribute_keys={list(self.da.attrs.keys())})"
 
     def __len__(self) -> int:
         return self.da.sizes.get("scan", 1)
@@ -790,16 +781,16 @@ class IRData(BaseModel):
         if not isinstance(other, IRData):
             return NotImplemented
         self._check_compatible(other, "add")
-        new_metadata = {**self.metadata, **other.metadata}
-        da_new = self._build_da(self.wavenumber, self.values + other.values, name=self.da.name, tos=self.tos, attrs=new_metadata)
+        new_attrs = {**self.da.attrs, **other.da.attrs}
+        da_new = self._build_da(self.wavenumber, self.values + other.values, name=self.da.name, tos=self.tos, attrs=new_attrs)
         return IRData(da=da_new)
 
     def __sub__(self, other: "IRData") -> "IRData":
         if not isinstance(other, IRData):
             return NotImplemented
         self._check_compatible(other, "subtract")
-        new_metadata = {**self.metadata, **other.metadata}
-        da_new = self._build_da(self.wavenumber, self.values - other.values, name=self.da.name, tos=self.tos, attrs=new_metadata)
+        new_attrs = {**self.da.attrs, **other.da.attrs}
+        da_new = self._build_da(self.wavenumber, self.values - other.values, name=self.da.name, tos=self.tos, attrs=new_attrs)
         return IRData(da=da_new)
 
 
@@ -851,5 +842,5 @@ class IRData(BaseModel):
             name=name,
         )
 
-        logger.debug(f"Built DataArray with dims={da.dims}, coords={list(da.coords)}, shape={da.shape}, tos_start={attrs.get('tos_start') if attrs else None}, tos[0]={tos[0] if tos is not None else None}, tos[-1]={tos[-1] if tos is not None else None}, metadata_keys={list(attrs.keys()) if attrs else None}")
+        logger.debug(f"Built DataArray with dims={da.dims}, coords={list(da.coords)}, shape={da.shape}, tos_start={attrs.get('tos_start') if attrs else None}, tos[0]={tos[0] if tos is not None else None}, tos[-1]={tos[-1] if tos is not None else None}, attribute_keys={list(attrs.keys()) if attrs else None}")
         return da
