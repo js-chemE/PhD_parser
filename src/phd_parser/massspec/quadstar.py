@@ -5,7 +5,6 @@ import pandas as pd
 import logging
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 def _convert_value(value: str) -> Any:
     """Convert string to int/float if possible, otherwise return string."""
@@ -277,7 +276,7 @@ def _build_column_map(meta: Dict[str, Any], current_columns: List[str]) -> Dict[
     }
 
 
-def read_export(file_path: str | Path, drop_threshold_cols: bool = True, tz_str: str = "Europe/Amsterdam") -> Tuple[Dict[str, Any], pd.DataFrame]:
+def read_export_single(file_path: str | Path, drop_threshold_cols: bool = True, tz_str: str = "Europe/Amsterdam") -> Tuple[Dict[str, Any], pd.DataFrame]:
     lines = extract_lines(file_path)
     meta_0, meta_1, meta_blocks, data = split_lines(lines)
     meta = parse_metadata_lines(meta_0, meta_1, meta_blocks)
@@ -294,3 +293,27 @@ def read_export(file_path: str | Path, drop_threshold_cols: bool = True, tz_str:
     logger.info(f"Read export: {df.shape[0]} cycles, {df.shape[1]} columns")
 
     return meta, df
+
+def read_export(path: str | Path, drop_threshold_cols: bool = True, tz_str: str = "Europe/Amsterdam") -> Tuple[Dict[str, Any], pd.DataFrame]:
+    path = Path(path)
+
+    if path.is_file():
+        return read_export_single(path, drop_threshold_cols=drop_threshold_cols, tz_str=tz_str)
+    elif path.is_dir():
+        all_meta = []
+        all_dfs = []
+        for file in path.iterdir():
+            if file.suffix.lower() in ACCEPTED_FILE_EXTENSIONS:
+                logger.info(f"Processing file: {file.name}")
+                meta, df = read_export_single(file, drop_threshold_cols=drop_threshold_cols, tz_str=tz_str)
+                all_meta.append(meta)
+                all_dfs.append(df)
+            else:
+                logger.warning(f"Skipping unsupported file: {file.name}")
+
+        if not all_dfs:
+            raise ValueError(f"No valid data files found in directory: {path}")
+
+        combined_df = pd.concat(all_dfs, ignore_index=True)
+        logger.info(f"Combined DataFrame shape from directory: {combined_df.shape}")
+        return {"files_processed": len(all_dfs), "file_metadata": all_meta}, combined_df

@@ -302,10 +302,34 @@ class IRData(BaseModel):
         )
         return IRData(da=da)
             
-
-    def sort(self, ascending: bool = True) -> "IRData":
-        da_sorted = self.da.sortby("wavenumber", ascending=ascending)
+    def sort(self, by: str | Sequence[str] = "wavenumber", ascending: bool = True) -> "IRData":
+        da_sorted = self.da.sortby(by, ascending=ascending)
         return IRData(da=da_sorted)
+    
+    def select_by_idx(self, idx: int) -> "IRData":
+        if self.ndim == 1:
+            raise ValueError("select_by_idx requires 2-D data")
+        if not (0 <= idx < self.shape[0]):
+            raise IndexError(f"idx {idx} out of bounds for {self.shape[0]} scans")
+        da_selected = self.da.isel(scan=idx)
+        return IRData(da=da_selected)
+
+    def select_by_tos(self, target_tos: float, method: Literal["nearest", "linear"] = "nearest", tolerance_seconds: Optional[float] = 10) -> "IRData":
+        if self.ndim == 1:
+            raise ValueError("select_by_tos requires 2-D data")
+        if self.tos is None:
+            raise ValueError("select_by_tos requires 'tos' coordinate")
+
+        if tolerance_seconds is not None:
+            nearest_dist = float(np.abs(self.tos - target_tos).min())
+            if nearest_dist > tolerance_seconds:
+                raise ValueError(
+                    f"Requested tos {target_tos:.1f}s is {nearest_dist:.1f}s from the nearest scan "
+                    f"(tolerance: {tolerance_seconds:.1f}s)"
+                )
+
+        da_selected = self.da.sel(tos=target_tos, method=method)
+        return IRData(da=da_selected)
 
     def select_wavenumber_range(
         self,
@@ -433,14 +457,14 @@ class IRData(BaseModel):
 
     def correct_pchip(
         self,
-        control_points_cm: List[float],
+        control_points_cm: Sequence[float],
         point_avg_half_width: int = 0,
     ) -> "IRData":
         from scipy.interpolate import PchipInterpolator
 
         wn_si = self.wavenumber
         wn_cm = wn_si / 100.0
-        cps = np.asarray(sorted(control_points_cm), dtype=float)
+        cps = np.sort(np.asarray(control_points_cm, dtype=float))
 
         def _subtract_pchip(spectrum_1d: np.ndarray) -> np.ndarray:
             x_knots = np.empty(len(cps))
@@ -469,7 +493,7 @@ class IRData(BaseModel):
     def correct_baseline(
         self,
         anchor_range_cm: Tuple[float, float] = (2500, 2600),
-        control_points_cm: Optional[List[float]] = None,
+        control_points_cm: Optional[Sequence[float]] = None,
         point_avg_half_width: int = 0,
         double_offset: bool = True,
     ) -> "IRData":
@@ -491,6 +515,7 @@ class IRData(BaseModel):
             control_points_cm=self.da.attrs.get("baseline_pchip_control_points_cm"),
             point_avg_half_width=self.da.attrs.get("baseline_pchip_half_width", 0),
         )
+
 
     # ----------------------------------------------------------------
     # Immutable — averaging
@@ -663,8 +688,11 @@ class IRData(BaseModel):
 
     def to_netcdf(self, filepath: Union[str, Path]) -> None:
         # tos_start in da.attrs (via attributes) round-trips automatically
+        filepath = Path(filepath)
+        if filepath.exists():
+            logger.warning(f"Overwriting existing file: {filepath}")
         self.da.to_netcdf(filepath)
-        logger.debug("Saved NetCDF → %s", filepath)
+        logger.debug(f"Saved NetCDF → {filepath}")
     
     
     # ----------------------------------------------------------------
@@ -685,6 +713,7 @@ class IRData(BaseModel):
 
         if wavenumber_si.ndim != 1:
             raise ValueError("wavenumber_per_cm must be 1-D")
+        
         if values.ndim == 1:
             if values.size != wavenumber_si.size:
                 raise ValueError(f"values size ({values.size}) != wavenumber size ({wavenumber_si.size})")
@@ -708,7 +737,8 @@ class IRData(BaseModel):
 
     @classmethod
     def from_netcdf(cls, filepath: Union[str, Path]) -> "IRData":
-        da = xr.open_dataarray(filepath)
+        with xr.open_dataarray(filepath) as da:
+            da = da.copy()
         return cls(da=da)
 
     @classmethod
@@ -747,7 +777,7 @@ class IRData(BaseModel):
             except Exception as exc:
                 if strict_tos_start:
                     raise ValueError(f"Could not parse tos_start '{raw_ts}': {exc}") from exc
-                logger.warning("Ignoring unparseable tos_start '%s': %s", raw_ts, exc)
+                logger.warning(f"Ignoring unparseable tos_start '{raw_ts}': {exc}")
 
         attrs = {}
         if parsed_tos_start is not None:

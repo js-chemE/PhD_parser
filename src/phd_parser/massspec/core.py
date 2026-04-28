@@ -503,6 +503,11 @@ class MSData(BaseModel):
         drop_threshold_cols: bool = True,
         tz_str: str = "Europe/Amsterdam",
     ) -> "MSData":
+
+        filepath = Path(filepath)
+        if filepath.is_dir():
+            logger.error(f"Provided path is a directory, expected a file: {filepath}")
+            raise ValueError(f"Expected a file path, got directory: {filepath}")
         meta, df = quadstar.read_export(
             filepath, drop_threshold_cols=drop_threshold_cols, tz_str=tz_str
         )

@@ -95,7 +95,7 @@ def parse_data_lines(lines: List[str]) -> Tuple[pd.DataFrame, List[str]]:
     columns = re.split(r"\s+", lines[0].strip())
     units = re.split(r"\s+", lines[1].strip())
     units = [u.replace("[", "").replace("]", "") for u in units if u]  # Remove empty strings
-    df = pd.read_csv(StringIO("".join(lines[2:])), sep="\s+", names=columns)
+    df = pd.read_csv(StringIO("".join(lines[2:])), sep=r"\s+", names=columns)
     return df, units
 
 
