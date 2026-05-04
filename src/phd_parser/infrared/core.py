@@ -120,6 +120,10 @@ class IRData(BaseModel):
     @cached_property
     def wavelength_nm(self) -> npt.NDArray:
         return self.wavelength * 1e9
+    
+    @cached_property
+    def wavelength_mum(self) -> npt.NDArray:
+        return self.wavelength * 1e6
 
     @cached_property
     def frequency(self) -> npt.NDArray:
@@ -134,6 +138,10 @@ class IRData(BaseModel):
     @cached_property
     def energy_eV(self) -> npt.NDArray:
         return self.energy / const.electron_volt
+    
+    @cached_property
+    def energy_kJ_per_mol(self) -> npt.NDArray:
+        return 1e-3 * self.energy * const.Avogadro # kJ/mol
 
     # ----------------------------------------------------------------
     # Get
