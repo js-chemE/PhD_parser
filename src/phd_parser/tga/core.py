@@ -8,30 +8,22 @@ import logging
 from typing import Optional, Union
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+
 
 class TGAData(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     temperature: npt.NDArray[np.float64] = Field(
-        default_factory=lambda: np.array([]), description="Temperature data from TGA measurement"
+        description="Temperature array (K by default)"
     )
     mass: npt.NDArray[np.float64] = Field(
-        default_factory=lambda: np.array([]), description="Mass data from TGA measurement"
+        description="Mass array (mg)"
     )
-
     mass_init: float | int | None = Field(
-        default=None, description="Initial mass of the sample, used for calculating mass fraction"
+        default=None, description="Initial sample mass for computing mass fraction"
     )
     baseline: Union["TGAData", None] = Field(
-        default=None, description="Baseline TGA data used for correction of the main TGA data"
-    )
-    
-    # Back Up
-    backup_temperature: npt.NDArray[np.float64] | None = Field(
-        default=None, description="Backup of the temperature data"
-    )
-    backup_mass: npt.NDArray[np.float64] | None = Field(
-        default=None, description="Backup of the mass data"
+        default=None, description="Baseline used for correction, stored for provenance"
     )
 
     # ----------------------------------------------------------------------
@@ -42,102 +34,107 @@ class TGAData(BaseModel):
     def mass_fraction(self) -> npt.NDArray[np.float64]:
         if self.mass_init is None:
             return np.zeros_like(self.mass)
-        else:
-            return self.mass / self.mass_init
+        return self.mass / self.mass_init
 
     @property
     def derivative(self) -> npt.NDArray[np.float64]:
         return np.gradient(self.mass, self.temperature)
-    
+
     @property
     def derivative_fraction(self) -> npt.NDArray[np.float64]:
         return np.gradient(self.mass_fraction, self.temperature)
-    
+
     # ----------------------------------------------------------------------
-    # Functions
+    # Immutable processing — all return a new TGAData
     # ----------------------------------------------------------------------
 
-    def backup(self) -> None:
-        self.backup_temperature = self.temperature.copy()
-        self.backup_mass = self.mass.copy()
+    def cut_front(self, index: int | None = None, temperature: float | None = None) -> "TGAData":
+        if index is not None:
+            return TGAData(
+                temperature=self.temperature[index:],
+                mass=self.mass[index:],
+                mass_init=self.mass_init,
+                baseline=self.baseline,
+            )
+        if temperature is not None:
+            mask = self.temperature >= temperature
+            return TGAData(
+                temperature=self.temperature[mask],
+                mass=self.mass[mask],
+                mass_init=self.mass_init,
+                baseline=self.baseline,
+            )
+        raise ValueError("Either index or temperature must be provided.")
 
-    def restore(self) -> None:
-        if self.backup_temperature is not None:
-            self.temperature = self.backup_temperature
-        if self.backup_mass is not None:
-            self.mass = self.backup_mass
+    def cut_back(self, index: int | None = None, temperature: float | None = None) -> "TGAData":
+        if index is not None:
+            return TGAData(
+                temperature=self.temperature[:index],
+                mass=self.mass[:index],
+                mass_init=self.mass_init,
+                baseline=self.baseline,
+            )
+        if temperature is not None:
+            mask = self.temperature <= temperature
+            return TGAData(
+                temperature=self.temperature[mask],
+                mass=self.mass[mask],
+                mass_init=self.mass_init,
+                baseline=self.baseline,
+            )
+        raise ValueError("Either index or temperature must be provided.")
 
-    def cut_front(self, index: int | None = None, temperature: float | None = None) -> None:
-        if index is None and temperature is None:
-            raise ValueError("Either index or temperature must be provided.")
-        elif index is not None:
-            self.temperature = self.temperature[index:]
-            self.mass = self.mass[index:]
-        elif temperature is not None:
-            self.temperature = self.temperature[self.temperature >= temperature]
-            self.mass = self.mass[self.temperature >= temperature]
-        else:
-            raise ValueError("Either index or temperature must be provided.")
+    def correct(self, baseline: "TGAData") -> "TGAData":
+        corrected_mass = self.mass - np.interp(
+            self.temperature, baseline.temperature, baseline.mass
+        )
+        logger.debug("Baseline correction applied.")
+        return TGAData(
+            temperature=self.temperature.copy(),
+            mass=corrected_mass,
+            mass_init=self.mass_init,
+            baseline=baseline,
+        )
 
-    def cut_back(self, index: int | None = None, temperature: float | None = None) -> None:
-        if index is None and temperature is None:
-            raise ValueError("Either index or temperature must be provided.")
-        elif index is not None:
-            self.temperature = self.temperature[:index]
-            self.mass = self.mass[:index]
-        elif temperature is not None:
-            self.temperature = self.temperature[self.temperature <= temperature]
-            self.mass = self.mass[self.temperature <= temperature]
-        else:
-            raise ValueError("Either index or temperature must be provided.")
-
-    def correct(self, baseline: "TGAData", backup: bool = False) -> None:
-        if baseline is None:
-            raise ValueError("Baseline TGA must be provided.")
-        if backup:
-            self.backup()
-        self.mass -= np.interp(self.temperature, baseline.temperature, baseline.mass)
-        self.baseline = baseline
-        logger.debug("Baseline correction applied to TGA data.")
-    
-    def smooth(self, window_length: int = 11, polyorder: int = 2) -> None:
-        """Return a smoothed TGA object using Savitzky–Golay filter."""
+    def smooth(self, window_length: int = 11, polyorder: int = 2) -> "TGAData":
         from scipy.signal import savgol_filter
-        self.mass = savgol_filter(self.mass, window_length, polyorder)
-
+        return TGAData(
+            temperature=self.temperature.copy(),
+            mass=savgol_filter(self.mass, window_length, polyorder),
+            mass_init=self.mass_init,
+            baseline=self.baseline,
+        )
 
     # ----------------------------------------------------------------------
-    # Reading in
+    # Constructors
     # ----------------------------------------------------------------------
 
     @classmethod
-    def from_e2290(cls, path: str | Path, baseline_path: Optional[str | Path] = None, in_kelvin: bool = True) -> "TGAData":
+    def from_e2290(
+        cls,
+        path: str | Path,
+        baseline_path: Optional[str | Path] = None,
+        in_kelvin: bool = True,
+    ) -> "TGAData":
         from phd_parser.tga.e2290 import read_export
 
-        if not isinstance(path, Path):
-            path = Path(path)
-        
-        if baseline_path is not None and not isinstance(baseline_path, Path):
-            baseline_path = Path(baseline_path)
+        path = Path(path)
+        correction = 273.15 if in_kelvin else 0.0
 
-        correction = 0.0
-        if in_kelvin:
-            correction = 273.15
-        
         e2290 = read_export(path)
         tga = cls(
             temperature=e2290["data"]["Ts"].values + correction,
             mass=e2290["data"]["Value"].values,
-            mass_init=e2290["weight"]
+            mass_init=e2290["weight"],
         )
-        tga.backup()
 
         if baseline_path is not None:
-            e2290_baseline = read_export(baseline_path)
+            e2290_baseline = read_export(Path(baseline_path))
             baseline = cls(
                 temperature=e2290_baseline["data"]["Ts"].values + correction,
                 mass=e2290_baseline["data"]["Value"].values,
-                mass_init=e2290_baseline["weight"]
+                mass_init=e2290_baseline["weight"],
             )
-            tga.correct(baseline, backup=False)
+            tga = tga.correct(baseline)
+
         return tga
