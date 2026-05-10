@@ -213,23 +213,45 @@ class MSData(BaseModel):
         mz: float,
         method: Literal["nearest", "linear"] = "nearest",
         tolerance: Optional[float] = 0.2,
+        rolling_window: Optional[int] = None,
     ) -> xr.DataArray:
-        """Intensity vs cycle for a single m/z from the primary block."""
+        """Intensity vs cycle for a single m/z from the primary block.
+
+        Parameters
+        ----------
+        rolling_window:
+            If given, apply a centered rolling mean of this many cycles to the
+            returned trace. The underlying data is not modified.
+        """
         da = self._block(PRIMARY_BLOCK_ID)
         self._check_mz_tolerance(np.asarray([mz], dtype=float), da.coords["mz"].values, tolerance)
-        return da.sel(mz=mz, method=method)
+        result = da.sel(mz=mz, method=method)
+        if rolling_window is not None:
+            result = result.rolling(cycle=rolling_window, center=True, min_periods=1).mean()
+        return result
  
     def get_traces(
         self,
         mz_list: Sequence[float],
         method: Literal["nearest", "linear"] = "nearest",
         tolerance: Optional[float] = None,
+        rolling_window: Optional[int] = None,
     ) -> xr.DataArray:
-        """Intensity vs cycle for multiple m/z values from the primary block."""
+        """Intensity vs cycle for multiple m/z values from the primary block.
+
+        Parameters
+        ----------
+        rolling_window:
+            If given, apply a centered rolling mean of this many cycles to the
+            returned traces. The underlying data is not modified.
+        """
         targets = np.atleast_1d(np.asarray(mz_list, dtype=float))
         da = self._block(PRIMARY_BLOCK_ID)
         self._check_mz_tolerance(targets, da.coords["mz"].values, tolerance)
-        return da.sel(mz=targets, method=method)
+        result = da.sel(mz=targets, method=method)
+        if rolling_window is not None:
+            result = result.rolling(cycle=rolling_window, center=True, min_periods=1).mean()
+        return result
  
     def get_spectrum(self, cycle: int) -> xr.DataArray:
         """Full m/z spectrum at a single cycle (nearest), from the primary block."""
@@ -349,6 +371,59 @@ class MSData(BaseModel):
         self._append_correction(
             new_ds,
             {"method": "mask_overloaded", "threshold": threshold, "n_masked": counts},
+        )
+        return MSData(ds=new_ds)
+
+    def smooth_trace_rolling(
+        self,
+        window: int,
+        block_id: Union[int, Literal["all"], None] = "all",
+        center: bool = True,
+        min_periods: Optional[int] = 1,
+    ) -> "MSData":
+        """Apply a rolling mean along the cycle dimension. Immutable.
+
+        Parameters
+        ----------
+        window:
+            Number of cycles to average over.
+        block_id:
+            Which block(s) to smooth. ``"all"`` or ``None`` smooths every block.
+        center:
+            If ``True`` (default) the window is centered on each cycle.
+        min_periods:
+            Minimum number of non-NaN observations required to produce a result.
+            Defaults to 1 so edge cycles are not dropped.
+        """
+        if window < 2:
+            raise ValueError(f"window must be >= 2, got {window}")
+
+        if block_id is None or block_id == "all":
+            target_blocks = self.block_ids
+        else:
+            if block_id not in self.block_ids:
+                raise KeyError(f"Block {block_id} not found. Available: {self.block_ids}")
+            target_blocks = [block_id]
+
+        new_ds = self.ds.copy(deep=True)
+        for bid in target_blocks:
+            name = f"block_{bid}"
+            smoothed = (
+                new_ds[name]
+                .rolling(cycle=window, center=center, min_periods=min_periods)
+                .mean()
+            )
+            new_ds[name] = smoothed
+
+        self._append_correction(
+            new_ds,
+            {
+                "method": "smooth_trace_rolling",
+                "window": window,
+                "center": center,
+                "min_periods": min_periods,
+                "blocks": target_blocks,
+            },
         )
         return MSData(ds=new_ds)
 
