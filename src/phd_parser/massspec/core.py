@@ -214,44 +214,71 @@ class MSData(BaseModel):
         method: Literal["nearest", "linear"] = "nearest",
         tolerance: Optional[float] = 0.2,
         rolling_window: Optional[int] = None,
+        normalize: Optional[Union[bool, tuple[float, float]]] = None,
     ) -> xr.DataArray:
         """Intensity vs cycle for a single m/z from the primary block.
 
         Parameters
         ----------
         rolling_window:
-            If given, apply a centered rolling mean of this many cycles to the
-            returned trace. The underlying data is not modified.
+            Centered rolling mean over this many cycles. Applied before
+            normalization. The underlying data is not modified.
+        normalize:
+            ``None`` / ``False`` — no normalization.
+            ``True``             — scale to [0, 1] using the trace's own min/max.
+            ``(vmin, vmax)``     — scale using the given fixed bounds.
         """
         da = self._block(PRIMARY_BLOCK_ID)
         self._check_mz_tolerance(np.asarray([mz], dtype=float), da.coords["mz"].values, tolerance)
         result = da.sel(mz=mz, method=method)
         if rolling_window is not None:
             result = result.rolling(cycle=rolling_window, center=True, min_periods=1).mean()
+        if normalize:
+            if isinstance(normalize, tuple):
+                vmin, vmax = float(normalize[0]), float(normalize[1])
+            else:
+                vmin = float(result.min())
+                vmax = float(result.max())
+            denom = vmax - vmin
+            result = (result - vmin) / denom if denom != 0.0 else xr.zeros_like(result)
         return result
- 
+
     def get_traces(
         self,
         mz_list: Sequence[float],
         method: Literal["nearest", "linear"] = "nearest",
         tolerance: Optional[float] = None,
         rolling_window: Optional[int] = None,
+        normalize: Optional[Union[bool, tuple[float, float]]] = None,
     ) -> xr.DataArray:
         """Intensity vs cycle for multiple m/z values from the primary block.
+
+        Delegates to :meth:`get_trace` per m/z so all parameters behave
+        identically. The tolerance check runs once up front.
 
         Parameters
         ----------
         rolling_window:
-            If given, apply a centered rolling mean of this many cycles to the
-            returned traces. The underlying data is not modified.
+            Centered rolling mean applied per trace (before normalization).
+        normalize:
+            ``True``         — each trace normalized independently to [0, 1].
+            ``(vmin, vmax)`` — same fixed scale applied to every trace.
         """
         targets = np.atleast_1d(np.asarray(mz_list, dtype=float))
-        da = self._block(PRIMARY_BLOCK_ID)
-        self._check_mz_tolerance(targets, da.coords["mz"].values, tolerance)
-        result = da.sel(mz=targets, method=method)
-        if rolling_window is not None:
-            result = result.rolling(cycle=rolling_window, center=True, min_periods=1).mean()
-        return result
+        self._check_mz_tolerance(
+            targets, self._block(PRIMARY_BLOCK_ID).coords["mz"].values, tolerance
+        )
+        traces = [
+            self.get_trace(
+                float(m),
+                method=method,
+                tolerance=None,
+                rolling_window=rolling_window,
+                normalize=normalize,
+            )
+            for m in targets
+        ]
+        return xr.concat(traces, dim="mz").transpose("cycle", "mz")
  
     def get_spectrum(self, cycle: int) -> xr.DataArray:
         """Full m/z spectrum at a single cycle (nearest), from the primary block."""
