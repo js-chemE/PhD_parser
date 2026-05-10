@@ -691,6 +691,214 @@ class IRData(BaseModel):
         return IRData(da=da_new)
 
     # ----------------------------------------------------------------
+    # SNR
+    # ----------------------------------------------------------------
+
+    def _snr_apply(self, fn) -> Union[float, npt.NDArray]:
+        if self.ndim == 1:
+            return float(fn(self.values))
+        return np.array([fn(row) for row in self.values])
+
+    def snr_windows(
+        self,
+        signal_range_cm: Tuple[float, float],
+        noise_range_cm: Tuple[float, float],
+        signal_metric: Literal["max", "peak_to_peak", "integral", "rms"] = "max",
+        noise_metric: Literal["std", "rms", "peak_to_peak"] = "std",
+    ) -> Union[float, npt.NDArray]:
+        wn_si = self.wavenumber
+        sig_lo, sig_hi = sorted(signal_range_cm)
+        noi_lo, noi_hi = sorted(noise_range_cm)
+        sig_mask = (wn_si >= sig_lo * 100.0) & (wn_si <= sig_hi * 100.0)
+        noi_mask = (wn_si >= noi_lo * 100.0) & (wn_si <= noi_hi * 100.0)
+        if not sig_mask.any():
+            raise ValueError(f"No points in signal range {sig_lo:.0f}–{sig_hi:.0f} cm⁻¹")
+        if not noi_mask.any():
+            raise ValueError(f"No points in noise range {noi_lo:.0f}–{noi_hi:.0f} cm⁻¹")
+
+        wn_sig = wn_si[sig_mask]
+
+        def _signal(spec_1d: np.ndarray) -> float:
+            s = spec_1d[sig_mask]
+            if signal_metric == "max":
+                return float(np.abs(s).max())
+            if signal_metric == "peak_to_peak":
+                return float(s.max() - s.min())
+            if signal_metric == "integral":
+                return float(np.abs(np.trapz(s, x=wn_sig)))
+            return float(np.sqrt(np.mean(s ** 2)))  # rms
+
+        def _noise(spec_1d: np.ndarray) -> float:
+            n = spec_1d[noi_mask]
+            if noise_metric == "std":
+                return float(n.std(ddof=1))
+            if noise_metric == "rms":
+                return float(np.sqrt(np.mean(n ** 2)))
+            return float(n.max() - n.min())  # peak_to_peak
+
+        def _ratio(spec_1d: np.ndarray) -> float:
+            sigma = _noise(spec_1d)
+            if sigma == 0:
+                logger.warning("Noise is zero; returning inf")
+                return float("inf")
+            return _signal(spec_1d) / sigma
+
+        return self._snr_apply(_ratio)
+
+    def snr_noise_window(
+        self,
+        noise_range_cm: Tuple[float, float],
+        signal_range_cm: Optional[Tuple[float, float]] = None,
+        noise_metric: Literal["rms", "std", "peak_to_peak"] = "rms",
+        detrend_order: int = 1,
+    ) -> Union[float, npt.NDArray]:
+        wn_si = self.wavenumber
+        noi_lo, noi_hi = sorted(noise_range_cm)
+        noi_mask = (wn_si >= noi_lo * 100.0) & (wn_si <= noi_hi * 100.0)
+        if not noi_mask.any():
+            raise ValueError(f"No points in noise range {noi_lo:.0f}–{noi_hi:.0f} cm⁻¹")
+
+        if signal_range_cm is not None:
+            sig_lo, sig_hi = sorted(signal_range_cm)
+            sig_mask = (wn_si >= sig_lo * 100.0) & (wn_si <= sig_hi * 100.0)
+            if not sig_mask.any():
+                raise ValueError(f"No points in signal range {sig_lo:.0f}–{sig_hi:.0f} cm⁻¹")
+        else:
+            sig_mask = np.ones_like(wn_si, dtype=bool)
+
+        wn_noi = wn_si[noi_mask]
+
+        def _noise(spec_1d: np.ndarray) -> float:
+            n = spec_1d[noi_mask].astype(float)
+            if detrend_order >= 0:
+                coeffs = np.polyfit(wn_noi, n, deg=detrend_order)
+                n = n - np.polyval(coeffs, wn_noi)
+            if noise_metric == "rms":
+                return float(np.sqrt(np.mean(n ** 2)))
+            if noise_metric == "std":
+                return float(n.std(ddof=1))
+            return float(n.max() - n.min())  # peak_to_peak
+
+        def _ratio(spec_1d: np.ndarray) -> float:
+            sigma = _noise(spec_1d)
+            if sigma == 0:
+                logger.warning("Noise is zero; returning inf")
+                return float("inf")
+            return float(np.abs(spec_1d[sig_mask]).max()) / sigma
+
+        return self._snr_apply(_ratio)
+
+    def snr_der(
+        self,
+        signal_range_cm: Optional[Tuple[float, float]] = None,
+    ) -> Union[float, npt.NDArray]:
+        wn_si = self.wavenumber
+        if signal_range_cm is not None:
+            sig_lo, sig_hi = sorted(signal_range_cm)
+            sig_mask = (wn_si >= sig_lo * 100.0) & (wn_si <= sig_hi * 100.0)
+            if not sig_mask.any():
+                raise ValueError(f"No points in signal range {sig_lo:.0f}–{sig_hi:.0f} cm⁻¹")
+        else:
+            sig_mask = np.ones_like(wn_si, dtype=bool)
+
+        factor = 1.482602 / np.sqrt(6.0)
+
+        def _ratio(spec_1d: np.ndarray) -> float:
+            if spec_1d.size < 5:
+                raise ValueError("DER-SNR requires at least 5 points")
+            diff = 2.0 * spec_1d[2:-2] - spec_1d[:-4] - spec_1d[4:]
+            sigma = factor * float(np.median(np.abs(diff)))
+            if sigma == 0:
+                logger.warning("Noise is zero; returning inf")
+                return float("inf")
+            return float(np.abs(spec_1d[sig_mask]).max()) / sigma
+
+        return self._snr_apply(_ratio)
+    
+    def snr_repeat(
+        self,
+        signal_range_cm: Optional[Tuple[float, float]] = None,
+        reduce: Literal["max", "median", "mean", "per_wavenumber"] = "max",
+    ) -> Union[float, npt.NDArray]:
+        if self.ndim == 1:
+            raise ValueError("snr_repeat requires 2-D data")
+        if self.shape[0] < 2:
+            raise ValueError("snr_repeat requires at least 2 scans")
+
+        wn_si = self.wavenumber
+        if signal_range_cm is not None:
+            sig_lo, sig_hi = sorted(signal_range_cm)
+            sig_mask = (wn_si >= sig_lo * 100.0) & (wn_si <= sig_hi * 100.0)
+            if not sig_mask.any():
+                raise ValueError(f"No points in signal range {sig_lo:.0f}–{sig_hi:.0f} cm⁻¹")
+        else:
+            sig_mask = np.ones_like(wn_si, dtype=bool)
+
+        mean_spec = self.values.mean(axis=0)
+        sigma_spec = self.values.std(axis=0, ddof=1)
+
+        with np.errstate(divide="ignore", invalid="ignore"):
+            snr_per_wn = np.where(sigma_spec > 0, np.abs(mean_spec) / sigma_spec, np.inf)
+
+        if reduce == "per_wavenumber":
+            return snr_per_wn
+
+        snr_in_range = snr_per_wn[sig_mask]
+        if reduce == "max":
+            return float(np.nanmax(snr_in_range))
+        if reduce == "median":
+            return float(np.nanmedian(snr_in_range))
+        return float(np.nanmean(snr_in_range))  # mean
+
+    def snr_psd(
+        self,
+        signal_range_cm: Optional[Tuple[float, float]] = None,
+        noise_fraction: float = 0.25,
+        detrend_order: int = 1,
+    ) -> Union[float, npt.NDArray]:
+        if not (0.0 < noise_fraction < 1.0):
+            raise ValueError("noise_fraction must be in (0, 1)")
+
+        wn_si = self.wavenumber
+        n_pts = wn_si.size
+        if n_pts < 8:
+            raise ValueError("snr_psd requires at least 8 points")
+
+        if signal_range_cm is not None:
+            sig_lo, sig_hi = sorted(signal_range_cm)
+            sig_mask = (wn_si >= sig_lo * 100.0) & (wn_si <= sig_hi * 100.0)
+            if not sig_mask.any():
+                raise ValueError(f"No points in signal range {sig_lo:.0f}–{sig_hi:.0f} cm⁻¹")
+        else:
+            sig_mask = np.ones_like(wn_si, dtype=bool)
+
+        # Number of high-frequency FFT bins to treat as noise
+        n_freq = n_pts // 2 + 1
+        n_noise_bins = max(1, int(np.floor(n_freq * noise_fraction)))
+
+        x_axis = np.arange(n_pts, dtype=float)
+
+        def _noise(spec_1d: np.ndarray) -> float:
+            s = spec_1d.astype(float)
+            if detrend_order >= 0:
+                coeffs = np.polyfit(x_axis, s, deg=detrend_order)
+                s = s - np.polyval(coeffs, x_axis)
+            spectrum = np.fft.rfft(s)
+            psd = (np.abs(spectrum) ** 2) / n_pts
+            tail = psd[-n_noise_bins:]
+            # Parseval: noise variance ≈ mean PSD over the tail bins
+            return float(np.sqrt(tail.mean()))
+
+        def _ratio(spec_1d: np.ndarray) -> float:
+            sigma = _noise(spec_1d)
+            if sigma == 0:
+                logger.warning("Noise is zero; returning inf")
+                return float("inf")
+            return float(np.abs(spec_1d[sig_mask]).max()) / sigma
+
+        return self._snr_apply(_ratio)
+
+    # ----------------------------------------------------------------
     # Export
     # ----------------------------------------------------------------
 

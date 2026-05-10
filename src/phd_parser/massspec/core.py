@@ -316,6 +316,42 @@ class MSData(BaseModel):
         self._append_correction(new_ds, {"method": "min_shift", "shifts": shifts_log})
         return MSData(ds=new_ds)
  
+    def mask_overloaded(
+        self,
+        threshold: float = 1e21,
+        block_id: Union[int, Literal["all"], None] = "all",
+    ) -> "MSData":
+        """Replace detector-saturated values exceeding *threshold* with NaN.
+
+        Values produced by an overloaded MS detector (e.g. ~1e38) are replaced
+        with NaN so they do not distort downstream calculations.
+        """
+        if block_id is None or block_id == "all":
+            target_blocks = self.block_ids
+        else:
+            if block_id not in self.block_ids:
+                raise KeyError(f"Block {block_id} not found. Available: {self.block_ids}")
+            target_blocks = [block_id]
+
+        new_ds = self.ds.copy(deep=True)
+        counts: dict[int, int] = {}
+
+        for bid in target_blocks:
+            name = f"block_{bid}"
+            arr = new_ds[name].values
+            mask = arr > threshold
+            n = int(mask.sum())
+            if n:
+                arr[mask] = np.nan
+                new_ds[name].values[...] = arr
+            counts[bid] = n
+
+        self._append_correction(
+            new_ds,
+            {"method": "mask_overloaded", "threshold": threshold, "n_masked": counts},
+        )
+        return MSData(ds=new_ds)
+
     def baseline_subtract(
         self,
         tos_start_seconds: float,
