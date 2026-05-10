@@ -231,8 +231,6 @@ class MSData(BaseModel):
         da = self._block(PRIMARY_BLOCK_ID)
         self._check_mz_tolerance(np.asarray([mz], dtype=float), da.coords["mz"].values, tolerance)
         result = da.sel(mz=mz, method=method)
-        if rolling_window is not None:
-            result = result.rolling(cycle=rolling_window, center=True, min_periods=1).mean()
         if normalize:
             if isinstance(normalize, tuple):
                 vmin, vmax = float(normalize[0]), float(normalize[1])
@@ -241,6 +239,10 @@ class MSData(BaseModel):
                 vmax = float(result.max())
             denom = vmax - vmin
             result = (result - vmin) / denom if denom != 0.0 else xr.zeros_like(result)
+        
+        if rolling_window is not None:
+            result = result.rolling(cycle=rolling_window, center=True, min_periods=1).mean()
+            
         return result
 
     def get_traces(

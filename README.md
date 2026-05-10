@@ -121,15 +121,17 @@ The `MSData` class is the core container for mass spectrometry data. It wraps an
 **Accessors**
 - Blocks: `block_ids`, `n_blocks`, `channels`, `mz`, `values`, `unit`, `block_type`, `channel_labels`
 - Time: `cycle`, `n_cycle`, `tos`, `tos_start`, `timestamps`
-- Extraction (m/z block): `get_trace` (single m/z vs cycle), `get_traces` (multiple m/z vs cycle), `get_spectrum` (full m/z at a cycle)
+- Extraction (m/z block): `get_trace` (single m/z vs cycle; optional centered `rolling_window` mean and `normalize` to [0, 1] or fixed bounds — applied on the returned array without touching the stored data), `get_traces` (multiple m/z vs cycle; delegates to `get_trace` so all parameters pass through), `get_spectrum` (full m/z at a cycle)
 - Extraction (any block): `get_channel` (single-channel trace from an auxiliary block)
 - Derived: `tic` (total ion current vs cycle, NaN-safe, cached)
 
 **Processing (all immutable — return a new `MSData`)**
 - Selection: `select_tos_range`
+- Data cleaning: `mask_overloaded` (replace values above a threshold — e.g. detector saturation spikes around 1e38 — with NaN, applied to one block or all)
+- Smoothing: `smooth_trace_rolling` (centered rolling mean along the cycle dimension, configurable window and `min_periods`, applied to one block or all)
 - Baseline / offset correction: `correct_traces` (shift negative m/z traces up to zero, targeted or across all channels of the m/z block), `baseline_subtract` (per-channel mean over a tos window, applied to one block or all)
 
-Both correction methods append an entry to `ds.attrs["trace_corrections"]` so the full processing history is preserved on the object and survives NetCDF round-trips.
+All processing methods append an entry to `ds.attrs["trace_corrections"]` so the full processing history is preserved on the object and survives NetCDF round-trips.
 
 **Export**
 - `to_csv` — cycle-indexed CSV for a single block (one column per channel, optional `tos_s` and `timestamp` columns)
