@@ -268,6 +268,7 @@ class IRData(BaseModel):
         wavenumber_per_cm: Union[float, list[float], npt.NDArray],
         method: Literal["nearest", "linear"] = "nearest",
         tolerance_per_cm: Optional[float] = None,
+        rolling_window: Optional[int] = None,
     ) -> xr.DataArray:
         if self.ndim == 1:
             raise ValueError("get_evolution requires 2-D data")
@@ -285,7 +286,12 @@ class IRData(BaseModel):
                         f"(tolerance: {tolerance_per_cm:.1f} cm⁻¹)"
                     )
 
-        return self.da.sel(wavenumber=targets_si, method=method)
+        result = self.da.sel(wavenumber=targets_si, method=method)
+
+        if rolling_window is not None:
+            result = result.rolling(scan=rolling_window, center=True, min_periods=1).mean()
+
+        return result
 
     # ----------------------------------------------------------------
     # Immutable — selection and sorting
