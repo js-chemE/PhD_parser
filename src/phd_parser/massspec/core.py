@@ -645,18 +645,22 @@ class MSData(BaseModel):
     ) -> "MSData":
 
         filepath = Path(filepath)
-        if filepath.is_dir():
-            logger.error(f"Provided path is a directory, expected a file: {filepath}")
-            raise ValueError(f"Expected a file path, got directory: {filepath}")
         meta, df = quadstar.read_export(
             filepath, drop_threshold_cols=drop_threshold_cols, tz_str=tz_str
         )
- 
+
+        # For directory reads, column_map and datablocks come from the first
+        # file's meta because all files in a run share the same channel layout.
+        effective_meta = meta["file_metadata"][0] if "file_metadata" in meta else meta
+
         # ---- cycle axis ---------------------------------------------
-        if "Cycle" in df.columns:
+        if not filepath.is_dir() and "Cycle" in df.columns:
             cycle = df["Cycle"].to_numpy(dtype=int)
         else:
-            logger.warning("Cycle column not found — using integer index")
+            if filepath.is_dir():
+                logger.info("Directory read — cycles re-indexed as sequential integers.")
+            else:
+                logger.warning("Cycle column not found — using integer index")
             cycle = np.arange(len(df), dtype=int)
  
         # ---- tos (time on stream) -----------------------------------
@@ -677,7 +681,7 @@ class MSData(BaseModel):
         # Block 0 (m/z): columns start with "m" → parse as float m/z.
         # Other blocks: use positional index as channel coord; stash original
         # column labels in block attrs so they aren't lost.
-        column_map = meta.get("column_map", {})
+        column_map = effective_meta.get("column_map", {})
         source_by_new = dict(zip(column_map["new"], column_map["source"]))
  
         chan_dict: dict[int, list[float]] = {}
@@ -724,7 +728,7 @@ class MSData(BaseModel):
                 val_arrays[block_id] = val_cols
  
         # Merge parser's per-block metadata with column-label stash.
-        parser_blocks = dict(meta.get("datablocks", {}))
+        parser_blocks = dict(effective_meta.get("datablocks", {}))
         block_attrs: dict[int, dict[str, Any]] = {}
         for bid in chan_arrays:
             attrs = dict(parser_blocks.get(bid, {}))
@@ -732,8 +736,8 @@ class MSData(BaseModel):
                 attrs["channel_labels"] = list(label_dict[bid])
             block_attrs[bid] = attrs
  
-        # File-level metadata → ds.attrs (drop 'datablocks' — that's now per-DA).
-        ds_attrs = {k: v for k, v in meta.items() if k != "datablocks"}
+        # File-level metadata → ds.attrs (drop 'datablocks' and 'file_metadata').
+        ds_attrs = {k: v for k, v in meta.items() if k not in ("datablocks", "file_metadata")}
  
         ds = cls._build_ds(
             cycle=cycle,

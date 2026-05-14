@@ -299,6 +299,7 @@ def read_export(path: str | Path, drop_threshold_cols: bool = True, tz_str: str 
 
     if path.is_file():
         return read_export_single(path, drop_threshold_cols=drop_threshold_cols, tz_str=tz_str)
+    
     elif path.is_dir():
         all_meta = []
         all_dfs = []
