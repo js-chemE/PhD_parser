@@ -15,7 +15,15 @@ from phd_parser.infrared import omnic
 logger = logging.getLogger(__name__)
 
 XLabel = Literal["wavenumber", "frequency", "energy"]
-VLabel = Literal["absorbance", "transmittance", "reflectance"]
+IRDataType = Literal["single_beam", "absorbance", "transmittance", "reflectance", "kubelka_munk", "log_1_r"]
+
+# Maps omnic header 'title' (vlabel) → IRData data_type attribute.
+# Keys are the strings produced by omnic._read_header ymap.
+_OMNIC_VLABEL_TO_DATA_TYPE: dict[str, IRDataType] = {
+    "absorbance": "absorbance",
+    "transmittance": "transmittance",
+    "reflectance": "reflectance",
+}
 
 
 class IRData(BaseModel):
@@ -29,12 +37,13 @@ class IRData(BaseModel):
     # Fields
     # ----------------------------------------------------------------
 
-    # Core data — SI units (m⁻¹). Coords: 'wavenumber' always, 'scan'+'tos' for 2-D.
-    # 'timestamp' is not stored — derived on demand from tos + da.attrs['tos_start'].
-    da: xr.DataArray = Field(
+    # Core data — SI units (m⁻¹). ds["data"] holds the spectrum. Coords: 'wavenumber' always,
+    # 'scan'+'tos' for 2-D. All attrs are at dataset level (ds.attrs).
+    # 'timestamp' is not stored — derived on demand from tos + ds.attrs['tos_start'].
+    ds: xr.Dataset = Field(
         description=(
-            "xarray DataArray with dims ('wavenumber',) or ('scan', 'wavenumber'). "
-            "Wavenumber in m⁻¹. Optional coord: 'tos' (seconds)."
+            "xarray Dataset with a 'data' variable with dims ('wavenumber',) or ('scan', 'wavenumber'). "
+            "Wavenumber in m⁻¹. Optional coord: 'tos' (seconds). Attrs at dataset level."
         )
     )
 
@@ -42,18 +51,33 @@ class IRData(BaseModel):
     # Validators
     # ----------------------------------------------------------------
 
-    @field_validator("da", mode="before")
+    @field_validator("ds", mode="before")
     @classmethod
-    def validate_da(cls, v: Any) -> xr.DataArray:
-        if not isinstance(v, xr.DataArray):
-            raise TypeError(f"'da' must be an xr.DataArray, got {type(v)}")
-        if "wavenumber" not in v.dims:
-            raise ValueError("DataArray must have a 'wavenumber' dimension")
-        if v.ndim not in (1, 2):
-            raise ValueError(f"DataArray must be 1-D or 2-D, got {v.ndim}-D")
-        if v.ndim == 2 and v.dims[0] != "scan":
-            raise ValueError("2-D DataArray must have dims ('scan', 'wavenumber')")
+    def validate_ds(cls, v: Any) -> xr.Dataset:
+        if not isinstance(v, xr.Dataset):
+            raise TypeError(f"'ds' must be an xr.Dataset, got {type(v)}")
+        if "data" not in v:
+            raise ValueError("Dataset must contain a 'data' variable")
+        data_var = v["data"]
+        if "wavenumber" not in data_var.dims:
+            raise ValueError("Dataset 'data' variable must have a 'wavenumber' dimension")
+        if data_var.ndim not in (1, 2):
+            raise ValueError(f"Dataset 'data' variable must be 1-D or 2-D, got {data_var.ndim}-D")
+        if data_var.ndim == 2 and data_var.dims[0] != "scan":
+            raise ValueError("2-D Dataset 'data' variable must have dims ('scan', 'wavenumber')")
+        if "background" in v:
+            cls._validate_background_var(v)
         return v
+
+    @classmethod
+    def _validate_background_var(cls, ds: xr.Dataset) -> None:
+        bg = ds["background"]
+        if "wavenumber" not in bg.dims:
+            raise ValueError("Background variable must have a 'wavenumber' dimension")
+        if bg.ndim != 1:
+            raise ValueError(f"Background variable must be 1-D, got {bg.ndim}-D")
+        if not np.allclose(bg.coords["wavenumber"].values, ds["data"].coords["wavenumber"].values):
+            raise ValueError("Background wavenumber axis does not match data wavenumber axis")
 
     @model_validator(mode="after")
     def validate_attrs(self) -> "IRData":
@@ -65,20 +89,20 @@ class IRData(BaseModel):
 
     @property
     def ndim(self) -> int:
-        return self.da.ndim
+        return self.ds["data"].ndim
 
     @property
     def shape(self) -> tuple[int, ...]:
-        return tuple(self.da.shape)
+        return tuple(self.ds["data"].shape)
 
     @property
     def values(self) -> npt.NDArray:
-        return self.da.values
+        return self.ds["data"].values
 
     @property
     def wavenumber(self) -> npt.NDArray:
         # SI units (m⁻¹)
-        return self.da.coords["wavenumber"].values
+        return self.ds.coords["wavenumber"].values
 
     @property
     def wavenumber_per_cm(self) -> npt.NDArray:
@@ -87,17 +111,37 @@ class IRData(BaseModel):
     @property
     def tos(self) -> Optional[npt.NDArray]:
         # Elapsed seconds since first scan
-        if "tos" in self.da.coords:
-            return self.da.coords["tos"].values
+        if "tos" in self.ds.coords:
+            return self.ds.coords["tos"].values
         return None
 
     @property
     def tos_start(self) -> Optional[pd.Timestamp]:
         # Parse from attributes; not stored as a coordinate since it's a single value applying to all scans
-        raw = self.da.attrs.get("tos_start")
+        raw = self.ds.attrs.get("tos_start")
         if raw is None:
             return None
         return pd.Timestamp(raw)
+
+    @property
+    def data_type(self) -> Optional[IRDataType]:
+        return self.ds.attrs.get("data_type")
+
+    @property
+    def has_background(self) -> bool:
+        return "background" in self.ds
+
+    @property
+    def background(self) -> Optional[npt.NDArray]:
+        if "background" not in self.ds:
+            return None
+        return self.ds["background"].values
+
+    @property
+    def background_data_type(self) -> Optional[IRDataType]:
+        if "background" not in self.ds:
+            return None
+        return self.ds["background"].attrs.get("data_type")
 
     @property
     def timestamps(self) -> Optional[pd.DatetimeIndex]:
@@ -154,7 +198,7 @@ class IRData(BaseModel):
             raise IndexError(
                 f"scan_index {scan_index} out of bounds for {self.shape[0]} scans"
             )
-        return self.da.isel(scan=scan_index).values
+        return self.ds["data"].isel(scan=scan_index).values
     
     def get_scan_by_tos(
         self,
@@ -178,7 +222,7 @@ class IRData(BaseModel):
                         f"Requested tos {t:.1f}s is {nearest_dist:.1f}s from the nearest scan "
                         f"(tolerance: {tolerance_seconds:.1f}s)"
                     )
-            return self.da.sel(tos=t, method=method).values
+            return self.ds["data"].sel(tos=t, method=method).values
 
         results = np.vstack([_fetch_one(t) for t in targets])
         return results[0] if scalar_input else results
@@ -257,7 +301,7 @@ class IRData(BaseModel):
         def _average_one(t: float) -> npt.NDArray:
             anchor_idx = _anchor_index(t)
             win = _window_indices(anchor_idx)
-            window_data = self.da.isel(scan=win).values  # shape: (n_scans_in_window, n_masses)
+            window_data = self.ds["data"].isel(scan=win).values  # shape: (n_scans_in_window, n_masses)
             return window_data.mean(axis=0)
 
         results = np.vstack([_average_one(t) for t in targets])
@@ -286,12 +330,50 @@ class IRData(BaseModel):
                         f"(tolerance: {tolerance_per_cm:.1f} cm⁻¹)"
                     )
 
-        result = self.da.sel(wavenumber=targets_si, method=method)
+        result = self.ds["data"].sel(wavenumber=targets_si, method=method)
 
         if rolling_window is not None:
             result = result.rolling(scan=rolling_window, center=True, min_periods=1).mean()
 
         return result
+
+    # ----------------------------------------------------------------
+    # Immutable — background
+    # ----------------------------------------------------------------
+
+    def with_background(
+        self,
+        background: Union[npt.NDArray, "IRData"],
+        data_type: Optional[IRDataType] = None,
+    ) -> "IRData":
+        if isinstance(background, IRData):
+            if background.ndim != 1:
+                raise ValueError("Background IRData must be 1-D (a single spectrum)")
+            bg_values = background.values
+            bg_data_type = data_type if data_type is not None else background.data_type
+        else:
+            bg_values = np.asarray(background, dtype=float)
+            if bg_values.ndim != 1:
+                raise ValueError("Background array must be 1-D")
+            bg_data_type = data_type
+
+        if bg_values.size != self.wavenumber.size:
+            raise ValueError(
+                f"Background size ({bg_values.size}) does not match wavenumber axis ({self.wavenumber.size})"
+            )
+
+        bg_attrs: dict[str, Any] = {}
+        if bg_data_type is not None:
+            bg_attrs["data_type"] = bg_data_type
+
+        bg_da = xr.DataArray(
+            data=bg_values,
+            coords={"wavenumber": self.ds.coords["wavenumber"]},
+            dims=["wavenumber"],
+            name="background",
+            attrs=bg_attrs,
+        )
+        return IRData(ds=self.ds.assign({"background": bg_da}))
 
     # ----------------------------------------------------------------
     # Immutable — selection and sorting
@@ -301,32 +383,31 @@ class IRData(BaseModel):
         old_tos_start = self.tos_start
         new_tos_start = pd.Timestamp(tos_start)
 
-        attrs = self.da.attrs
+        attrs = dict(self.ds.attrs)
         attrs["tos_start"] = new_tos_start.isoformat()
 
         old_tos = self.tos
         new_tos = old_tos + (new_tos_start - old_tos_start).total_seconds() if old_tos is not None else None
 
-        da = self._build_da(
+        ds = self._build_ds(
             wavenumber_si=self.wavenumber,
             values=self.values,
             tos=new_tos,
             attrs=attrs,
-            name=self.da.name,
         )
-        return IRData(da=da)
-            
+        return IRData(ds=self._carry_background(ds))
+
     def sort(self, by: str | Sequence[str] = "wavenumber", ascending: bool = True) -> "IRData":
-        da_sorted = self.da.sortby(by, ascending=ascending)
-        return IRData(da=da_sorted)
+        ds_sorted = self.ds.sortby(by, ascending=ascending)
+        return IRData(ds=ds_sorted)
     
     def select_by_idx(self, idx: int) -> "IRData":
         if self.ndim == 1:
             raise ValueError("select_by_idx requires 2-D data")
         if not (0 <= idx < self.shape[0]):
             raise IndexError(f"idx {idx} out of bounds for {self.shape[0]} scans")
-        da_selected = self.da.isel(scan=idx)
-        return IRData(da=da_selected)
+        ds_selected = self.ds.isel(scan=idx)
+        return IRData(ds=ds_selected)
 
     def select_by_tos(self, target_tos: float, method: Literal["nearest", "linear"] = "nearest", tolerance_seconds: Optional[float] = 10) -> "IRData":
         if self.ndim == 1:
@@ -342,15 +423,15 @@ class IRData(BaseModel):
                     f"(tolerance: {tolerance_seconds:.1f}s)"
                 )
 
-        da_selected = self.da.sel(tos=target_tos, method=method)
-        return IRData(da=da_selected)
+        ds_selected = self.ds.sel(tos=target_tos, method=method)
+        return IRData(ds=ds_selected)
 
     def select_wavenumber_range(
         self,
         min_cm: Optional[float] = None,
         max_cm: Optional[float] = None,
     ) -> "IRData":
-        da = self.da
+        da = self.ds["data"]
         if min_cm is not None:
             wn = da.coords["wavenumber"].values
             da = da.sel(wavenumber=wn >= min_cm * 100.0)
@@ -358,14 +439,13 @@ class IRData(BaseModel):
             wn = da.coords["wavenumber"].values
             da = da.sel(wavenumber=wn <= max_cm * 100.0)
 
-        da_new = self._build_da(
+        ds_new = self._build_ds(
             wavenumber_si=da.coords["wavenumber"].values,
             values=da.values,
             tos=da.coords["tos"].values if "tos" in da.coords else None,
-            attrs=da.attrs,
-            name=da.name,
+            attrs=dict(self.ds.attrs),
         )
-        return IRData(da=da_new)
+        return IRData(ds=self._slice_background_to(ds_new))
 
     def select_tos_range(
         self,
@@ -375,7 +455,7 @@ class IRData(BaseModel):
         if self.tos is None:
             raise ValueError("select_tos_range requires a 'tos' coordinate")
 
-        da = self.da
+        da = self.ds["data"]
         if min_s is not None:
             tos = da.coords["tos"].values
             if not np.any(tos >= min_s):
@@ -390,14 +470,13 @@ class IRData(BaseModel):
             da = da.isel(scan=tos <= max_s)
 
         # tos values are absolute elapsed seconds, so tos_start + tos[i] remains valid
-        da_new = self._build_da(
+        ds_new = self._build_ds(
             wavenumber_si=da.coords["wavenumber"].values,
             values=da.values,
             tos=da.coords["tos"].values,
-            attrs=da.attrs,
-            name=da.name,
+            attrs=dict(self.ds.attrs),
         )
-        return IRData(da=da_new)
+        return IRData(ds=self._carry_background(ds_new))
 
     # ----------------------------------------------------------------
     # Immutable — smoothing
@@ -412,8 +491,8 @@ class IRData(BaseModel):
             smoothed = np.apply_along_axis(
                 lambda m: savgol_filter(m, window_length, polyorder), axis=1, arr=self.values
             )
-        da_new = self._build_da(self.wavenumber, smoothed, name=self.da.name, tos=self.tos, attrs=self.da.attrs)
-        return IRData(da=da_new)
+        ds_new = self._build_ds(self.wavenumber, smoothed, tos=self.tos, attrs=dict(self.ds.attrs))
+        return IRData(ds=self._carry_background(ds_new))
 
     def smooth_gaussian(self, sigma_cm: float) -> "IRData":
         from scipy.ndimage import gaussian_filter1d
@@ -425,8 +504,8 @@ class IRData(BaseModel):
             smoothed = np.apply_along_axis(
                 lambda m: gaussian_filter1d(m, sigma=sigma_si), axis=1, arr=self.values
             )
-        da_new = self._build_da(self.wavenumber, smoothed, name=self.da.name, tos=self.tos, attrs=self.da.attrs)
-        return IRData(da=da_new)
+        ds_new = self._build_ds(self.wavenumber, smoothed, tos=self.tos, attrs=dict(self.ds.attrs))
+        return IRData(ds=self._carry_background(ds_new))
 
     def smooth_moving(self, window_size: int = 5) -> "IRData":
         if window_size < 1:
@@ -439,8 +518,8 @@ class IRData(BaseModel):
             smoothed = np.apply_along_axis(
                 lambda m: np.convolve(m, kernel, mode="same"), axis=1, arr=self.values
             )
-        da_new = self._build_da(self.wavenumber, smoothed, name=self.da.name, tos=self.tos, attrs=self.da.attrs)
-        return IRData(da=da_new)
+        ds_new = self._build_ds(self.wavenumber, smoothed, tos=self.tos, attrs=dict(self.ds.attrs))
+        return IRData(ds=self._carry_background(ds_new))
 
     # ----------------------------------------------------------------
     # Immutable — baseline correction
@@ -465,9 +544,9 @@ class IRData(BaseModel):
         else:
             corrected = self.values - self.values[:, mask].mean(axis=1, keepdims=True)
 
-        new_attrs = {**self.da.attrs, "baseline_anchor_range_cm": list(anchor_range_cm)}
-        da_new = self._build_da(wn, corrected, name=self.da.name, tos=self.tos, attrs=new_attrs)
-        return IRData(da=da_new)
+        new_attrs = {**self.ds.attrs, "baseline_anchor_range_cm": list(anchor_range_cm)}
+        ds_new = self._build_ds(wn, corrected, tos=self.tos, attrs=new_attrs)
+        return IRData(ds=self._carry_background(ds_new))
 
     def correct_pchip(
         self,
@@ -497,12 +576,12 @@ class IRData(BaseModel):
             corrected = np.apply_along_axis(_subtract_pchip, axis=1, arr=self.values)
 
         new_attrs = {
-            **self.da.attrs,
+            **self.ds.attrs,
             "baseline_pchip_control_points_cm": sorted(control_points_cm),
             "baseline_pchip_half_width": point_avg_half_width,
         }
-        da_new = self._build_da(wn_si, corrected, name=self.da.name, tos=self.tos, attrs=new_attrs)
-        return IRData(da=da_new)
+        ds_new = self._build_ds(wn_si, corrected, tos=self.tos, attrs=new_attrs)
+        return IRData(ds=self._carry_background(ds_new))
 
     def correct_baseline(
         self,
@@ -521,13 +600,13 @@ class IRData(BaseModel):
 
     def reapply_baseline(self) -> "IRData":
         # Re-runs correction using parameters stored in attributes (e.g. after average_scans)
-        anchor_range_cm = self.da.attrs.get("baseline_anchor_range_cm")
+        anchor_range_cm = self.ds.attrs.get("baseline_anchor_range_cm")
         if anchor_range_cm is None:
             raise ValueError("No baseline parameters found in attributes.")
         return self.correct_baseline(
             anchor_range_cm=tuple(anchor_range_cm),
-            control_points_cm=self.da.attrs.get("baseline_pchip_control_points_cm"),
-            point_avg_half_width=self.da.attrs.get("baseline_pchip_half_width", 0),
+            control_points_cm=self.ds.attrs.get("baseline_pchip_control_points_cm"),
+            point_avg_half_width=self.ds.attrs.get("baseline_pchip_half_width", 0),
         )
 
 
@@ -565,8 +644,8 @@ class IRData(BaseModel):
                 new_tos = tos_blocks[:, -1]
 
         # tos values remain absolute elapsed seconds, so tos_start stays valid
-        da_new = self._build_da(self.wavenumber, new_values, name=self.da.name, tos=new_tos, attrs=self.da.attrs)
-        return IRData(da=da_new)
+        ds_new = self._build_ds(self.wavenumber, new_values, tos=new_tos, attrs=dict(self.ds.attrs))
+        return IRData(ds=self._carry_background(ds_new))
 
     def average_scans_by_tos(
         self,
@@ -607,7 +686,7 @@ class IRData(BaseModel):
         new_tos = np.array(targets)
 
         new_attrs = {
-            **self.da.attrs,
+            **self.ds.attrs,
             "averaged_target_tos": [float(t) for t in targets],
             "averaged_anchor_tos": [
                 float(tos_values[int(np.abs(tos_values - t).argmin())])
@@ -618,14 +697,14 @@ class IRData(BaseModel):
             "averaged_time_window": time_window,
         }
 
-        da_new = self._build_da(
+        ds_new = self._build_ds(
             wavenumber_si=self.wavenumber,
             values=new_values,
-            name=self.da.name,
             tos=new_tos,
             attrs=new_attrs,
         )
-        return IRData(da=da_new)
+        return IRData(ds=self._carry_background(ds_new))
+
     # ----------------------------------------------------------------
     # Immutable - Normalisation
     # ----------------------------------------------------------------
@@ -636,8 +715,8 @@ class IRData(BaseModel):
             logger.warning("Maximum value is zero; returning original data without normalisation")
             return self
         new_values = self.values / max_val
-        da_new = self._build_da(self.wavenumber, new_values, name=self.da.name, tos=self.tos, attrs=self.da.attrs)
-        return IRData(da=da_new)
+        ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=dict(self.ds.attrs))
+        return IRData(ds=self._carry_background(ds_new))
 
     def normalise_integral(self) -> "IRData":
         integral = np.trapz(self.values, x=self.wavenumber, axis=-1)
@@ -645,9 +724,9 @@ class IRData(BaseModel):
             logger.warning("Integral is zero for some scans; returning original data without normalisation")
             return self
         new_values = self.values / integral[..., np.newaxis]
-        da_new = self._build_da(self.wavenumber, new_values, name=self.da.name, tos=self.tos, attrs=self.da.attrs)
-        return IRData(da=da_new)
-    
+        ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=dict(self.ds.attrs))
+        return IRData(ds=self._carry_background(ds_new))
+
     def normalise_reference(self, reference: npt.NDArray) -> "IRData":
         if reference.ndim != 1:
             raise ValueError("Reference spectrum must be 1-D")
@@ -658,15 +737,15 @@ class IRData(BaseModel):
             return self
 
         new_values = self.values / reference
-        da_new = self._build_da(self.wavenumber, new_values, name=self.da.name, tos=self.tos, attrs=self.da.attrs)
-        return IRData(da=da_new)
-    
+        ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=dict(self.ds.attrs))
+        return IRData(ds=self._carry_background(ds_new))
+
     def normalise_reference_scan(self, scan_index: int) -> "IRData":
         if self.ndim == 1:
             raise ValueError("normalise_reference_scan requires 2-D data")
         reference = self.get_scan(scan_index)
         return self.normalise_reference(reference)
-    
+
     def normalise_reference_by_tos(
         self,
         target_tos: float,
@@ -677,7 +756,7 @@ class IRData(BaseModel):
             raise ValueError("normalise_reference_by_tos requires 2-D data")
         reference = self.get_scan_by_tos(target_tos, method=method, tolerance_seconds=tolerance_seconds)
         return self.normalise_reference(reference)
-    
+
     def normalise_value_range(self, new_min: float = 0.0, new_max: float = 1.0) -> "IRData":
         old_min = self.values.min()
         old_max = self.values.max()
@@ -685,16 +764,83 @@ class IRData(BaseModel):
             logger.warning("All values are the same; returning original data without normalisation")
             return self
         new_values = (self.values - old_min) / (old_max - old_min) * (new_max - new_min) + new_min
-        da_new = self._build_da(self.wavenumber, new_values, name=self.da.name, tos=self.tos, attrs=self.da.attrs)
-        return IRData(da=da_new)
-    
+        ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=dict(self.ds.attrs))
+        return IRData(ds=self._carry_background(ds_new))
+
     def normalise_value(self, factor: float) -> "IRData":
         if factor == 0:
             logger.warning("Normalisation factor is zero; returning original data without normalisation")
             return self
         new_values = self.values / factor
-        da_new = self._build_da(self.wavenumber, new_values, name=self.da.name, tos=self.tos, attrs=self.da.attrs)
-        return IRData(da=da_new)
+        ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=dict(self.ds.attrs))
+        return IRData(ds=self._carry_background(ds_new))
+
+    # ----------------------------------------------------------------
+    # Gram-Schmidt reconstructed chromatogram
+    # ----------------------------------------------------------------
+
+    def get_gram_schmidt(self, reference: npt.NDArray) -> xr.DataArray:
+        """Gram-Schmidt vector: L2 norm of each scan's component orthogonal to the reference subspace."""
+        if self.ndim == 1:
+            raise ValueError("get_gram_schmidt requires 2-D data")
+
+        ref = np.atleast_2d(np.asarray(reference, dtype=float))
+        if ref.shape[-1] != self.wavenumber.size:
+            raise ValueError(
+                f"Reference has {ref.shape[-1]} points but wavenumber axis has {self.wavenumber.size}"
+            )
+
+        basis: list[npt.NDArray] = []
+        for r in ref:
+            v = r.copy()
+            for b in basis:
+                v = v - np.dot(v, b) * b
+            norm = np.linalg.norm(v)
+            ref_norm = np.linalg.norm(r)
+            if norm > 1e-12 * (ref_norm if ref_norm > 0 else 1.0):
+                basis.append(v / norm)
+
+        if not basis:
+            raise ValueError("Reference spectra are linearly dependent; cannot build orthonormal basis")
+
+        B = np.array(basis)                          # (n_basis, n_wn)
+        spectra = self.values                        # (n_scans, n_wn)
+        residuals = spectra - (spectra @ B.T) @ B   # remove reference subspace
+        gs_values = np.linalg.norm(residuals, axis=1)  # (n_scans,)
+
+        coords: dict[str, Any] = {"scan": self.ds.coords["scan"].values}
+        if self.tos is not None:
+            coords["tos"] = ("scan", self.tos)
+
+        return xr.DataArray(
+            data=gs_values,
+            coords=coords,
+            dims=["scan"],
+            attrs={"gs_n_basis": len(basis)},
+            name="gram_schmidt",
+        )
+
+    def get_gram_schmidt_scan(
+        self,
+        reference_scans: Union[int, Sequence[int]] = 0,
+    ) -> xr.DataArray:
+        if self.ndim == 1:
+            raise ValueError("get_gram_schmidt_scan requires 2-D data")
+        indices = [reference_scans] if isinstance(reference_scans, int) else list(reference_scans)
+        return self.get_gram_schmidt(self.values[indices])
+
+    def get_gram_schmidt_by_tos(
+        self,
+        reference_tos: Union[float, Sequence[float]],
+        method: Literal["nearest", "linear"] = "nearest",
+        tolerance_seconds: Optional[float] = 10,
+    ) -> xr.DataArray:
+        if self.ndim == 1:
+            raise ValueError("get_gram_schmidt_by_tos requires 2-D data")
+        reference = self.get_scan_by_tos(
+            reference_tos, method=method, tolerance_seconds=tolerance_seconds
+        )
+        return self.get_gram_schmidt(reference)
 
     # ----------------------------------------------------------------
     # SNR
@@ -909,11 +1055,11 @@ class IRData(BaseModel):
     # ----------------------------------------------------------------
 
     def to_netcdf(self, filepath: Union[str, Path]) -> None:
-        # tos_start in da.attrs (via attributes) round-trips automatically
+        # tos_start in ds.attrs round-trips automatically
         filepath = Path(filepath)
         if filepath.exists():
             logger.warning(f"Overwriting existing file: {filepath}")
-        self.da.to_netcdf(filepath)
+        self.ds.to_netcdf(filepath)
         logger.debug(f"Saved NetCDF → {filepath}")
     
     
@@ -928,14 +1074,14 @@ class IRData(BaseModel):
         values: npt.NDArray,
         tos: Optional[npt.NDArray] = None,
         tos_start: Optional[Union[pd.Timestamp, str]] = None,
-        name: Optional[str] = None,
+        data_type: IRDataType = "single_beam",
     ) -> "IRData":
         wavenumber_si = np.asarray(wavenumber_per_cm, dtype=float) * 100.0
         values = np.asarray(values, dtype=float)
 
         if wavenumber_si.ndim != 1:
             raise ValueError("wavenumber_per_cm must be 1-D")
-        
+
         if values.ndim == 1:
             if values.size != wavenumber_si.size:
                 raise ValueError(f"values size ({values.size}) != wavenumber size ({wavenumber_si.size})")
@@ -950,26 +1096,29 @@ class IRData(BaseModel):
         else:
             raise ValueError(f"values must be 1-D or 2-D, got shape {values.shape}")
 
-        attrs = {}
+        attrs: dict[str, Any] = {"data_type": data_type}
         if tos_start is not None:
             attrs["tos_start"] = pd.Timestamp(tos_start).isoformat()
 
-        da = cls._build_da(wavenumber_si, values, name = name, tos=tos, attrs=attrs)
-        return cls(da=da)
+        ds = cls._build_ds(wavenumber_si, values, tos=tos, attrs=attrs)
+        return cls(ds=ds)
 
     @classmethod
     def from_netcdf(cls, filepath: Union[str, Path]) -> "IRData":
-        with xr.open_dataarray(filepath) as da:
-            da = da.copy()
-        return cls(da=da)
+        with xr.open_dataset(filepath) as ds:
+            ds = ds.copy()
+        return cls(ds=ds)
 
     @classmethod
     def from_xarray(
         cls,
-        da: xr.DataArray,
+        da: Union[xr.DataArray, xr.Dataset],
     ) -> "IRData":
-        da = da.copy()
-        return cls(da=da)
+        if isinstance(da, xr.DataArray):
+            ds = xr.Dataset({"data": da.copy()}, attrs=dict(da.attrs))
+        else:
+            ds = da.copy()
+        return cls(ds=ds)
 
     @classmethod
     def from_omnic_spa(
@@ -1005,14 +1154,24 @@ class IRData(BaseModel):
         if parsed_tos_start is not None:
             attrs["tos_start"] = parsed_tos_start.isoformat()
 
-        da = cls._build_da(
+        vlabel = raw["meta"].get("vlabel", "")
+        data_type = _OMNIC_VLABEL_TO_DATA_TYPE.get(vlabel)
+        if data_type is None:
+            raise ValueError(
+                f"Omnic vlabel '{vlabel}' has no known data_type mapping. "
+                f"Known mappings: {list(_OMNIC_VLABEL_TO_DATA_TYPE)}. "
+                "Add it to _OMNIC_VLABEL_TO_DATA_TYPE in infrared/core.py."
+            )
+        attrs["data_type"] = data_type
+
+        ds = cls._build_ds(
             wavenumber_si,
             values,
             tos=tos,
-            attrs=attrs
-            )
+            attrs=attrs,
+        )
 
-        return cls(da=da)
+        return cls(ds=ds)
 
     # ----------------------------------------------------------------
     # Dunder helpers
@@ -1021,35 +1180,48 @@ class IRData(BaseModel):
     def __repr__(self) -> str:
         wn = self.wavenumber_per_cm
         wn_range = f"{wn.min():.1f}–{wn.max():.1f} cm-1" if wn.size else "empty"
-        dims = dict(zip(self.da.dims, self.da.shape))
         tos_info = f", tos={self.tos[0]:.1f}–{self.tos[-1]:.1f}s" if self.tos is not None else ""
         ts_info = f", tos_start={self.tos_start}" if self.tos_start is not None else ""
-        return f"IRData(shape={self.shape}, wavenumber={wn_range}{tos_info}{ts_info}, attribute_keys={list(self.da.attrs.keys())})"
+        bg_info = f", background={self.background_data_type}" if self.has_background else ""
+        return f"IRData(data_type={self.data_type}, shape={self.shape}, wavenumber={wn_range}{tos_info}{ts_info}{bg_info})"
 
     def __len__(self) -> int:
-        return self.da.sizes.get("scan", 1)
+        return self.ds.sizes.get("scan", 1)
     
     def __add__(self, other: "IRData") -> "IRData":
         if not isinstance(other, IRData):
             return NotImplemented
         self._check_compatible(other, "add")
-        new_attrs = {**self.da.attrs, **other.da.attrs}
-        da_new = self._build_da(self.wavenumber, self.values + other.values, name=self.da.name, tos=self.tos, attrs=new_attrs)
-        return IRData(da=da_new)
+        new_attrs = {**self.ds.attrs, **other.ds.attrs}
+        ds_new = self._build_ds(self.wavenumber, self.values + other.values, tos=self.tos, attrs=new_attrs)
+        return IRData(ds=self._carry_background(ds_new))
 
     def __sub__(self, other: "IRData") -> "IRData":
         if not isinstance(other, IRData):
             return NotImplemented
         self._check_compatible(other, "subtract")
-        new_attrs = {**self.da.attrs, **other.da.attrs}
-        da_new = self._build_da(self.wavenumber, self.values - other.values, name=self.da.name, tos=self.tos, attrs=new_attrs)
-        return IRData(da=da_new)
+        new_attrs = {**self.ds.attrs, **other.ds.attrs}
+        ds_new = self._build_ds(self.wavenumber, self.values - other.values, tos=self.tos, attrs=new_attrs)
+        return IRData(ds=self._carry_background(ds_new))
 
 
     # ----------------------------------------------------------------
     # Private helpers
     # ----------------------------------------------------------------
-    
+
+    def _carry_background(self, ds: xr.Dataset) -> xr.Dataset:
+        """Copy background variable from self into ds unchanged (wavenumber axis must match)."""
+        if "background" in self.ds:
+            return ds.assign({"background": self.ds["background"]})
+        return ds
+
+    def _slice_background_to(self, ds: xr.Dataset) -> xr.Dataset:
+        """Slice background to match ds's wavenumber coordinate, then copy into ds."""
+        if "background" not in self.ds:
+            return ds
+        bg_sliced = self.ds["background"].sel(wavenumber=ds.coords["wavenumber"])
+        return ds.assign({"background": bg_sliced})
+
     def _check_compatible(self, other: "IRData", op: str) -> None:
         if self.wavenumber.shape != other.wavenumber.shape or not np.allclose(self.wavenumber, other.wavenumber):
             raise ValueError(f"Cannot {op} IRData with different wavenumber axes")
@@ -1060,20 +1232,20 @@ class IRData(BaseModel):
         
 
     @staticmethod
-    def _build_da(
+    def _build_ds(
         wavenumber_si: npt.NDArray,
         values: npt.NDArray,
         tos: Optional[npt.NDArray] = None,
         attrs: Optional[dict[str, Any]] = None,
-        name: str = 'infrared_data',
-    ) -> xr.DataArray:
+    ) -> xr.Dataset:
         coords: dict[str, Any] = {"wavenumber": wavenumber_si}
         dims: list[str]
 
         if attrs is None:
             attrs = {}
-        
+
         attrs["wavenumber_unit"] = "m^-1"
+        attrs.setdefault("data_type", "single_beam")
 
         if values.ndim == 1:
             dims = ["wavenumber"]
@@ -1086,13 +1258,8 @@ class IRData(BaseModel):
             else:
                 logger.warning("No 'tos' provided for 2-D data; 'tos' coordinate will be missing")
 
-        da = xr.DataArray(
-            data=values,
-            coords=coords,
-            dims=dims,
-            attrs=attrs,
-            name=name,
-        )
+        data_var = xr.DataArray(data=values, coords=coords, dims=dims, name="data")
+        ds = xr.Dataset({"data": data_var}, attrs=attrs)
 
-        logger.debug(f"Built DataArray with dims={da.dims}, coords={list(da.coords)}, shape={da.shape}, tos_start={attrs.get('tos_start') if attrs else None}, tos[0]={tos[0] if tos is not None else None}, tos[-1]={tos[-1] if tos is not None else None}, attribute_keys={list(attrs.keys()) if attrs else None}")
-        return da
+        logger.debug(f"Built Dataset with dims={dict(ds.sizes)}, coords={list(ds.coords)}, shape={ds['data'].shape}, tos_start={attrs.get('tos_start') if attrs else None}, tos[0]={tos[0] if tos is not None else None}, tos[-1]={tos[-1] if tos is not None else None}, attribute_keys={list(attrs.keys()) if attrs else None}")
+        return ds
