@@ -183,12 +183,23 @@ def _read_header(fid: io.BufferedReader, pos: int) -> Dict[str, Any]:
     fid.seek(pos + 12)
     ykey = _read(fid, "uint8")
     ymap = {
-        17: ("absorbance", "absorbance"),
-        16: ("%", "transmittance"),
         11: ("%", "reflectance"),
-        22: ("V", "signal"),
+        12: (None, "log(1/R)"),
+        15: (None, "single beam"),
+        16: ("%", "transmittance"),
+        17: ("a.u.", "absorbance"),
+        20: ("Kubelka_Munk", "Kubelka_Munk"),
+        21: (None, "reflectance"),
+        22: ("V", "detector signal"),
     }
-    out["units"], out["title"] = ymap.get(ykey, (None, "intensity"))
+
+    out_units, out_title = ymap.get(ykey)
+
+    if out_title is None:
+        logger.warning(f"Unknown y-axis key {ykey} in header at position {pos}. Defaulting to 'single beam' with no units.")
+        out_units, out_title = (None, "single beam")
+
+    out["units"], out["title"] = out_units, out_title
 
     # ---- x range ----
     fid.seek(pos + 16)

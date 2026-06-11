@@ -23,6 +23,9 @@ _OMNIC_VLABEL_TO_DATA_TYPE: dict[str, IRDataType] = {
     "absorbance": "absorbance",
     "transmittance": "transmittance",
     "reflectance": "reflectance",
+    "single beam": "single_beam",
+    "Kubelka_Munk": "kubelka_munk",
+    "log(1/R)": "log_1_r",
 }
 
 
@@ -346,6 +349,12 @@ class IRData(BaseModel):
         background: Union[npt.NDArray, "IRData"],
         data_type: Optional[IRDataType] = None,
     ) -> "IRData":
+        """Set or switch the background spectrum (always stored as single_beam).
+
+        If no background is currently assigned: assigns it without touching data values.
+        If a background is already assigned: converts the new background to single_beam
+        using the existing background, then recalculates data values accordingly.
+        """
         if isinstance(background, IRData):
             if background.ndim != 1:
                 raise ValueError("Background IRData must be 1-D (a single spectrum)")
@@ -362,18 +371,69 @@ class IRData(BaseModel):
                 f"Background size ({bg_values.size}) does not match wavenumber axis ({self.wavenumber.size})"
             )
 
-        bg_attrs: dict[str, Any] = {}
-        if bg_data_type is not None:
-            bg_attrs["data_type"] = bg_data_type
+        bg_sb = self._bg_to_single_beam(bg_values, bg_data_type)
 
-        bg_da = xr.DataArray(
-            data=bg_values,
-            coords={"wavenumber": self.ds.coords["wavenumber"]},
-            dims=["wavenumber"],
-            name="background",
-            attrs=bg_attrs,
-        )
-        return IRData(ds=self.ds.assign({"background": bg_da}))
+        if not self.has_background:
+            return self._set_background(bg_sb)
+        else:
+            return self._switch_background(bg_sb)
+
+    def with_background_scan(self, scan_index: int) -> "IRData":
+        """Use the scan at scan_index as the new background.
+
+        The scan is extracted as a 1-D IRData with the same data_type as self.
+        If data is not single_beam, the scan is converted back to single_beam using
+        the existing background before being assigned.
+        """
+        if self.ndim == 1:
+            raise ValueError("with_background_scan requires 2-D data")
+        return self.with_background(self.select_by_idx(scan_index))
+
+    def with_background_by_tos(
+        self,
+        target_tos: float,
+        method: Literal["nearest", "linear"] = "nearest",
+        tolerance_seconds: Optional[float] = 10,
+    ) -> "IRData":
+        """Use the scan nearest to target_tos as the new background.
+
+        Same single_beam conversion logic as with_background_scan.
+        """
+        if self.ndim == 1:
+            raise ValueError("with_background_by_tos requires 2-D data")
+        return self.with_background(self.select_by_tos(target_tos, method=method, tolerance_seconds=tolerance_seconds))
+
+    def del_background(self) -> "IRData":
+        """Remove the background spectrum without changing data values."""
+        return self._del_background()
+
+    def set_background(
+        self,
+        background: Union[npt.NDArray, "IRData"],
+        data_type: Optional[IRDataType] = None,
+    ) -> "IRData":
+        """Force-assign a background without recalculating values (drops any existing background first).
+
+        Use with_background() instead when switching backgrounds should trigger recalculation.
+        """
+        if isinstance(background, IRData):
+            if background.ndim != 1:
+                raise ValueError("Background IRData must be 1-D (a single spectrum)")
+            bg_values = background.values
+            bg_data_type = data_type if data_type is not None else background.data_type
+        else:
+            bg_values = np.asarray(background, dtype=float)
+            if bg_values.ndim != 1:
+                raise ValueError("Background array must be 1-D")
+            bg_data_type = data_type
+
+        if bg_values.size != self.wavenumber.size:
+            raise ValueError(
+                f"Background size ({bg_values.size}) does not match wavenumber axis ({self.wavenumber.size})"
+            )
+
+        bg_sb = self._bg_to_single_beam(bg_values, bg_data_type)
+        return self._del_background()._set_background(bg_sb)
 
     # ----------------------------------------------------------------
     # Immutable — selection and sorting
@@ -774,6 +834,116 @@ class IRData(BaseModel):
         new_values = self.values / factor
         ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=dict(self.ds.attrs))
         return IRData(ds=self._carry_background(ds_new))
+
+    # ----------------------------------------------------------------
+    # Immutable — type conversion
+    # ----------------------------------------------------------------
+
+    def _convert(self, new_values: npt.NDArray, new_data_type: IRDataType) -> "IRData":
+        new_attrs = {**self.ds.attrs, "data_type": new_data_type}
+        ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=new_attrs)
+        return IRData(ds=self._carry_background(ds_new))
+
+    def _require_background(self) -> npt.NDArray:
+        if not self.has_background:
+            raise ValueError(
+                f"Converting from '{self.data_type}' requires a background spectrum. "
+                "Set one with .with_background()."
+            )
+        return self.background
+
+    def to_transmittance(self) -> "IRData":
+        if self.data_type == "transmittance":
+            return self
+        if self.data_type == "single_beam":
+            bg = self._require_background()
+            if np.any(bg == 0):
+                logger.warning("Background contains zeros; transmittance will contain inf")
+            return self._convert(self.values / bg, "transmittance")
+        if self.data_type == "absorbance":
+            return self._convert(np.power(10.0, -self.values), "transmittance")
+        raise ValueError(
+            f"Cannot convert '{self.data_type}' to transmittance. "
+            "Reflectance-based types (reflectance, log_1_r, kubelka_munk) belong to a different experiment."
+        )
+
+    def to_reflectance(self) -> "IRData":
+        if self.data_type == "reflectance":
+            return self
+        if self.data_type == "single_beam":
+            bg = self._require_background()
+            if np.any(bg == 0):
+                logger.warning("Background contains zeros; reflectance will contain inf")
+            return self._convert(self.values / bg, "reflectance")
+        if self.data_type == "log_1_r":
+            return self._convert(np.power(10.0, -self.values), "reflectance")
+        if self.data_type == "absorbance":
+            # OMNIC stores DRIFTS/reflectance data as absorbance (= -log₁₀(R)); invert to get R.
+            return self._convert(np.power(10.0, -self.values), "reflectance")
+        if self.data_type == "kubelka_munk":
+            km = self.values
+            r = (1.0 + km) - np.sqrt(km * (km + 2.0))
+            return self._convert(r, "reflectance")
+        raise ValueError(
+            f"Cannot convert '{self.data_type}' to reflectance. "
+            "Transmittance-based type (transmittance) belongs to a different experiment."
+        )
+
+    def to_absorbance(self) -> "IRData":
+        if self.data_type == "absorbance":
+            return self
+        if self.data_type == "single_beam":
+            bg = self._require_background()
+            ratio = self.values / bg
+            if np.any(ratio <= 0):
+                logger.warning("Non-positive sample/background ratio; absorbance will contain nan/inf")
+            return self._convert(-np.log10(ratio), "absorbance")
+        if self.data_type == "transmittance":
+            if np.any(self.values <= 0):
+                logger.warning("Non-positive transmittance; absorbance will contain nan/inf")
+            return self._convert(-np.log10(self.values), "absorbance")
+        raise ValueError(
+            f"Cannot convert '{self.data_type}' to absorbance. "
+            "Absorbance is defined as -log₁₀(T) for transmission experiments. "
+            "For reflectance experiments use to_log_1_r()."
+        )
+
+    def to_log_1_r(self) -> "IRData":
+        if self.data_type == "log_1_r":
+            return self
+        if self.data_type == "single_beam":
+            bg = self._require_background()
+            ratio = self.values / bg
+            if np.any(ratio <= 0):
+                logger.warning("Non-positive sample/background ratio; log(1/R) will contain nan/inf")
+            return self._convert(-np.log10(ratio), "log_1_r")
+        if self.data_type == "reflectance":
+            if np.any(self.values <= 0):
+                logger.warning("Non-positive reflectance; log(1/R) will contain nan/inf")
+            return self._convert(-np.log10(self.values), "log_1_r")
+        if self.data_type == "absorbance":
+            # OMNIC stores DRIFTS/reflectance data as absorbance (= -log₁₀(R)); relabel as log(1/R).
+            return self._convert(self.values.copy(), "log_1_r")
+        if self.data_type == "kubelka_munk":
+            km = self.values
+            r = (1.0 + km) - np.sqrt(km * (km + 2.0))
+            if np.any(r <= 0):
+                logger.warning("Non-positive reflectance after KM inversion; log(1/R) will contain nan/inf")
+            return self._convert(-np.log10(r), "log_1_r")
+        raise ValueError(
+            f"Cannot convert '{self.data_type}' to log(1/R). "
+            "log(1/R) is defined for reflectance experiments. "
+            "For transmission experiments use to_absorbance()."
+        )
+
+    def to_kubelka_munk(self) -> "IRData":
+        if self.data_type == "kubelka_munk":
+            return self
+        r_ir = self.to_reflectance()  # raises if transmittance-based
+        r = r_ir.values
+        if np.any(r <= 0):
+            logger.warning("Non-positive reflectance; Kubelka-Munk will contain nan/inf")
+        return r_ir._convert((1.0 - r) ** 2 / (2.0 * r), "kubelka_munk")
 
     # ----------------------------------------------------------------
     # Gram-Schmidt reconstructed chromatogram
@@ -1208,6 +1378,75 @@ class IRData(BaseModel):
     # ----------------------------------------------------------------
     # Private helpers
     # ----------------------------------------------------------------
+
+    def _del_background(self) -> "IRData":
+        if "background" not in self.ds:
+            return self
+        return IRData(ds=self.ds.drop_vars("background"))
+
+    def _make_bg_da(self, values: npt.NDArray) -> xr.DataArray:
+        return xr.DataArray(
+            data=values,
+            coords={"wavenumber": self.ds.coords["wavenumber"]},
+            dims=["wavenumber"],
+            name="background",
+            attrs={"data_type": "single_beam"},
+        )
+
+    def _set_background(self, bg_single_beam: npt.NDArray) -> "IRData":
+        return IRData(ds=self.ds.assign({"background": self._make_bg_da(bg_single_beam)}))
+
+    def _switch_background(self, new_bg: npt.NDArray) -> "IRData":
+        new_values = self._recalculate_with_new_background(new_bg)
+        new_attrs = dict(self.ds.attrs)
+        ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=new_attrs)
+        return IRData(ds=ds_new.assign({"background": self._make_bg_da(new_bg)}))
+
+    def _bg_to_single_beam(
+        self, bg_values: npt.NDArray, bg_data_type: Optional[IRDataType]
+    ) -> npt.NDArray:
+        """Convert incoming background values to single_beam units.
+
+        If bg_data_type is already single_beam (or None), return as-is.
+        Otherwise reconstruct using the existing background (which must exist).
+        """
+        if bg_data_type is None or bg_data_type == "single_beam":
+            return bg_values
+        old_bg = self.background
+        if old_bg is None:
+            raise ValueError(
+                f"Cannot convert background from '{bg_data_type}' to single_beam without an "
+                "existing background. Assign a single_beam background first, or pass "
+                "data_type='single_beam'."
+            )
+        if bg_data_type in ("transmittance", "reflectance"):
+            return bg_values * old_bg
+        if bg_data_type in ("absorbance", "log_1_r"):
+            return np.power(10.0, -bg_values) * old_bg
+        if bg_data_type == "kubelka_munk":
+            km = bg_values
+            r = (1.0 + km) - np.sqrt(km * (km + 2.0))
+            return r * old_bg
+        raise ValueError(f"Unknown background data_type '{bg_data_type}'")
+
+    def _recalculate_with_new_background(self, new_bg: npt.NDArray) -> npt.NDArray:
+        """Recalculate data values after swapping background (old background must exist)."""
+        old_bg = self.background
+        dt = self.data_type
+        if dt is None:
+            raise ValueError("data_type is not set; cannot recalculate values with new background")
+        if dt == "single_beam":
+            return self.values.copy()
+        if dt in ("transmittance", "reflectance"):
+            return self.values * (old_bg / new_bg)
+        if dt in ("absorbance", "log_1_r"):
+            return self.values + np.log10(new_bg / old_bg)
+        if dt == "kubelka_munk":
+            km = self.values
+            r_old = (1.0 + km) - np.sqrt(km * (km + 2.0))
+            r_new = r_old * (old_bg / new_bg)
+            return (1.0 - r_new) ** 2 / (2.0 * r_new)
+        raise ValueError(f"Cannot recalculate values for data_type '{dt}'")
 
     def _carry_background(self, ds: xr.Dataset) -> xr.Dataset:
         """Copy background variable from self into ds unchanged (wavenumber axis must match)."""

@@ -171,40 +171,86 @@ Low-level parser in `phd_parser.tga.e2290`:
 
 ### Infrared
 
-The `IRData` class is the core container for infrared spectroscopy data. It wraps an `xarray.DataArray` with wavenumbers stored in SI units (m⁻¹) internally and supports both single spectra (1-D) and time-resolved series (2-D, with `scan` and `tos` coordinates). Absolute acquisition timestamps are reconstructed on demand from a `tos_start` stored in metadata plus the elapsed `tos` coordinate — this survives all transformations.
+The `IRData` class is the core container for infrared spectroscopy data. It wraps an `xarray.Dataset` (`ds`) with wavenumbers stored in SI units (m⁻¹) internally. The primary spectrum is `ds["data"]`; an optional `ds["background"]` (always single-beam, 1-D) is stored alongside it. All metadata lives in `ds.attrs`. Two data layouts are supported: `(wavenumber,)` for a single spectrum and `(scan, wavenumber)` for a time series, with an optional `tos` coordinate (seconds) on the `scan` dimension. Absolute acquisition timestamps are reconstructed on demand from `tos_start + tos` and are never stored as a coordinate.
+
+Every spectrum carries a `data_type` attribute that records the physical representation:
+
+| `data_type` | Description |
+|---|---|
+| `single_beam` | Raw detector signal |
+| `absorbance` | −log₁₀(T); default for OMNIC transmission data |
+| `transmittance` | I_sample / I_background |
+| `reflectance` | I_sample / I_background (reflection experiment) |
+| `log_1_r` | −log₁₀(R); pseudo-absorbance for DRIFTS/ATR |
+| `kubelka_munk` | (1−R)² / (2R) |
 
 **Constructors**
-- `from_arrays` — build from raw numpy arrays (wavenumber in cm⁻¹, values, optional `tos` and `tos_start`)
-- `from_xarray` — wrap an existing `xr.DataArray`
+- `from_arrays` — build from raw numpy arrays (wavenumber in cm⁻¹, values, optional `tos`, `tos_start`, `data_type`)
+- `from_xarray` — wrap an existing `xr.DataArray` or `xr.Dataset`
 - `from_netcdf` — load a previously saved NetCDF file
-- `from_omnic_spa` — read Thermo OMNIC `.spa` files (single or series)
+- `from_omnic_spa` — read Thermo OMNIC `.spa` files (single file or directory); `data_type` is mapped automatically from the OMNIC header; unknown types raise `ValueError`
 
 **Accessors**
-- Unit conversions: `wavenumber`, `wavenumber_per_cm`, `wavelength`, `wavelength_nm`, `frequency`, `energy`, `energy_eV`
+- Spectrum: `values`, `ndim`, `shape`, `data_type`
+- Wavenumber axis: `wavenumber` (m⁻¹), `wavenumber_per_cm` (cm⁻¹)
+- Cached unit conversions: `wavelength`, `wavelength_nm`, `wavelength_mum`, `frequency`, `energy`, `energy_eV`, `energy_kJ_per_mol`
 - Time: `tos`, `tos_start`, `timestamps`
-- Selection: `get_scan`, `get_scan_by_tos`, `get_scan_by_tos_average`, `get_evolution`
+- Background: `has_background`, `background` (numpy array), `background_data_type`
+- Scan retrieval: `get_scan`, `get_scan_by_tos`, `get_scan_by_tos_average`, `get_evolution`
 
-**Processing (all immutable — return a new `IRData`)**
-- Selection: `sort`, `select_wavenumber_range`, `select_tos_range`
+**Background management (all immutable — return a new `IRData`)**
+
+The background is always stored as `single_beam`. When a background is already set, switching it triggers automatic recalculation of the data values (e.g. `A_new = A_old + log₁₀(bg_new / bg_old)`).
+
+- `with_background(background, data_type)` — set (no existing background) or switch (recalculates values); accepts `IRData` or numpy array
+- `with_background_scan(scan_index)` — use an existing scan as background; converts it from the current `data_type` to `single_beam` automatically
+- `with_background_by_tos(target_tos)` — same as above, addressed by time-on-stream
+- `set_background(background, data_type)` — force-assign a background without recalculating values (drops any existing background first)
+- `del_background()` — remove the background without changing data values
+
+**Type conversion (all immutable — return a new `IRData`)**
+
+Conversions follow experiment type: transmission-side (`single_beam → transmittance → absorbance`) and reflection-side (`single_beam → reflectance → log_1_r → kubelka_munk`) are distinct. `absorbance → reflectance` is supported for the common case where OMNIC stores DRIFTS data labelled as absorbance.
+
+- `to_transmittance()` — from `single_beam` (needs background) or `absorbance`
+- `to_reflectance()` — from `single_beam` (needs background), `absorbance`, `log_1_r`, or `kubelka_munk`
+- `to_absorbance()` — from `single_beam` (needs background) or `transmittance`
+- `to_log_1_r()` — from `single_beam` (needs background), `reflectance`, `absorbance`, or `kubelka_munk`
+- `to_kubelka_munk()` — from any reflectance-reachable type; routes through `to_reflectance()` internally
+
+**Processing (all immutable — return a new `IRData`; background is propagated automatically)**
+- Selection: `sort`, `select_by_idx`, `select_by_tos`, `select_wavenumber_range`, `select_tos_range`, `assign_tos_start`
 - Smoothing: `smooth_savgol`, `smooth_gaussian`, `smooth_moving`
 - Baseline correction: `correct_offset`, `correct_pchip`, `correct_baseline`, `reapply_baseline`
 - Averaging: `average_scans`, `average_scans_by_tos`
 - Normalisation: `normalise_max`, `normalise_integral`, `normalise_reference`, `normalise_reference_scan`, `normalise_reference_by_tos`, `normalise_value_range`, `normalise_value`
 - Arithmetic: `+`, `-` between compatible `IRData` objects
 
+**Signal quality**
+- `snr_windows` — signal-to-noise ratio from separate signal and noise spectral windows; configurable signal metric (`max`, `peak_to_peak`, `integral`, `rms`) and noise metric (`std`, `rms`, `peak_to_peak`)
+- `snr_noise_window` — noise estimated from a single flat region (polynomial detrend before estimation)
+- `snr_der` — DER-SNR estimator from the second-difference of the spectrum (no reference region needed)
+- `snr_repeat` — SNR from scan-to-scan repeatability (requires 2-D data)
+- `snr_psd` — power-spectral-density estimator using the high-frequency tail of the FFT
+
+**Gram-Schmidt chromatogram**
+- `get_gram_schmidt(reference)` — orthogonal component of each scan relative to a reference subspace; useful for reconstructing a chromatographic profile from a hyphenated IR series
+- `get_gram_schmidt_scan(reference_scans)` — convenience wrapper using scan indices as the reference
+- `get_gram_schmidt_by_tos(reference_tos)` — convenience wrapper using time-on-stream as the reference
+
 **Export**
-- `to_csv` — wavenumber-indexed CSV (cm⁻¹ or m⁻¹)
-- `to_netcdf` — round-trippable NetCDF preserving metadata
+- `to_netcdf` — round-trippable NetCDF preserving spectrum, background, coordinates, and all metadata
 
 #### OMNIC (Thermo Scientific)
 
 Low-level parser for `.spa` files in `phd_parser.infrared.omnic`:
 
-- `read_spa` — reads a single `.spa` file, a directory of `.spa` files, or an iterable of paths; returns a dict with stacked `x`, `v` and `tos` arrays plus metadata
+- `read_spa` — reads a single `.spa` file, a directory of `.spa` files, or an iterable of paths; returns a dict with stacked `x`, `v`, and `tos` arrays plus metadata (`vlabel`, `vunit`, `xlabel`, `xunit`, datetime list)
 - Supports local paths and HTTP(S) URLs
 - Time-of-scan (`tos`) derived from: explicit `tos_start`, a fixed `delta_time_seconds` increment, or the embedded file timestamps (default)
 - Optional `sort_key` for ordering series (default extracts the "Spectrum Index N" pattern from filenames)
-- Extracts core header fields (x/y units, number of points, range) and acquisition datetime
+- Extracts core header fields (x/y units, number of points, spectral range) and acquisition datetime
+- The `vlabel` from the OMNIC header is mapped to `IRDataType` via `_OMNIC_VLABEL_TO_DATA_TYPE`; unknown labels raise `ValueError` with instructions to extend the mapping
 
 Due to the high overhead of SpectroChemPy [^1], this `read_spa` is a stripped-down version of their parser. For further processing beyond raw file reading, I recommend checking them out.
 
