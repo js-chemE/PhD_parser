@@ -1,7 +1,7 @@
 import logging
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Literal, Optional, Sequence, Union, List, Tuple
+from typing import Any, Literal, Optional, Sequence, Union, Tuple
 
 import numpy as np
 import numpy.typing as npt
