@@ -20,6 +20,75 @@ Otherwise, simply download the code and copy it.
 
 Each equipment/parser is independently usable.
 
+```python
+import phd_parser as pp
+from pathlib import Path
+import pandas as pd
+```
+
+---
+
+## Core concepts
+
+### `tos_start` — anchoring time-on-stream to the clock
+
+Every data class stores time as *time-on-stream* (`tos`): elapsed seconds since the experiment began. This is a stable, unit-free axis that does not depend on clocks or timezones and survives all transformations and NetCDF round-trips.
+
+To link `tos` back to wall-clock time you supply a `tos_start` once at construction time — a timezone-aware `pandas.Timestamp`. Absolute timestamps are then derived on demand from `tos_start + tos` and are never stored as a coordinate.
+
+```python
+tos_start = pd.Timestamp("2026-04-21 14:42:00", tz="Europe/Amsterdam")
+
+lv  = pp.labview.LVData.from_b67_box5_txt(dir_lv, tos_start=tos_start)
+ms  = pp.massspec.MSData.from_quadstar_asc(asc_file, tos_start=tos_start)
+ir  = pp.infrared.IRData.from_omnic_spa(dir_spa, tos_start=tos_start)
+```
+
+Because every instrument shares the same `tos_start`, a single `tos` value means the same moment in all three datasets — making cross-instrument alignment trivial.
+
+---
+
+### Immutable transformations — every method returns a new object
+
+No processing method mutates the object it is called on. Instead, every method returns a *new* instance with the transformation applied, leaving the original intact. This means you can always go back to the raw data, compare intermediate stages, and chain operations in a single readable expression.
+
+```python
+# Each step produces a new object; the raw object is unchanged.
+ir = (
+    ir_raw
+    .select_tos_range(0, 6 * 3600)
+    .correct_baseline(anchor_range_cm=(2600, 2500),
+                      control_points_cm=[3450, 3100, 2720, 1750, 1230])
+)
+
+ms = ms_raw.select_tos_range(0, 6 * 3600).correct_traces().mask_overloaded()
+lv = lv_raw.select_tos_range(0, 6 * 3600)
+```
+
+The convention `*_raw` for the freshly-loaded object and a plain name for the processed version makes the lineage clear at a glance.
+
+---
+
+### Read once, cache as NetCDF
+
+Parsing hundreds of `.spa` files from disk is slow. The recommended workflow is to parse and pre-process once, save to a compact NetCDF file, then load the NetCDF on every subsequent run. All metadata, backgrounds, coordinates, and processing history survive the round-trip.
+
+```python
+# First run — parse raw files, assign background, save.
+ir_raw = (
+    pp.infrared.IRData.from_omnic_spa(dir_spa, tos_start=tos_start)
+    .with_background(pp.infrared.IRData.from_omnic_spa(bg_file, tos_start=tos_start))
+)
+ir_raw.to_netcdf(cache_path)
+
+# Every subsequent run — fast load.
+ir_raw = pp.infrared.IRData.from_netcdf(cache_path)
+```
+
+The same pattern applies to `MSData` and `LVData`.
+
+---
+
 ## Included Equipment
 
 The idea for each equipment is that there is a core `Data` class which utilises diverse parsers to read in and process the raw files from specific equipment and setups. This repo is partially highly specified for our group's equipment. However, parts of it contain parsers for commercial manufacturers and file formats and are hence universally applicable.
@@ -49,6 +118,34 @@ The `LVData` class is the core container for LabView process data. It wraps an `
 - `to_dataframe` — `tos`-indexed DataFrame, optional timestamp column
 - `to_csv` — `tos`-indexed CSV (timestamp column included when `tos_start` is set)
 - `to_netcdf` — round-trippable NetCDF preserving all channels and metadata
+
+**Typical workflow**
+
+```python
+from pathlib import Path
+import pandas as pd
+import phd_parser as pp
+
+dir_lv    = Path("path/to/labview")
+tos_start = pd.Timestamp("2026-04-21 14:42:00", tz="Europe/Amsterdam")
+
+# --- Load ---
+lv_raw = pp.labview.LVData.from_b67_box5_txt(dir_lv, tos_start=tos_start)
+
+# --- Crop to experiment window ---
+lv = lv_raw.select_tos_range(0, 6 * 3600)
+
+# --- Access channels ---
+T_reactor = lv.get_channel("Reactor T PV")   # returns an xr.DataArray
+P_analytic = lv.get_channel("Analytic P PV")
+
+# Axis in hours: lv.tos / 3600
+# Absolute timestamps: lv.timestamps
+
+# --- Save / reload ---
+lv_raw.to_netcdf(Path("path/to/cache.nc"))
+lv_raw = pp.labview.LVData.from_netcdf(Path("path/to/cache.nc"))
+```
 
 #### Building 67, Box 5 (high-pressure setup)
 
@@ -241,6 +338,60 @@ Conversions follow experiment type: transmission-side (`single_beam → transmit
 **Export**
 - `to_netcdf` — round-trippable NetCDF preserving spectrum, background, coordinates, and all metadata
 
+**Typical workflow**
+
+```python
+from pathlib import Path
+import pandas as pd
+import phd_parser as pp
+
+dir_omnic   = Path("path/to/omnic")
+dir_reac    = dir_omnic / "02_Reaction"
+bg_file     = dir_omnic / "Background_2026-04-21.spa"
+cache_path  = dir_omnic / "reaction.nc"
+
+tos_start = pd.Timestamp("2026-04-21 14:42:00", tz="Europe/Amsterdam")
+
+# --- First run: parse raw .spa files, assign background, save ---
+ir_raw_bg = pp.infrared.IRData.from_omnic_spa(bg_file, tos_start=tos_start)
+ir_raw = (
+    pp.infrared.IRData.from_omnic_spa(dir_reac, tos_start=tos_start)
+    .with_background(ir_raw_bg)           # store single-beam background;
+)                                         # data values remain in original data_type
+ir_raw.to_netcdf(cache_path)
+
+# --- Subsequent runs: fast load ---
+ir_raw = pp.infrared.IRData.from_netcdf(cache_path)
+
+# --- Processing chain ---
+anchor_range_cm    = (2600, 2500)
+control_points_cm  = [3450, 3100, 2720, 2600, 2500, 2150, 1750, 1230, 800]
+
+ir = (
+    ir_raw
+    .select_tos_range(0, 6 * 3600)                                   # crop to experiment window
+    .correct_baseline(anchor_range_cm, control_points_cm)            # PCHIP baseline correction
+    .select_wavenumber_range(1000, 3900)                             # discard noisy edges
+)
+
+# Inspect a single averaged scan at 100 min TOS
+spectrum = ir.get_scan_by_tos_average(100 * 60, direction="center", number_of_scans=10)
+
+# Track peak intensity over time
+evolution = ir.get_evolution(1600)   # wavenumber in cm⁻¹, returns tos-indexed array
+
+# Average spectra at specific temperature setpoints
+ir_temps = ir.average_scans_by_tos(
+    tos_targets=[66*60, 126*60, 186*60, 246*60, 306*60],
+    time_window=10 * 60,
+    direction="backwards",
+)
+ir_region = ir_temps.select_wavenumber_range(1000, 1750).normalise_value(0.06)
+
+# Signal-to-noise over time
+snr = ir.snr_windows(signal_range_cm=(1500, 1750), noise_range_cm=(1800, 1900))
+```
+
 #### OMNIC (Thermo Scientific)
 
 Low-level parser for `.spa` files in `phd_parser.infrared.omnic`:
@@ -283,6 +434,36 @@ All processing methods append an entry to `ds.attrs["trace_corrections"]` so the
 **Export**
 - `to_csv` — cycle-indexed CSV for a single block (one column per channel, optional `tos_s` and `timestamp` columns)
 - `to_netcdf` — round-trippable NetCDF preserving all blocks, coords, and metadata
+
+**Typical workflow**
+
+```python
+from pathlib import Path
+import pandas as pd
+import phd_parser as pp
+
+asc_file  = next(Path("path/to/quadstar").glob("*.asc"))
+tos_start = pd.Timestamp("2026-04-21 14:42:00", tz="Europe/Amsterdam")
+
+# --- Load ---
+ms_raw = pp.massspec.MSData.from_quadstar_asc(asc_file, tos_start=tos_start)
+
+# --- Processing chain ---
+ms = (
+    ms_raw
+    .select_tos_range(0, 6 * 3600)   # crop to experiment window
+    .correct_traces()                 # shift any negative m/z traces up to zero
+    .mask_overloaded()                # replace detector-saturation spikes (≈1e38) with NaN
+)
+
+# Extract individual m/z traces
+trace_28 = ms.get_trace(28)                          # CO / N₂ vs cycle
+trace_44 = ms.get_trace(44, normalize=(0, 1))        # CO₂ normalised to [0, 1]
+
+# Save / reload
+ms_raw.to_netcdf(Path("path/to/cache.nc"))
+ms_raw = pp.massspec.MSData.from_netcdf(Path("path/to/cache.nc"))
+```
 
 #### Quadstar for MS in building 67 - Box 5
 
