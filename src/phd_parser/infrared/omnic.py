@@ -56,6 +56,21 @@ def _read_text(fid: io.BufferedReader, pos: int, size: int) -> str:
 # =========================
 
 def extract_spectrum_id(path: Union[str, Path]) -> Optional[int]:
+    """Extract a numeric spectrum identifier from a file path, trying all known strategies.
+
+    Currently delegates to :func:`extract_spectrum_id_1`.  Returns ``None``
+    and logs a warning if every strategy fails.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Path to the ``.spa`` file whose stem is inspected.
+
+    Returns
+    -------
+    int or None
+        Extracted integer ID, or ``None`` if no strategy succeeds.
+    """
     for extractor in [extract_spectrum_id_1]:
         try:
             return extractor(path)
@@ -64,6 +79,21 @@ def extract_spectrum_id(path: Union[str, Path]) -> Optional[int]:
     return None
 
 def extract_spectrum_id_1(path: Union[str, Path]) -> int:
+    """Extract a spectrum index from a filename containing ``'Spectrum Index <N>'``.
+
+    Returns ``0`` when the pattern is absent.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Path to the ``.spa`` file whose stem is inspected.
+
+    Returns
+    -------
+    int
+        Integer parsed from ``'Spectrum Index <N>'``, or ``0`` if the pattern
+        is not found.
+    """
     name = Path(path).stem
 
     m = re.search(r"Spectrum Index (\d+)", name)
@@ -73,6 +103,21 @@ def extract_spectrum_id_1(path: Union[str, Path]) -> int:
     return 0
 
 def extract_spectrum_tos(path: Union[str, Path]) -> Optional[int]:
+    """Extract elapsed time in seconds from a file path, trying all known strategies.
+
+    Currently delegates to :func:`extract_spectrum_tos_1`.  Returns ``None``
+    and logs a warning if every strategy fails.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Path to the ``.spa`` file whose stem is inspected.
+
+    Returns
+    -------
+    int or None
+        Elapsed time in seconds, or ``None`` if no strategy succeeds.
+    """
     for extractor in [extract_spectrum_tos_1]:
         try:
             return extractor(path)
@@ -81,17 +126,32 @@ def extract_spectrum_tos(path: Union[str, Path]) -> Optional[int]:
     return None
 
 def extract_spectrum_tos_1(path: Union[str, Path]) -> int:
+    """Extract elapsed time in seconds from a filename containing ``'at <H> Hours'``.
+
+    Accepts both ``,`` and ``.`` as decimal separators.  Returns ``0`` when
+    the pattern is absent.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Path to the ``.spa`` file whose stem is inspected.
+
+    Returns
+    -------
+    int
+        Elapsed time in whole seconds, or ``0`` if the pattern is not found.
+    """
     name = Path(path).stem
-    
+
     # Match e.g. "2,46 Hours" or "2.46 Hours"
     m = re.search(r"at\s+([\d.,]+)\s*Hours", name)
-    
+
     if m:
         hours_str = m.group(1).replace(",", ".")  # normalize decimal separator
         hours = float(hours_str)
         seconds = int(hours * 3600)
         return seconds
-    
+
     return 0
 # =========================
 # Core SPA reader
@@ -236,14 +296,66 @@ def read_spa(
     delta_time_seconds: Optional[float] = None,
     tos_start: Optional[pd.Timestamp | str] = None,
 ) -> Dict[str, Any]:
-    
+    """Read one or more Thermo OMNIC ``.spa`` files and return a standardised dict.
+
+    Accepts a single file path, a directory (all ``.spa`` files are read), or
+    an iterable of file paths.  Multiple spectra are stacked row-wise and their
+    x-axes must be identical.
+
+    The ``tos`` coordinate (elapsed seconds) is derived in order of priority:
+
+    1. From ``tos_start`` — each spectrum's embedded timestamp minus
+       ``tos_start``.
+    2. From ``delta_time_seconds`` — uniform spacing ``0, dt, 2*dt, …``.
+    3. Automatically from the first spectrum's timestamp (``tos[0] == 0``).
+
+    Parameters
+    ----------
+    path : str, pathlib.Path, or iterable of str/Path
+        Single file, directory, or sequence of files to read.
+    sort_key : callable or None, optional
+        Function applied to each file path to determine sort order when
+        reading a directory or iterable.  Defaults to
+        :func:`extract_spectrum_id`.  Pass ``None`` to skip sorting.
+    delta_time_seconds : float or None, optional
+        Fixed time step in seconds between consecutive spectra.  Mutually
+        exclusive with ``tos_start`` (default is ``None``).
+    tos_start : pandas.Timestamp or str or None, optional
+        Absolute reference time used to convert embedded file timestamps to
+        elapsed seconds.  Mutually exclusive with ``delta_time_seconds``
+        (default is ``None``).
+
+    Returns
+    -------
+    dict
+        A dict with two keys:
+
+        ``"data"``
+            Dict containing ``"x"`` (1-D wavenumber array), ``"v"``
+            (intensity array, shape ``(n_wavenumber,)`` for a single file or
+            ``(n_spectra, n_wavenumber)`` for multiple files), and optionally
+            ``"tos"`` (1-D elapsed-seconds array).
+
+        ``"meta"``
+            Dict of provenance metadata including ``"vlabel"``, ``"vunit"``,
+            ``"xlabel"``, ``"xunit"``, ``"n_points"``, ``"min_x"``,
+            ``"max_x"``, ``"name"``, ``"path"``, ``"datetime"``, and
+            ``"tos_start"``.
+
+    Raises
+    ------
+    ValueError
+        If both ``delta_time_seconds`` and ``tos_start`` are supplied, if
+        ``tos_start`` cannot be parsed, or if the x-axes of multiple spectra
+        do not match.
+    """
     if delta_time_seconds is not None and tos_start is not None:
         raise ValueError("Cannot specify both 'delta_time_seconds' and 'tos_start'. Please choose one method for calculating time of scan data.")
-    
+
     if tos_start is not None:
         if isinstance(tos_start, str):
             try:
-                tos_start = pd.to_datetime(tos_start)     
+                tos_start = pd.to_datetime(tos_start)
             except Exception as e:
                 logger.error(f"Failed to parse 'tos_start' string '{tos_start}': {e}")
                 raise ValueError(f"Invalid 'tos_start' value: {tos_start}. Must be a pandas Timestamp or a string parseable by pandas.")
@@ -316,7 +428,7 @@ def read_spa(
     elif delta_time_seconds is not None:
         tos = np.arange(v.shape[0]) * delta_time_seconds
         logger.debug(f"Calculated time offsets (tos) from 'delta_time_seconds'. delta_time_seconds={delta_time_seconds}, tos[0]={tos[0]}, tos[-1]={tos[-1]}")
-   
+
     else:
         try:
             tos_start = r0["datetime"]
@@ -328,7 +440,7 @@ def read_spa(
         except Exception as e:
             logger.error(f"Error calculating time offsets: {e}")
             tos = None
-        
+
 
     # ---- meta ----
     meta = {

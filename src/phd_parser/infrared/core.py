@@ -30,6 +30,23 @@ _OMNIC_VLABEL_TO_DATA_TYPE: dict[str, IRDataType] = {
 
 
 class IRData(BaseModel):
+    """Immutable wrapper around an xarray Dataset for infrared spectroscopy data.
+
+    Spectra are stored in SI units (wavenumber in m⁻¹). All processing methods
+    return a new ``IRData`` instance rather than mutating ``self``.
+
+    Attributes
+    ----------
+    ds : xr.Dataset
+        Dataset containing a ``"data"`` variable with dims ``('wavenumber',)``
+        for a single spectrum or ``('scan', 'wavenumber')`` for a time series.
+        Wavenumber coordinate is in m⁻¹. An optional ``'tos'`` coordinate
+        (elapsed seconds, attached to the ``scan`` dim) and a ``'background'``
+        variable (1-D, single_beam) may also be present.  Dataset-level attrs
+        hold ``data_type``, ``wavenumber_unit``, ``tos_start`` (ISO string),
+        and provenance keys written by processing methods.
+    """
+
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         validate_assignment=True,
@@ -92,27 +109,72 @@ class IRData(BaseModel):
 
     @property
     def ndim(self) -> int:
+        """Number of dimensions of the data variable (1 or 2).
+
+        Returns
+        -------
+        int
+            ``1`` for a single spectrum, ``2`` for a time series
+            ``(scan, wavenumber)``.
+        """
         return self.ds["data"].ndim
 
     @property
     def shape(self) -> tuple[int, ...]:
+        """Shape of the data variable.
+
+        Returns
+        -------
+        tuple of int
+            ``(n_wavenumber,)`` for 1-D data or
+            ``(n_scan, n_wavenumber)`` for 2-D data.
+        """
         return tuple(self.ds["data"].shape)
 
     @property
     def values(self) -> npt.NDArray:
+        """Raw spectral intensity values as a NumPy array.
+
+        Returns
+        -------
+        numpy.ndarray
+            Array of shape ``(n_wavenumber,)`` or ``(n_scan, n_wavenumber)``.
+        """
         return self.ds["data"].values
 
     @property
     def wavenumber(self) -> npt.NDArray:
+        """Wavenumber axis in SI units (m⁻¹).
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D array of wavenumber values in m⁻¹.
+        """
         # SI units (m⁻¹)
         return self.ds.coords["wavenumber"].values
 
     @property
     def wavenumber_per_cm(self) -> npt.NDArray:
+        """Wavenumber axis in cm⁻¹.
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D array of wavenumber values in cm⁻¹.
+        """
         return self.wavenumber / 100.0
 
     @property
     def tos(self) -> Optional[npt.NDArray]:
+        """Elapsed time of each scan in seconds since ``tos_start``.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            1-D array of elapsed seconds, or ``None`` if the ``'tos'``
+            coordinate is absent.
+        """
         # Elapsed seconds since first scan
         if "tos" in self.ds.coords:
             return self.ds.coords["tos"].values
@@ -120,6 +182,13 @@ class IRData(BaseModel):
 
     @property
     def tos_start(self) -> Optional[pd.Timestamp]:
+        """Absolute start time of the measurement.
+
+        Returns
+        -------
+        pandas.Timestamp or None
+            Parsed from ``ds.attrs['tos_start']``, or ``None`` if not set.
+        """
         # Parse from attributes; not stored as a coordinate since it's a single value applying to all scans
         raw = self.ds.attrs.get("tos_start")
         if raw is None:
@@ -128,26 +197,66 @@ class IRData(BaseModel):
 
     @property
     def data_type(self) -> Optional[IRDataType]:
+        """Spectral quantity stored in ``ds['data']``.
+
+        Returns
+        -------
+        str or None
+            One of ``'single_beam'``, ``'absorbance'``, ``'transmittance'``,
+            ``'reflectance'``, ``'log_1_r'``, ``'kubelka_munk'``, or ``None``
+            if not set.
+        """
         return self.ds.attrs.get("data_type")
 
     @property
     def has_background(self) -> bool:
+        """Whether a background spectrum is stored in the dataset.
+
+        Returns
+        -------
+        bool
+            ``True`` if ``ds['background']`` exists.
+        """
         return "background" in self.ds
 
     @property
     def background(self) -> Optional[npt.NDArray]:
+        """Background spectrum values (single_beam, 1-D).
+
+        Returns
+        -------
+        numpy.ndarray or None
+            1-D array of background intensities, or ``None`` if no background
+            has been assigned.
+        """
         if "background" not in self.ds:
             return None
         return self.ds["background"].values
 
     @property
     def background_data_type(self) -> Optional[IRDataType]:
+        """Data type label of the stored background variable.
+
+        Returns
+        -------
+        str or None
+            Value of ``ds['background'].attrs['data_type']``, or ``None`` if
+            no background is present.
+        """
         if "background" not in self.ds:
             return None
         return self.ds["background"].attrs.get("data_type")
 
     @property
     def timestamps(self) -> Optional[pd.DatetimeIndex]:
+        """Absolute datetime of each scan derived from ``tos`` and ``tos_start``.
+
+        Returns
+        -------
+        pandas.DatetimeIndex or None
+            Index of absolute timestamps, or ``None`` if either ``tos`` or
+            ``tos_start`` is missing.
+        """
         # Derived from tos + tos_start; not stored as a coordinate
         if self.tos is None or self.tos_start is None:
             return None
@@ -161,33 +270,82 @@ class IRData(BaseModel):
 
     @cached_property
     def wavelength(self) -> npt.NDArray:
+        """Wavelength axis in metres (``1 / wavenumber``).
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D array of wavelength values in m.
+        """
         # metres
         return 1.0 / self.wavenumber
 
     @cached_property
     def wavelength_nm(self) -> npt.NDArray:
+        """Wavelength axis in nanometres.
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D array of wavelength values in nm.
+        """
         return self.wavelength * 1e9
-    
+
     @cached_property
     def wavelength_mum(self) -> npt.NDArray:
+        """Wavelength axis in micrometres.
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D array of wavelength values in µm.
+        """
         return self.wavelength * 1e6
 
     @cached_property
     def frequency(self) -> npt.NDArray:
+        """Frequency axis in hertz (``wavenumber * c``).
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D array of frequency values in Hz.
+        """
         # Hz
         return self.wavenumber * const.c
 
     @cached_property
     def energy(self) -> npt.NDArray:
+        """Photon energy axis in joules (``wavenumber * h * c``).
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D array of photon energies in J.
+        """
         # Joules
         return self.wavenumber * const.Planck * const.c
 
     @cached_property
     def energy_eV(self) -> npt.NDArray:
+        """Photon energy axis in electronvolts.
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D array of photon energies in eV.
+        """
         return self.energy / const.electron_volt
-    
+
     @cached_property
     def energy_kJ_per_mol(self) -> npt.NDArray:
+        """Molar photon energy axis in kJ mol⁻¹.
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D array of molar photon energies in kJ mol⁻¹.
+        """
         return 1e-3 * self.energy * const.Avogadro # kJ/mol
 
     # ----------------------------------------------------------------
@@ -195,6 +353,25 @@ class IRData(BaseModel):
     # ----------------------------------------------------------------
 
     def get_scan(self, scan_index: int) -> npt.NDArray:
+        """Return the intensity values of a single scan by integer index.
+
+        Parameters
+        ----------
+        scan_index : int
+            Zero-based index of the scan to retrieve.
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D array of shape ``(n_wavenumber,)``.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D (no scan dimension).
+        IndexError
+            If ``scan_index`` is outside ``[0, n_scan)``.
+        """
         if self.ndim == 1:
             raise ValueError("get_scan requires 2-D data")
         if not (0 <= scan_index < self.shape[0]):
@@ -202,13 +379,39 @@ class IRData(BaseModel):
                 f"scan_index {scan_index} out of bounds for {self.shape[0]} scans"
             )
         return self.ds["data"].isel(scan=scan_index).values
-    
+
     def get_scan_by_tos(
         self,
         target_tos: Union[float, Sequence[float]],
         method: Literal["nearest", "linear"] = "nearest",
         tolerance_seconds: Optional[float] = 10,
     ) -> Union[npt.NDArray]:
+        """Return the scan(s) nearest to one or more target elapsed-time values.
+
+        Parameters
+        ----------
+        target_tos : float or sequence of float
+            Target elapsed time(s) in seconds.
+        method : {'nearest', 'linear'}, optional
+            Interpolation method passed to ``xarray.DataArray.sel``
+            (default is ``'nearest'``).
+        tolerance_seconds : float or None, optional
+            Maximum allowed distance between a target and the nearest scan.
+            Raises ``ValueError`` when exceeded.  Pass ``None`` to disable
+            (default is ``10``).
+
+        Returns
+        -------
+        numpy.ndarray
+            Shape ``(n_wavenumber,)`` for a scalar target or
+            ``(n_targets, n_wavenumber)`` for a sequence.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D, if no ``'tos'`` coordinate is present, or if
+            any target exceeds ``tolerance_seconds`` from the nearest scan.
+        """
         if self.ndim == 1:
             raise ValueError("get_scan_by_tos requires 2-D data")
         if self.tos is None:
@@ -240,6 +443,43 @@ class IRData(BaseModel):
         time_window: Optional[float] = None,
         direction: Literal["forward", "backward", "center"] = "center",
     ) -> Union[npt.NDArray]:
+        """Return the scan averaged over a window centred on each target tos.
+
+        When neither ``number_of_scans`` nor ``time_window`` is supplied the
+        single nearest scan is returned (equivalent to ``get_scan_by_tos``).
+
+        Parameters
+        ----------
+        target_tos : float or sequence of float
+            Target elapsed time(s) in seconds that anchor the averaging window.
+        method : {'nearest', 'linear'}, optional
+            Selection method for the anchor scan (default is ``'nearest'``).
+        tolerance_seconds : float or None, optional
+            Maximum distance in seconds between a target and its anchor scan
+            (default is ``10``).
+        number_of_scans : int or None, optional
+            Number of consecutive scans to average.  Mutually exclusive with
+            ``time_window``.
+        time_window : float or None, optional
+            Duration in seconds over which scans are averaged.  Mutually
+            exclusive with ``number_of_scans``.
+        direction : {'forward', 'backward', 'center'}, optional
+            Position of the anchor within the window (default is
+            ``'center'``).
+
+        Returns
+        -------
+        numpy.ndarray
+            Shape ``(n_wavenumber,)`` for a scalar target or
+            ``(n_targets, n_wavenumber)`` for a sequence.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D, if no ``'tos'`` coordinate is present, if
+            any target exceeds the tolerance, or if the resulting window is
+            empty.
+        """
         if self.ndim == 1:
             raise ValueError("get_scan_by_tos_average requires 2-D data")
         if self.tos is None:
@@ -317,6 +557,36 @@ class IRData(BaseModel):
         tolerance_per_cm: Optional[float] = None,
         rolling_window: Optional[int] = None,
     ) -> xr.DataArray:
+        """Return the intensity evolution over scans at one or more wavenumbers.
+
+        Parameters
+        ----------
+        wavenumber_per_cm : float or array-like
+            Target wavenumber(s) in cm⁻¹.
+        method : {'nearest', 'linear'}, optional
+            Selection method passed to ``xarray.DataArray.sel``
+            (default is ``'nearest'``).
+        tolerance_per_cm : float or None, optional
+            Maximum allowed distance in cm⁻¹ between a target and the nearest
+            grid point.  Raises ``ValueError`` when exceeded.  Pass ``None``
+            to disable (default is ``None``).
+        rolling_window : int or None, optional
+            If provided, apply a rolling mean over ``rolling_window`` scans
+            (centred, minimum one period) before returning (default is
+            ``None``).
+
+        Returns
+        -------
+        xr.DataArray
+            DataArray with dims ``('scan',)`` or ``('scan', 'wavenumber')``
+            depending on the number of target wavenumbers.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D or if a target wavenumber exceeds
+            ``tolerance_per_cm`` from the nearest grid point.
+        """
         if self.ndim == 1:
             raise ValueError("get_evolution requires 2-D data")
 
@@ -354,6 +624,28 @@ class IRData(BaseModel):
         If no background is currently assigned: assigns it without touching data values.
         If a background is already assigned: converts the new background to single_beam
         using the existing background, then recalculates data values accordingly.
+
+        Parameters
+        ----------
+        background : numpy.ndarray or IRData
+            Background spectrum.  If an ``IRData`` its ``data_type`` is used
+            unless overridden by ``data_type``.
+        data_type : str or None, optional
+            Override the data type of ``background`` when it is a plain array.
+            Must be one of the ``IRDataType`` literals (default is ``None``).
+
+        Returns
+        -------
+        IRData
+            New instance with the background set and data values recalculated
+            if a previous background existed.
+
+        Raises
+        ------
+        ValueError
+            If a 2-D ``IRData`` is passed as background, if the background
+            array is not 1-D, or if the background size does not match the
+            wavenumber axis.
         """
         if isinstance(background, IRData):
             if background.ndim != 1:
@@ -384,6 +676,21 @@ class IRData(BaseModel):
         The scan is extracted as a 1-D IRData with the same data_type as self.
         If data is not single_beam, the scan is converted back to single_beam using
         the existing background before being assigned.
+
+        Parameters
+        ----------
+        scan_index : int
+            Zero-based index of the scan to promote to background.
+
+        Returns
+        -------
+        IRData
+            New instance with the selected scan set as background.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D.
         """
         if self.ndim == 1:
             raise ValueError("with_background_scan requires 2-D data")
@@ -398,13 +705,39 @@ class IRData(BaseModel):
         """Use the scan nearest to target_tos as the new background.
 
         Same single_beam conversion logic as with_background_scan.
+
+        Parameters
+        ----------
+        target_tos : float
+            Target elapsed time in seconds.
+        method : {'nearest', 'linear'}, optional
+            Selection method (default is ``'nearest'``).
+        tolerance_seconds : float or None, optional
+            Maximum distance in seconds from the target to the nearest scan
+            (default is ``10``).
+
+        Returns
+        -------
+        IRData
+            New instance with the selected scan set as background.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D or if the target exceeds the tolerance.
         """
         if self.ndim == 1:
             raise ValueError("with_background_by_tos requires 2-D data")
         return self.with_background(self.select_by_tos(target_tos, method=method, tolerance_seconds=tolerance_seconds))
 
     def del_background(self) -> "IRData":
-        """Remove the background spectrum without changing data values."""
+        """Remove the background spectrum without changing data values.
+
+        Returns
+        -------
+        IRData
+            New instance with the ``'background'`` variable dropped.
+        """
         return self._del_background()
 
     def set_background(
@@ -415,6 +748,27 @@ class IRData(BaseModel):
         """Force-assign a background without recalculating values (drops any existing background first).
 
         Use with_background() instead when switching backgrounds should trigger recalculation.
+
+        Parameters
+        ----------
+        background : numpy.ndarray or IRData
+            Background spectrum to store.  If an ``IRData`` its ``data_type``
+            is used unless overridden by ``data_type``.
+        data_type : str or None, optional
+            Override the data type of ``background`` when it is a plain array
+            (default is ``None``).
+
+        Returns
+        -------
+        IRData
+            New instance with the background assigned and data values
+            unchanged.
+
+        Raises
+        ------
+        ValueError
+            If a 2-D ``IRData`` is passed, if the array is not 1-D, or if the
+            background size does not match the wavenumber axis.
         """
         if isinstance(background, IRData):
             if background.ndim != 1:
@@ -440,6 +794,20 @@ class IRData(BaseModel):
     # ----------------------------------------------------------------
 
     def assign_tos_start(self, tos_start: Union[pd.Timestamp, str]) -> "IRData":
+        """Return a new instance with ``tos_start`` replaced and ``tos`` shifted accordingly.
+
+        Parameters
+        ----------
+        tos_start : pandas.Timestamp or str
+            New absolute start time.  Strings are parsed by
+            ``pandas.Timestamp``.
+
+        Returns
+        -------
+        IRData
+            New instance with updated ``tos_start`` attribute and adjusted
+            ``tos`` coordinate.
+        """
         old_tos_start = self.tos_start
         new_tos_start = pd.Timestamp(tos_start)
 
@@ -458,10 +826,44 @@ class IRData(BaseModel):
         return IRData(ds=self._carry_background(ds))
 
     def sort(self, by: str | Sequence[str] = "wavenumber", ascending: bool = True) -> "IRData":
+        """Return a new instance with coordinates sorted.
+
+        Parameters
+        ----------
+        by : str or sequence of str, optional
+            Coordinate name(s) to sort by (default is ``'wavenumber'``).
+        ascending : bool, optional
+            Sort in ascending order when ``True`` (default is ``True``).
+
+        Returns
+        -------
+        IRData
+            New instance with the dataset sorted along the specified
+            coordinate(s).
+        """
         ds_sorted = self.ds.sortby(by, ascending=ascending)
         return IRData(ds=ds_sorted)
-    
+
     def select_by_idx(self, idx: int) -> "IRData":
+        """Return a 1-D IRData containing the scan at the given integer index.
+
+        Parameters
+        ----------
+        idx : int
+            Zero-based scan index.
+
+        Returns
+        -------
+        IRData
+            New 1-D instance for the selected scan.
+
+        Raises
+        ------
+        ValueError
+            If the data are already 1-D.
+        IndexError
+            If ``idx`` is outside ``[0, n_scan)``.
+        """
         if self.ndim == 1:
             raise ValueError("select_by_idx requires 2-D data")
         if not (0 <= idx < self.shape[0]):
@@ -470,6 +872,29 @@ class IRData(BaseModel):
         return IRData(ds=ds_selected)
 
     def select_by_tos(self, target_tos: float, method: Literal["nearest", "linear"] = "nearest", tolerance_seconds: Optional[float] = 10) -> "IRData":
+        """Return a 1-D IRData containing the scan nearest to ``target_tos``.
+
+        Parameters
+        ----------
+        target_tos : float
+            Target elapsed time in seconds.
+        method : {'nearest', 'linear'}, optional
+            Selection method (default is ``'nearest'``).
+        tolerance_seconds : float or None, optional
+            Maximum distance in seconds from the target to the nearest scan.
+            Raises ``ValueError`` when exceeded (default is ``10``).
+
+        Returns
+        -------
+        IRData
+            New 1-D instance for the selected scan.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D, if no ``'tos'`` coordinate is present, or if
+            the target exceeds the tolerance.
+        """
         if self.ndim == 1:
             raise ValueError("select_by_tos requires 2-D data")
         if self.tos is None:
@@ -491,6 +916,21 @@ class IRData(BaseModel):
         min_cm: Optional[float] = None,
         max_cm: Optional[float] = None,
     ) -> "IRData":
+        """Return a new instance restricted to a wavenumber sub-range.
+
+        Parameters
+        ----------
+        min_cm : float or None, optional
+            Lower bound in cm⁻¹ (inclusive).  ``None`` means no lower bound.
+        max_cm : float or None, optional
+            Upper bound in cm⁻¹ (inclusive).  ``None`` means no upper bound.
+
+        Returns
+        -------
+        IRData
+            New instance with the wavenumber axis truncated and the background
+            sliced to match.
+        """
         da = self.ds["data"]
         if min_cm is not None:
             wn = da.coords["wavenumber"].values
@@ -512,6 +952,25 @@ class IRData(BaseModel):
         min_s: Optional[float] = None,
         max_s: Optional[float] = None,
     ) -> "IRData":
+        """Return a new instance restricted to scans within a tos sub-range.
+
+        Parameters
+        ----------
+        min_s : float or None, optional
+            Lower bound in seconds (inclusive).  ``None`` means no lower bound.
+        max_s : float or None, optional
+            Upper bound in seconds (inclusive).  ``None`` means no upper bound.
+
+        Returns
+        -------
+        IRData
+            New instance containing only the scans within the specified range.
+
+        Raises
+        ------
+        ValueError
+            If no ``'tos'`` coordinate is present.
+        """
         if self.tos is None:
             raise ValueError("select_tos_range requires a 'tos' coordinate")
 
@@ -543,6 +1002,20 @@ class IRData(BaseModel):
     # ----------------------------------------------------------------
 
     def smooth_savgol(self, window_length: int = 21, polyorder: int = 3) -> "IRData":
+        """Apply a Savitzky-Golay smoothing filter along the wavenumber axis.
+
+        Parameters
+        ----------
+        window_length : int, optional
+            Length of the filter window in points (default is ``21``).
+        polyorder : int, optional
+            Polynomial order for the filter (default is ``3``).
+
+        Returns
+        -------
+        IRData
+            New instance with smoothed spectral values.
+        """
         from scipy.signal import savgol_filter
 
         if self.ndim == 1:
@@ -555,6 +1028,18 @@ class IRData(BaseModel):
         return IRData(ds=self._carry_background(ds_new))
 
     def smooth_gaussian(self, sigma_cm: float) -> "IRData":
+        """Apply a Gaussian smoothing filter along the wavenumber axis.
+
+        Parameters
+        ----------
+        sigma_cm : float
+            Standard deviation of the Gaussian kernel in cm⁻¹.
+
+        Returns
+        -------
+        IRData
+            New instance with smoothed spectral values.
+        """
         from scipy.ndimage import gaussian_filter1d
 
         sigma_si = sigma_cm * 100.0
@@ -568,6 +1053,23 @@ class IRData(BaseModel):
         return IRData(ds=self._carry_background(ds_new))
 
     def smooth_moving(self, window_size: int = 5) -> "IRData":
+        """Apply a uniform moving-average filter along the wavenumber axis.
+
+        Parameters
+        ----------
+        window_size : int, optional
+            Number of points in the averaging window (default is ``5``).
+
+        Returns
+        -------
+        IRData
+            New instance with smoothed spectral values.
+
+        Raises
+        ------
+        ValueError
+            If ``window_size`` is less than ``1``.
+        """
         if window_size < 1:
             raise ValueError("window_size must be >= 1")
 
@@ -589,6 +1091,24 @@ class IRData(BaseModel):
         self,
         anchor_range_cm: Tuple[float, float] = (2500, 2600),
     ) -> "IRData":
+        """Subtract a constant offset computed as the mean over an anchor range.
+
+        Parameters
+        ----------
+        anchor_range_cm : tuple of float, optional
+            ``(low, high)`` wavenumber bounds in cm⁻¹ that define the
+            baseline anchor region (default is ``(2500, 2600)``).
+
+        Returns
+        -------
+        IRData
+            New instance with the offset removed.
+
+        Raises
+        ------
+        ValueError
+            If no wavenumber points fall within the anchor range.
+        """
         lo_si = min(anchor_range_cm) * 100.0
         hi_si = max(anchor_range_cm) * 100.0
         wn = self.wavenumber
@@ -613,6 +1133,22 @@ class IRData(BaseModel):
         control_points_cm: Sequence[float],
         point_avg_half_width: int = 0,
     ) -> "IRData":
+        """Subtract a PCHIP-interpolated baseline through the given control points.
+
+        Parameters
+        ----------
+        control_points_cm : sequence of float
+            Wavenumber positions in cm⁻¹ used as knots for the PCHIP spline.
+        point_avg_half_width : int, optional
+            Half-width (in points) of the local averaging window used to
+            compute the intensity at each knot (default is ``0``, i.e. the
+            single nearest point).
+
+        Returns
+        -------
+        IRData
+            New instance with the PCHIP baseline subtracted.
+        """
         from scipy.interpolate import PchipInterpolator
 
         wn_si = self.wavenumber
@@ -650,6 +1186,33 @@ class IRData(BaseModel):
         point_avg_half_width: int = 0,
         double_offset: bool = True,
     ) -> "IRData":
+        """Apply a two-step baseline correction: offset then optional PCHIP.
+
+        Step 1 subtracts a constant offset via ``correct_offset``.  If
+        ``control_points_cm`` is provided, step 2 removes a PCHIP spline via
+        ``correct_pchip``, followed optionally by a second offset step (mirrors
+        DRIFTS behaviour).
+
+        Parameters
+        ----------
+        anchor_range_cm : tuple of float, optional
+            Anchor wavenumber range in cm⁻¹ used for the offset step(s)
+            (default is ``(2500, 2600)``).
+        control_points_cm : sequence of float or None, optional
+            Knot positions in cm⁻¹ for the PCHIP step.  ``None`` skips the
+            PCHIP step (default is ``None``).
+        point_avg_half_width : int, optional
+            Half-width in points for local averaging at each PCHIP knot
+            (default is ``0``).
+        double_offset : bool, optional
+            Apply a second offset correction after the PCHIP step when
+            ``True`` (default is ``True``).
+
+        Returns
+        -------
+        IRData
+            New instance with the baseline removed.
+        """
         # Step 1: offset, step 2: PCHIP, step 3: optional second offset (mirrors DRIFTS behaviour)
         result = self.correct_offset(anchor_range_cm)
         if control_points_cm:
@@ -659,6 +1222,18 @@ class IRData(BaseModel):
         return result
 
     def reapply_baseline(self) -> "IRData":
+        """Re-run baseline correction using parameters stored in dataset attributes.
+
+        Returns
+        -------
+        IRData
+            New instance with the stored baseline correction reapplied.
+
+        Raises
+        ------
+        ValueError
+            If ``ds.attrs`` does not contain ``'baseline_anchor_range_cm'``.
+        """
         # Re-runs correction using parameters stored in attributes (e.g. after average_scans)
         anchor_range_cm = self.ds.attrs.get("baseline_anchor_range_cm")
         if anchor_range_cm is None:
@@ -679,6 +1254,28 @@ class IRData(BaseModel):
         number_of_scans: int,
         tos_method: Literal["mean", "median", "first", "last"] = "first",
     ) -> "IRData":
+        """Co-add consecutive groups of scans by averaging.
+
+        Trailing scans that do not fill a complete group are discarded.
+
+        Parameters
+        ----------
+        number_of_scans : int
+            Number of consecutive scans per group.
+        tos_method : {'mean', 'median', 'first', 'last'}, optional
+            How to assign a representative ``tos`` value to each averaged
+            group (default is ``'first'``).
+
+        Returns
+        -------
+        IRData
+            New instance with ``n_scan // number_of_scans`` averaged scans.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D or if ``number_of_scans`` is less than ``1``.
+        """
         if self.ndim == 1:
             raise ValueError("average_scans requires 2-D data")
         if number_of_scans < 1:
@@ -716,7 +1313,41 @@ class IRData(BaseModel):
         time_window: Optional[float] = None,
         direction: Literal["forward", "backward", "center"] = "center",
     ) -> "IRData":
-        
+        """Return a new IRData from scans averaged around each target tos.
+
+        Each target produces one averaged spectrum.  The anchor ``tos`` of the
+        nearest real scan is used as the ``tos`` coordinate for that output
+        spectrum.
+
+        Parameters
+        ----------
+        target_tos : float or sequence of float
+            Target elapsed time(s) in seconds.
+        method : {'nearest', 'linear'}, optional
+            Selection method for the anchor scan (default is ``'nearest'``).
+        tolerance_seconds : float or None, optional
+            Maximum distance in seconds between a target and its anchor scan
+            (default is ``10``).
+        number_of_scans : int or None, optional
+            Number of scans to average.  Mutually exclusive with
+            ``time_window``.
+        time_window : float or None, optional
+            Duration in seconds over which scans are averaged.  Mutually
+            exclusive with ``number_of_scans``.
+        direction : {'forward', 'backward', 'center'}, optional
+            Position of the anchor within the window (default is
+            ``'center'``).
+
+        Returns
+        -------
+        IRData
+            New instance with one scan per target tos.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D or if any target exceeds the tolerance.
+        """
         if self.ndim == 1:
             raise ValueError("average_scans_by_tos requires 2-D data")
 
@@ -770,6 +1401,14 @@ class IRData(BaseModel):
     # ----------------------------------------------------------------
 
     def normalise_max(self) -> "IRData":
+        """Divide all values by the global maximum.
+
+        Returns
+        -------
+        IRData
+            New instance with values in ``[0, 1]``.  Returns ``self``
+            unchanged if the maximum is zero.
+        """
         max_val = self.values.max()
         if max_val == 0:
             logger.warning("Maximum value is zero; returning original data without normalisation")
@@ -779,6 +1418,14 @@ class IRData(BaseModel):
         return IRData(ds=self._carry_background(ds_new))
 
     def normalise_integral(self) -> "IRData":
+        """Divide each spectrum by its trapezoidal integral over the wavenumber axis.
+
+        Returns
+        -------
+        IRData
+            New instance with unit-integral spectra.  Returns ``self``
+            unchanged if any integral is zero.
+        """
         integral = np.trapz(self.values, x=self.wavenumber, axis=-1)
         if np.any(integral == 0):
             logger.warning("Integral is zero for some scans; returning original data without normalisation")
@@ -788,6 +1435,25 @@ class IRData(BaseModel):
         return IRData(ds=self._carry_background(ds_new))
 
     def normalise_reference(self, reference: npt.NDArray) -> "IRData":
+        """Divide all spectra element-wise by a reference spectrum.
+
+        Parameters
+        ----------
+        reference : numpy.ndarray
+            1-D reference spectrum with the same number of wavenumber points.
+
+        Returns
+        -------
+        IRData
+            New instance with values divided by ``reference``.  Returns
+            ``self`` unchanged if ``reference`` contains any zeros.
+
+        Raises
+        ------
+        ValueError
+            If ``reference`` is not 1-D or its size does not match the
+            wavenumber axis.
+        """
         if reference.ndim != 1:
             raise ValueError("Reference spectrum must be 1-D")
         if reference.size != self.wavenumber.size:
@@ -801,6 +1467,23 @@ class IRData(BaseModel):
         return IRData(ds=self._carry_background(ds_new))
 
     def normalise_reference_scan(self, scan_index: int) -> "IRData":
+        """Normalise all spectra by the scan at ``scan_index``.
+
+        Parameters
+        ----------
+        scan_index : int
+            Zero-based index of the scan to use as the reference.
+
+        Returns
+        -------
+        IRData
+            New instance with each spectrum divided by the reference scan.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D.
+        """
         if self.ndim == 1:
             raise ValueError("normalise_reference_scan requires 2-D data")
         reference = self.get_scan(scan_index)
@@ -812,12 +1495,50 @@ class IRData(BaseModel):
         method: Literal["nearest", "linear"] = "nearest",
         tolerance_seconds: Optional[float] = 10,
     ) -> "IRData":
+        """Normalise all spectra by the scan nearest to ``target_tos``.
+
+        Parameters
+        ----------
+        target_tos : float
+            Target elapsed time in seconds.
+        method : {'nearest', 'linear'}, optional
+            Selection method for the reference scan (default is
+            ``'nearest'``).
+        tolerance_seconds : float or None, optional
+            Maximum distance in seconds between the target and the nearest
+            scan (default is ``10``).
+
+        Returns
+        -------
+        IRData
+            New instance with each spectrum divided by the reference scan.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D or if the target exceeds the tolerance.
+        """
         if self.ndim == 1:
             raise ValueError("normalise_reference_by_tos requires 2-D data")
         reference = self.get_scan_by_tos(target_tos, method=method, tolerance_seconds=tolerance_seconds)
         return self.normalise_reference(reference)
 
     def normalise_value_range(self, new_min: float = 0.0, new_max: float = 1.0) -> "IRData":
+        """Rescale values to fit within ``[new_min, new_max]``.
+
+        Parameters
+        ----------
+        new_min : float, optional
+            Target minimum value (default is ``0.0``).
+        new_max : float, optional
+            Target maximum value (default is ``1.0``).
+
+        Returns
+        -------
+        IRData
+            New instance with linearly rescaled values.  Returns ``self``
+            unchanged if all values are identical.
+        """
         old_min = self.values.min()
         old_max = self.values.max()
         if old_max == old_min:
@@ -828,6 +1549,19 @@ class IRData(BaseModel):
         return IRData(ds=self._carry_background(ds_new))
 
     def normalise_value(self, factor: float) -> "IRData":
+        """Divide all values by a scalar factor.
+
+        Parameters
+        ----------
+        factor : float
+            The divisor.  Must be non-zero.
+
+        Returns
+        -------
+        IRData
+            New instance with values divided by ``factor``.  Returns ``self``
+            unchanged if ``factor`` is zero.
+        """
         if factor == 0:
             logger.warning("Normalisation factor is zero; returning original data without normalisation")
             return self
@@ -853,6 +1587,21 @@ class IRData(BaseModel):
         return self.background
 
     def to_transmittance(self) -> "IRData":
+        """Convert to transmittance (T = sample / background or T = 10^−A).
+
+        Returns
+        -------
+        IRData
+            New instance with ``data_type='transmittance'``.  Returns ``self``
+            if already transmittance.
+
+        Raises
+        ------
+        ValueError
+            If ``data_type`` is a reflectance-based type (``'reflectance'``,
+            ``'log_1_r'``, ``'kubelka_munk'``) or if a background is needed
+            but not set.
+        """
         if self.data_type == "transmittance":
             return self
         if self.data_type == "single_beam":
@@ -868,6 +1617,20 @@ class IRData(BaseModel):
         )
 
     def to_reflectance(self) -> "IRData":
+        """Convert to reflectance (R = sample / background or inverse KM/log(1/R)).
+
+        Returns
+        -------
+        IRData
+            New instance with ``data_type='reflectance'``.  Returns ``self``
+            if already reflectance.
+
+        Raises
+        ------
+        ValueError
+            If ``data_type`` is ``'transmittance'`` or if a background is
+            needed but not set.
+        """
         if self.data_type == "reflectance":
             return self
         if self.data_type == "single_beam":
@@ -890,6 +1653,20 @@ class IRData(BaseModel):
         )
 
     def to_absorbance(self) -> "IRData":
+        """Convert to absorbance (A = −log₁₀(T) for transmission experiments).
+
+        Returns
+        -------
+        IRData
+            New instance with ``data_type='absorbance'``.  Returns ``self``
+            if already absorbance.
+
+        Raises
+        ------
+        ValueError
+            If ``data_type`` is not ``'single_beam'`` or ``'transmittance'``,
+            or if a background is needed but not set.
+        """
         if self.data_type == "absorbance":
             return self
         if self.data_type == "single_beam":
@@ -909,6 +1686,20 @@ class IRData(BaseModel):
         )
 
     def to_log_1_r(self) -> "IRData":
+        """Convert to log(1/R) for diffuse-reflectance experiments.
+
+        Returns
+        -------
+        IRData
+            New instance with ``data_type='log_1_r'``.  Returns ``self``
+            if already log(1/R).
+
+        Raises
+        ------
+        ValueError
+            If the current ``data_type`` cannot be converted to log(1/R), or
+            if a background is needed but not set.
+        """
         if self.data_type == "log_1_r":
             return self
         if self.data_type == "single_beam":
@@ -937,6 +1728,21 @@ class IRData(BaseModel):
         )
 
     def to_kubelka_munk(self) -> "IRData":
+        """Convert to Kubelka-Munk remission function F(R) = (1−R)² / (2R).
+
+        Returns
+        -------
+        IRData
+            New instance with ``data_type='kubelka_munk'``.  Returns ``self``
+            if already Kubelka-Munk.
+
+        Raises
+        ------
+        ValueError
+            If the current ``data_type`` is transmittance-based and cannot be
+            converted to reflectance, or if a background is needed but not
+            set.
+        """
         if self.data_type == "kubelka_munk":
             return self
         r_ir = self.to_reflectance()  # raises if transmittance-based
@@ -950,7 +1756,27 @@ class IRData(BaseModel):
     # ----------------------------------------------------------------
 
     def get_gram_schmidt(self, reference: npt.NDArray) -> xr.DataArray:
-        """Gram-Schmidt vector: L2 norm of each scan's component orthogonal to the reference subspace."""
+        """Gram-Schmidt vector: L2 norm of each scan's component orthogonal to the reference subspace.
+
+        Parameters
+        ----------
+        reference : numpy.ndarray
+            1-D or 2-D array of reference spectrum/spectra with shape
+            ``(n_wavenumber,)`` or ``(n_ref, n_wavenumber)``.
+
+        Returns
+        -------
+        xr.DataArray
+            1-D DataArray of shape ``(n_scan,)`` containing the Gram-Schmidt
+            orthogonal norm for each scan.  Includes ``'tos'`` as a
+            non-dimension coordinate when available.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D, if the reference wavenumber dimension does
+            not match, or if the reference spectra are linearly dependent.
+        """
         if self.ndim == 1:
             raise ValueError("get_gram_schmidt requires 2-D data")
 
@@ -994,6 +1820,24 @@ class IRData(BaseModel):
         self,
         reference_scans: Union[int, Sequence[int]] = 0,
     ) -> xr.DataArray:
+        """Compute the Gram-Schmidt chromatogram using one or more scans as the reference.
+
+        Parameters
+        ----------
+        reference_scans : int or sequence of int, optional
+            Zero-based index or indices of the scan(s) to use as the reference
+            subspace (default is ``0``).
+
+        Returns
+        -------
+        xr.DataArray
+            1-D DataArray of Gram-Schmidt norms, one per scan.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D.
+        """
         if self.ndim == 1:
             raise ValueError("get_gram_schmidt_scan requires 2-D data")
         indices = [reference_scans] if isinstance(reference_scans, int) else list(reference_scans)
@@ -1005,6 +1849,29 @@ class IRData(BaseModel):
         method: Literal["nearest", "linear"] = "nearest",
         tolerance_seconds: Optional[float] = 10,
     ) -> xr.DataArray:
+        """Compute the Gram-Schmidt chromatogram using scans selected by tos as the reference.
+
+        Parameters
+        ----------
+        reference_tos : float or sequence of float
+            Target elapsed time(s) in seconds identifying the reference
+            scan(s).
+        method : {'nearest', 'linear'}, optional
+            Selection method (default is ``'nearest'``).
+        tolerance_seconds : float or None, optional
+            Maximum distance in seconds from the target to the nearest scan
+            (default is ``10``).
+
+        Returns
+        -------
+        xr.DataArray
+            1-D DataArray of Gram-Schmidt norms, one per scan.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D or if any target exceeds the tolerance.
+        """
         if self.ndim == 1:
             raise ValueError("get_gram_schmidt_by_tos requires 2-D data")
         reference = self.get_scan_by_tos(
@@ -1028,6 +1895,33 @@ class IRData(BaseModel):
         signal_metric: Literal["max", "peak_to_peak", "integral", "rms"] = "max",
         noise_metric: Literal["std", "rms", "peak_to_peak"] = "std",
     ) -> Union[float, npt.NDArray]:
+        """Estimate SNR using separate spectral windows for signal and noise.
+
+        Parameters
+        ----------
+        signal_range_cm : tuple of float
+            ``(low, high)`` wavenumber range in cm⁻¹ defining the signal
+            window.
+        noise_range_cm : tuple of float
+            ``(low, high)`` wavenumber range in cm⁻¹ defining the noise
+            window.
+        signal_metric : {'max', 'peak_to_peak', 'integral', 'rms'}, optional
+            Statistic used to quantify the signal (default is ``'max'``).
+        noise_metric : {'std', 'rms', 'peak_to_peak'}, optional
+            Statistic used to quantify the noise (default is ``'std'``).
+
+        Returns
+        -------
+        float or numpy.ndarray
+            Scalar SNR for 1-D data; array of shape ``(n_scan,)`` for 2-D
+            data.
+
+        Raises
+        ------
+        ValueError
+            If no wavenumber points fall within either the signal or noise
+            range.
+        """
         wn_si = self.wavenumber
         sig_lo, sig_hi = sorted(signal_range_cm)
         noi_lo, noi_hi = sorted(noise_range_cm)
@@ -1074,6 +1968,37 @@ class IRData(BaseModel):
         noise_metric: Literal["rms", "std", "peak_to_peak"] = "rms",
         detrend_order: int = 1,
     ) -> Union[float, npt.NDArray]:
+        """Estimate SNR using a dedicated noise window with polynomial detrending.
+
+        The noise region is optionally detrended before computing the noise
+        metric.  The signal is taken as the absolute maximum over
+        ``signal_range_cm`` (or the entire spectrum if ``None``).
+
+        Parameters
+        ----------
+        noise_range_cm : tuple of float
+            ``(low, high)`` wavenumber range in cm⁻¹ used to estimate noise.
+        signal_range_cm : tuple of float or None, optional
+            ``(low, high)`` wavenumber range in cm⁻¹ used to find the peak
+            signal.  ``None`` uses the full spectrum (default is ``None``).
+        noise_metric : {'rms', 'std', 'peak_to_peak'}, optional
+            Statistic used to quantify the detrended noise (default is
+            ``'rms'``).
+        detrend_order : int, optional
+            Polynomial order for detrending the noise window.  Use ``-1`` to
+            skip detrending (default is ``1``).
+
+        Returns
+        -------
+        float or numpy.ndarray
+            Scalar SNR for 1-D data; array of shape ``(n_scan,)`` for 2-D
+            data.
+
+        Raises
+        ------
+        ValueError
+            If no points fall within the noise or signal range.
+        """
         wn_si = self.wavenumber
         noi_lo, noi_hi = sorted(noise_range_cm)
         noi_mask = (wn_si >= noi_lo * 100.0) & (wn_si <= noi_hi * 100.0)
@@ -1114,6 +2039,29 @@ class IRData(BaseModel):
         self,
         signal_range_cm: Optional[Tuple[float, float]] = None,
     ) -> Union[float, npt.NDArray]:
+        """Estimate SNR using the DER-SNR algorithm (Stoehr et al. 2008).
+
+        The noise standard deviation is estimated from the second-difference
+        of the spectrum without requiring a dedicated noise window.
+
+        Parameters
+        ----------
+        signal_range_cm : tuple of float or None, optional
+            ``(low, high)`` wavenumber range in cm⁻¹ used to find the peak
+            signal.  ``None`` uses the full spectrum (default is ``None``).
+
+        Returns
+        -------
+        float or numpy.ndarray
+            Scalar SNR for 1-D data; array of shape ``(n_scan,)`` for 2-D
+            data.
+
+        Raises
+        ------
+        ValueError
+            If no points fall within ``signal_range_cm`` or if the spectrum
+            has fewer than 5 points.
+        """
         wn_si = self.wavenumber
         if signal_range_cm is not None:
             sig_lo, sig_hi = sorted(signal_range_cm)
@@ -1136,12 +2084,39 @@ class IRData(BaseModel):
             return float(np.abs(spec_1d[sig_mask]).max()) / sigma
 
         return self._snr_apply(_ratio)
-    
+
     def snr_repeat(
         self,
         signal_range_cm: Optional[Tuple[float, float]] = None,
         reduce: Literal["max", "median", "mean", "per_wavenumber"] = "max",
     ) -> Union[float, npt.NDArray]:
+        """Estimate SNR from scan-to-scan reproducibility across repeated measurements.
+
+        The noise is the standard deviation across scans; the signal is the
+        mean absolute value.
+
+        Parameters
+        ----------
+        signal_range_cm : tuple of float or None, optional
+            ``(low, high)`` wavenumber range in cm⁻¹ used to find the peak
+            SNR.  ``None`` uses the full spectrum (default is ``None``).
+        reduce : {'max', 'median', 'mean', 'per_wavenumber'}, optional
+            How to summarise the per-wavenumber SNR across the signal range
+            (default is ``'max'``).  Use ``'per_wavenumber'`` to return the
+            full SNR spectrum.
+
+        Returns
+        -------
+        float or numpy.ndarray
+            Scalar SNR when ``reduce`` is not ``'per_wavenumber'``; array of
+            shape ``(n_wavenumber,)`` when ``reduce='per_wavenumber'``.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D, if fewer than 2 scans are present, or if no
+            points fall within ``signal_range_cm``.
+        """
         if self.ndim == 1:
             raise ValueError("snr_repeat requires 2-D data")
         if self.shape[0] < 2:
@@ -1178,6 +2153,36 @@ class IRData(BaseModel):
         noise_fraction: float = 0.25,
         detrend_order: int = 1,
     ) -> Union[float, npt.NDArray]:
+        """Estimate SNR from the high-frequency tail of the power spectral density.
+
+        The noise power is estimated from the top ``noise_fraction`` of FFT
+        frequency bins.
+
+        Parameters
+        ----------
+        signal_range_cm : tuple of float or None, optional
+            ``(low, high)`` wavenumber range in cm⁻¹ used to find the peak
+            signal.  ``None`` uses the full spectrum (default is ``None``).
+        noise_fraction : float, optional
+            Fraction of high-frequency FFT bins treated as noise, in
+            ``(0, 1)`` (default is ``0.25``).
+        detrend_order : int, optional
+            Polynomial order for detrending before the FFT.  Use ``-1`` to
+            skip (default is ``1``).
+
+        Returns
+        -------
+        float or numpy.ndarray
+            Scalar SNR for 1-D data; array of shape ``(n_scan,)`` for 2-D
+            data.
+
+        Raises
+        ------
+        ValueError
+            If ``noise_fraction`` is not in ``(0, 1)``, if the spectrum has
+            fewer than 8 points, or if no points fall within
+            ``signal_range_cm``.
+        """
         if not (0.0 < noise_fraction < 1.0):
             raise ValueError("noise_fraction must be in (0, 1)")
 
@@ -1225,14 +2230,22 @@ class IRData(BaseModel):
     # ----------------------------------------------------------------
 
     def to_netcdf(self, filepath: Union[str, Path]) -> None:
+        """Save the dataset to a NetCDF file.
+
+        Parameters
+        ----------
+        filepath : str or pathlib.Path
+            Destination file path.  An existing file will be overwritten with
+            a warning.
+        """
         # tos_start in ds.attrs round-trips automatically
         filepath = Path(filepath)
         if filepath.exists():
             logger.warning(f"Overwriting existing file: {filepath}")
         self.ds.to_netcdf(filepath)
         logger.debug(f"Saved NetCDF → {filepath}")
-    
-    
+
+
     # ----------------------------------------------------------------
     # Constructors
     # ----------------------------------------------------------------
@@ -1246,6 +2259,35 @@ class IRData(BaseModel):
         tos_start: Optional[Union[pd.Timestamp, str]] = None,
         data_type: IRDataType = "single_beam",
     ) -> "IRData":
+        """Construct an IRData from raw NumPy arrays.
+
+        Parameters
+        ----------
+        wavenumber_per_cm : numpy.ndarray
+            1-D wavenumber axis in cm⁻¹.
+        values : numpy.ndarray
+            Spectral values.  Shape ``(n_wavenumber,)`` for a single spectrum
+            or ``(n_scan, n_wavenumber)`` for a time series.
+        tos : numpy.ndarray or None, optional
+            1-D array of elapsed times in seconds, required for 2-D data
+            (default is ``None``).
+        tos_start : pandas.Timestamp or str or None, optional
+            Absolute start time of the measurement (default is ``None``).
+        data_type : str, optional
+            Spectral quantity label (default is ``'single_beam'``).
+
+        Returns
+        -------
+        IRData
+            New instance built from the provided arrays.
+
+        Raises
+        ------
+        ValueError
+            If ``wavenumber_per_cm`` is not 1-D, if ``values`` shape is
+            inconsistent with the wavenumber axis, or if ``tos`` size does not
+            match the number of scans.
+        """
         wavenumber_si = np.asarray(wavenumber_per_cm, dtype=float) * 100.0
         values = np.asarray(values, dtype=float)
 
@@ -1275,6 +2317,18 @@ class IRData(BaseModel):
 
     @classmethod
     def from_netcdf(cls, filepath: Union[str, Path]) -> "IRData":
+        """Load an IRData from a NetCDF file previously saved with ``to_netcdf``.
+
+        Parameters
+        ----------
+        filepath : str or pathlib.Path
+            Path to the ``.nc`` file.
+
+        Returns
+        -------
+        IRData
+            New instance reconstructed from the file.
+        """
         with xr.open_dataset(filepath) as ds:
             ds = ds.copy()
         return cls(ds=ds)
@@ -1284,6 +2338,19 @@ class IRData(BaseModel):
         cls,
         da: Union[xr.DataArray, xr.Dataset],
     ) -> "IRData":
+        """Construct an IRData from an existing xarray DataArray or Dataset.
+
+        Parameters
+        ----------
+        da : xr.DataArray or xr.Dataset
+            Source object.  A ``DataArray`` is wrapped in a ``Dataset`` under
+            the key ``'data'``.  A ``Dataset`` is used directly.
+
+        Returns
+        -------
+        IRData
+            New instance wrapping the provided xarray object.
+        """
         if isinstance(da, xr.DataArray):
             ds = xr.Dataset({"data": da.copy()}, attrs=dict(da.attrs))
         else:
@@ -1299,6 +2366,46 @@ class IRData(BaseModel):
         tos_start: Optional[Union[pd.Timestamp, str]] = None,
         strict_tos_start: bool = True,
     ) -> "IRData":
+        """Load one or more Thermo OMNIC ``.spa`` files into an IRData.
+
+        A single file path produces a 1-D instance; a directory path (or the
+        ``filepath`` pointing to a directory) reads all ``.spa`` files in that
+        directory and produces a 2-D instance sorted by spectrum index.
+
+        Parameters
+        ----------
+        filepath : str or pathlib.Path
+            Path to a single ``.spa`` file or a directory containing multiple
+            ``.spa`` files.
+        wavenumber_2SI_factor : float, optional
+            Multiplicative factor to convert the file's native x-axis to m⁻¹
+            (default is ``100.0``, converting cm⁻¹ → m⁻¹).
+        delta_time_seconds : float or None, optional
+            Fixed time step between consecutive spectra used to build the
+            ``tos`` coordinate when embedded timestamps are unavailable.
+            Mutually exclusive with ``tos_start`` (default is ``None``).
+        tos_start : pandas.Timestamp or str or None, optional
+            Absolute start time used to compute ``tos`` from file timestamps.
+            Mutually exclusive with ``delta_time_seconds`` (default is
+            ``None``).
+        strict_tos_start : bool, optional
+            Raise ``ValueError`` if the ``tos_start`` from file metadata
+            cannot be parsed when ``True``; log a warning and skip it when
+            ``False`` (default is ``True``).
+
+        Returns
+        -------
+        IRData
+            New instance loaded from the file(s).
+
+        Raises
+        ------
+        ValueError
+            If both ``delta_time_seconds`` and ``tos_start`` are provided, if
+            the OMNIC y-axis label is not in the known mapping, or if
+            ``strict_tos_start`` is ``True`` and ``tos_start`` cannot be
+            parsed.
+        """
         if delta_time_seconds is not None and tos_start is not None:
             raise ValueError("Specify either 'delta_time_seconds' or 'tos_start', not both.")
 
@@ -1307,7 +2414,7 @@ class IRData(BaseModel):
         wavenumber_si = np.asarray(raw["data"]["x"]) * wavenumber_2SI_factor
         values = np.asarray(raw["data"]["v"], dtype=float)
         tos = np.asarray(raw["data"].get("tos"), dtype=float) if "tos" in raw["data"] else None
-        
+
         # Parse tos_start from argument or attributes, with optional strictness
         parsed_tos_start: Optional[pd.Timestamp] = None
         if tos_start is not None:
@@ -1357,7 +2464,7 @@ class IRData(BaseModel):
 
     def __len__(self) -> int:
         return self.ds.sizes.get("scan", 1)
-    
+
     def __add__(self, other: "IRData") -> "IRData":
         if not isinstance(other, IRData):
             return NotImplemented
@@ -1468,7 +2575,7 @@ class IRData(BaseModel):
             raise ValueError(f"Cannot {op} IRData with different number of dimensions")
         if self.ndim == 2 and self.shape[0] != other.shape[0]:
             raise ValueError(f"Cannot {op} 2-D IRData with different number of scans")
-        
+
 
     @staticmethod
     def _build_ds(

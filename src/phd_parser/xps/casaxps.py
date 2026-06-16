@@ -15,12 +15,21 @@ def _convert_value(value: str) -> Any:
         return int(value)
     except ValueError:
         return value
-    
+
 ACCEPTED_FILE_EXTENSIONS = {".txt", ".csv"}
 
 def extract_lines(file_path: str | Path) -> List[str]:
-    """
-    Read file and return raw lines.
+    """Read a CasaXPS export file and return its raw lines.
+
+    Parameters
+    ----------
+    file_path : str or Path
+        Path to the CasaXPS export file (``.txt`` or ``.csv``).
+
+    Returns
+    -------
+    list of str
+        All lines of the file including newline characters.
     """
     path = Path(file_path)
 
@@ -32,7 +41,31 @@ def extract_lines(file_path: str | Path) -> List[str]:
 def split_lines(
     lines: List[str],
 ) -> Tuple[List[str], str, List[str]]:
-    
+    """Partition raw file lines into metadata, column-header, and data sections.
+
+    The column-header row is identified as the first non-empty line
+    whose leading token starts with ``'K.E.'``.  All lines before it
+    are treated as metadata; all non-empty lines after it are data.
+
+    Parameters
+    ----------
+    lines : list of str
+        Raw lines as returned by :func:`extract_lines`.
+
+    Returns
+    -------
+    metadata_lines : list of str
+        Lines preceding the column-header row.
+    column_line : str
+        The column-header row (tab-separated column names).
+    data_lines : list of str
+        Non-empty lines following the column-header row.
+
+    Raises
+    ------
+    ValueError
+        When no column header row starting with ``'K.E.'`` is found.
+    """
     metadata_lines: List[str] = []
     column_line: str | None = None
     data_start_idx: int | None = None
@@ -65,6 +98,26 @@ def split_lines(
     return metadata_lines, column_line, data_lines
 
 def parse_metadata_lines(lines: List[str]) -> Dict[str, Any]:
+    """Parse CasaXPS metadata lines into a structured dictionary.
+
+    Tab-separated lines are parsed as key-value pairs.  Lines with
+    four or more tokens are treated as alternating key-value sequences.
+    Single-token lines are stored under auto-incremented ``info_N``
+    keys.  When a ``"Name"`` key is present the function also builds a
+    ``"peaks"`` list and assigns a ``"type"`` label
+    (``"singlet"``, ``"doublet"``, ``"triplet"``, or ``"unknown"``).
+
+    Parameters
+    ----------
+    lines : list of str
+        Metadata lines as returned by :func:`split_lines`.
+
+    Returns
+    -------
+    dict
+        Parsed metadata including an optional ``"peaks"`` list and a
+        ``"type"`` string.
+    """
     metadata: Dict[str, Any] = {}
     info_counter = 0
 
@@ -138,7 +191,28 @@ def parse_data_lines(
     data_lines: List[str],
     header_line: Optional[str] = None,
 ) -> pd.DataFrame |  Tuple[pd.DataFrame, pd.DataFrame]:
+    """Parse CasaXPS data lines into one or two DataFrames.
 
+    When the column-header row contains an empty tab-separated token
+    the data are split at that position into a kinetic-energy (K.E.)
+    DataFrame and a binding-energy (B.E.) DataFrame.  Otherwise a
+    single DataFrame is returned.
+
+    Parameters
+    ----------
+    data_lines : list of str
+        Tab-separated numeric data lines.
+    header_line : str, optional
+        The column-header row.  When ``None`` column names are
+        auto-generated as ``col_0``, ``col_1``, …
+
+    Returns
+    -------
+    pandas.DataFrame or tuple of (pandas.DataFrame, pandas.DataFrame)
+        A single numeric DataFrame when no separator column is detected,
+        or a ``(left, right)`` tuple when a blank separator column is
+        found.
+    """
     # --- parse header ---
     if header_line is not None:
         columns = [c.strip() for c in header_line.strip().split("\t")]
@@ -186,7 +260,36 @@ def parse_data_lines(
 
 
 def read_export(file_path: str | Path) -> Dict[str, Any]:
+    """Parse a CasaXPS export file into metadata and spectral DataFrames.
 
+    Supports ``.txt`` and ``.csv`` file extensions.  The file is split
+    into metadata and data sections by :func:`split_lines`, then each
+    section is parsed independently.  Kinetic-energy and binding-energy
+    datasets are identified by the name of their first column.
+
+    Parameters
+    ----------
+    file_path : str or Path
+        Path to the CasaXPS export file.
+
+    Returns
+    -------
+    dict
+        Dictionary with keys:
+
+        ``"meta"`` : dict
+            Parsed metadata including peak information and type label.
+        ``"kinetic energy"`` : pandas.DataFrame or None
+            K.E.-axis spectral data, or ``None`` when absent.
+        ``"binding energy"`` : pandas.DataFrame or None
+            B.E.-axis spectral data, or ``None`` when absent.
+
+    Raises
+    ------
+    ValueError
+        When the file extension is not ``.txt`` or ``.csv``, or when
+        no ``'K.E.'`` column header row is found.
+    """
     path = Path(file_path)
 
     # --- validate file ---

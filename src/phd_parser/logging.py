@@ -10,7 +10,29 @@ LEVELS = {
 }
 
 def setup_logger(level: int | str = logging.INFO, use_file_handler=True, use_console_handler=False):
+    """Configure the ``phd_parser`` package logger.
 
+    Clears any existing handlers on the ``'phd_parser'`` logger and
+    attaches new ones according to the arguments.  The logger does not
+    propagate to the root logger so that library users retain full
+    control over their own logging configuration.
+
+    Parameters
+    ----------
+    level : int or str, optional
+        Logging level for the package logger.  Accepts standard
+        :mod:`logging` integer constants (e.g. ``logging.DEBUG``) or
+        their string equivalents (e.g. ``"DEBUG"``).  String values are
+        case-insensitive.  Defaults to ``logging.INFO``.
+    use_file_handler : bool, optional
+        When ``True`` (default), attach a
+        :class:`logging.FileHandler` that writes to
+        ``phd_parser.log`` in the current working directory (mode
+        ``'w'``).
+    use_console_handler : bool, optional
+        When ``True``, attach a :class:`logging.StreamHandler` that
+        writes to ``stderr`` (default is ``False``).
+    """
     if isinstance(level, str):
         level = LEVELS.get(level.upper(), logging.INFO)
 
@@ -32,4 +54,10 @@ def setup_logger(level: int | str = logging.INFO, use_file_handler=True, use_con
         pkg_logger.addHandler(ch)
 
 def disable_logging():
+    """Silence all ``phd_parser`` log output.
+
+    Sets the package logger level above ``CRITICAL`` so that no
+    messages at any standard level are emitted.  Call
+    :func:`setup_logger` to re-enable logging.
+    """
     logging.getLogger('phd_parser').setLevel(logging.CRITICAL + 1)

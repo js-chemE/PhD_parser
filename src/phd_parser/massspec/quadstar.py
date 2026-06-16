@@ -14,12 +14,21 @@ def _convert_value(value: str) -> Any:
         return int(value)
     except ValueError:
         return value
-    
+
 ACCEPTED_FILE_EXTENSIONS = {".asc"}
 
 def extract_lines(file_path: str | Path) -> List[str]:
-    """
-    Read file and return raw lines.
+    """Read a Quadstar ``.asc`` file and return its raw lines.
+
+    Parameters
+    ----------
+    file_path : str or Path
+        Path to the ``.asc`` file to read.
+
+    Returns
+    -------
+    list[str]
+        All lines from the file, including newline characters.
     """
     path = Path(file_path)
 
@@ -27,11 +36,39 @@ def extract_lines(file_path: str | Path) -> List[str]:
         lines = f.readlines()
         logger.info(f"Extracted {len(lines)} lines from {file_path}")
         return lines
-    
+
 
 def split_lines(
     lines: List[str],
 ) -> Tuple[List[str], List[str], List[str], List[str]]:
+    """Partition raw file lines into the four structural sections of an ``.asc`` export.
+
+    The Quadstar ASCII format uses blank lines as section delimiters.  The
+    function collects contiguous non-blank groups and assigns them to the four
+    expected sections: file header, cycle/block counts, block definitions, and
+    data rows (column header + measurement rows).
+
+    Parameters
+    ----------
+    lines : list[str]
+        Raw lines as returned by :func:`extract_lines`.
+
+    Returns
+    -------
+    meta_0 : list[str]
+        File-header section (ASCII sample cycles, date/time, converted cycles).
+    meta_1 : list[str]
+        Cycle and datablock count section.
+    meta_blocks : list[str]
+        Datablock and channel definition section.
+    data : list[str]
+        Flattened list of column-header and data rows.
+
+    Raises
+    ------
+    ValueError
+        If fewer than four blank-line-delimited sections are found.
+    """
     # Collect contiguous non-empty groups separated by blank lines
     sections: List[List[str]] = []
     current: List[str] = []
@@ -70,6 +107,24 @@ def parse_metadata_lines(
     meta_1: List[str],
     meta_blocks: List[str],
 ) -> Dict[str, Any]:
+    """Parse the three metadata sections of a Quadstar ``.asc`` export into a dict.
+
+    Parameters
+    ----------
+    meta_0 : list[str]
+        File-header section lines (file name, date, time, converted cycles).
+    meta_1 : list[str]
+        Cycle and datablock count section lines.
+    meta_blocks : list[str]
+        Datablock and channel definition section lines.
+
+    Returns
+    -------
+    dict[str, Any]
+        Flat metadata dictionary containing keys such as ``"file_name"``,
+        ``"date"``, ``"time"``, ``"n_cycles"``, ``"n_datablocks"``, and
+        ``"datablocks"`` (a nested dict keyed by block ID).
+    """
     meta: Dict[str, Any] = {}
 
     # ------------------------------------------------------------------
@@ -185,6 +240,35 @@ def parse_metadata_lines(
     return meta
 
 def parse_data_lines(data: List[str], drop_threshold_cols: bool = False, tz_str: str = "Europe/Amsterdam") -> pd.DataFrame:
+    """Parse tab-separated data rows from a Quadstar ``.asc`` export into a DataFrame.
+
+    The first element of ``data`` is treated as the column-header row.
+    Numeric columns are coerced to float/int where possible.  A combined
+    ``Timestamp`` column is synthesised from the ``Date`` and ``Time`` columns
+    and localised to the specified timezone.
+
+    Parameters
+    ----------
+    data : list[str]
+        Raw data lines with the column header as the first element, as
+        returned by :func:`split_lines`.
+    drop_threshold_cols : bool, optional
+        If ``True``, columns whose names start with ``"Threshold"`` are
+        removed from the result.  Default is ``False``.
+    tz_str : str, optional
+        Timezone name used to localise parsed timestamps.  Default is
+        ``"Europe/Amsterdam"``.
+
+    Returns
+    -------
+    pandas.DataFrame
+        Parsed measurement table with a ``Timestamp`` column appended.
+
+    Raises
+    ------
+    ValueError
+        If ``data`` is empty.
+    """
     if not data:
         logger.error("No data lines to parse")
         raise ValueError("data is empty")
@@ -206,7 +290,7 @@ def parse_data_lines(data: List[str], drop_threshold_cols: bool = False, tz_str:
 
 
     # Threshold columns to category
-    
+
     if drop_threshold_cols:
         threshold_cols = [col for col in df.columns if col.startswith("Threshold")]
         df.drop(columns=threshold_cols, inplace=True)
@@ -214,7 +298,7 @@ def parse_data_lines(data: List[str], drop_threshold_cols: bool = False, tz_str:
         for i, col in enumerate(df.columns):
             if col == "Threshold":
                 df.iloc[:, i] = df.iloc[:, i].astype("category")
-        
+
 
     logger.debug(f"Parsed data into DataFrame with shape {df.shape}")
 
@@ -277,6 +361,31 @@ def _build_column_map(meta: Dict[str, Any], current_columns: List[str]) -> Dict[
 
 
 def read_export_single(file_path: str | Path, drop_threshold_cols: bool = True, tz_str: str = "Europe/Amsterdam") -> Tuple[Dict[str, Any], pd.DataFrame]:
+    """Parse a single Quadstar ``.asc`` file into metadata and a DataFrame.
+
+    Orchestrates :func:`extract_lines`, :func:`split_lines`,
+    :func:`parse_metadata_lines`, and :func:`parse_data_lines`, then
+    renames DataFrame columns according to the datablock/channel definitions
+    found in the metadata and attaches a ``"column_map"`` key to the returned
+    metadata dict.
+
+    Parameters
+    ----------
+    file_path : str or Path
+        Path to the ``.asc`` file.
+    drop_threshold_cols : bool, optional
+        Passed through to :func:`parse_data_lines`.  Drops threshold columns
+        when ``True`` (default).
+    tz_str : str, optional
+        Timezone name for timestamp localisation (default ``"Europe/Amsterdam"``).
+
+    Returns
+    -------
+    meta : dict[str, Any]
+        Parsed file metadata including ``"datablocks"`` and ``"column_map"``.
+    df : pandas.DataFrame
+        Measurement table with renamed columns.
+    """
     lines = extract_lines(file_path)
     meta_0, meta_1, meta_blocks, data = split_lines(lines)
     meta = parse_metadata_lines(meta_0, meta_1, meta_blocks)
@@ -295,11 +404,42 @@ def read_export_single(file_path: str | Path, drop_threshold_cols: bool = True, 
     return meta, df
 
 def read_export(path: str | Path, drop_threshold_cols: bool = True, tz_str: str = "Europe/Amsterdam") -> Tuple[Dict[str, Any], pd.DataFrame]:
+    """Load one or more Quadstar ``.asc`` exports from a file or directory.
+
+    When ``path`` points to a single file, delegates directly to
+    :func:`read_export_single`.  When ``path`` is a directory, all ``.asc``
+    files found at the top level are parsed and their DataFrames are
+    concatenated row-wise with a reset index.
+
+    Parameters
+    ----------
+    path : str or Path
+        Path to a single ``.asc`` file or a directory containing ``.asc``
+        files.
+    drop_threshold_cols : bool, optional
+        Passed through to :func:`read_export_single`.  Default is ``True``.
+    tz_str : str, optional
+        Timezone name for timestamp localisation (default ``"Europe/Amsterdam"``).
+
+    Returns
+    -------
+    meta : dict[str, Any]
+        For a single file: the metadata dict from :func:`read_export_single`.
+        For a directory: a dict with ``"files_processed"`` (int) and
+        ``"file_metadata"`` (list of per-file metadata dicts).
+    df : pandas.DataFrame
+        Combined measurement table.
+
+    Raises
+    ------
+    ValueError
+        If ``path`` is a directory but contains no ``.asc`` files.
+    """
     path = Path(path)
 
     if path.is_file():
         return read_export_single(path, drop_threshold_cols=drop_threshold_cols, tz_str=tz_str)
-    
+
     elif path.is_dir():
         all_meta = []
         all_dfs = []

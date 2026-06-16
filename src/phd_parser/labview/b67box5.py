@@ -91,11 +91,58 @@ CHANNEL_META: dict[str, dict[str, Any]] = {
 
 
 def read(path: str | Path, datetime_format: str = r"%Y-%m-%d_%H-%M-%S", tos_start: Optional[pd.Timestamp] = None, sep: str = "\t", header: Optional[int] = 0, tzinfo: Optional[str] = "Europe/Amsterdam") -> Tuple[pd.DataFrame, dict[str, dict[str, Any]], dict[str, Any]]:
+    """Read one or more LabView tab-separated log files from building 67, box 5.
+
+    Accepts either a single file path or a directory.  When a directory is
+    supplied, all files with ``.txt``, ``.csv``, or ``.ab`` extensions are
+    read and concatenated in the order returned by the filesystem.
+
+    The raw dataframe is then passed to :func:`process_log` for timestamp
+    parsing, unit conversion, and channel-metadata lookup.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Path to a single log file or a directory containing log files.
+    datetime_format : str, optional
+        ``strptime`` format string used to parse file-name timestamps
+        (default is ``r"%Y-%m-%d_%H-%M-%S"``).  Not applied to the in-file
+        timestamp column; see :func:`process_log`.
+    tos_start : pandas.Timestamp, optional
+        Reference time for the ``tos`` (time-on-stream) coordinate.
+        Passed through to :func:`process_log`; defaults to the first
+        row's timestamp.
+    sep : str, optional
+        Column separator for ``pandas.read_csv`` (default is ``"\\t"``).
+    header : int or None, optional
+        Row number(s) to use as column names, passed to ``pandas.read_csv``
+        (default is ``0``).
+    tzinfo : str or None, optional
+        Timezone name used to localise the parsed timestamps (default is
+        ``"Europe/Amsterdam"``).
+
+    Returns
+    -------
+    pandas.DataFrame
+        Cleaned dataframe with a ``"timestamp"`` column (tz-aware) and a
+        numeric ``"tos"`` column (elapsed seconds).
+    dict
+        Mapping of channel name to attribute dict (unit, group, etc.).
+    dict
+        File-level provenance metadata (``"setup"``, ``"n_rows"``,
+        ``"tos_start"``, ``"path"``, etc.).
+
+    Raises
+    ------
+    FileNotFoundError
+        If *path* does not exist, or if a file inside a directory cannot be
+        found after listing.
+    """
     path = Path(path)
 
     if not path.exists():
         raise FileNotFoundError(path)
-    
+
     if path.is_file():
         df = pd.read_csv(path, sep=sep, header=header)
 
@@ -108,7 +155,7 @@ def read(path: str | Path, datetime_format: str = r"%Y-%m-%d_%H-%M-%S", tos_star
 
                 if not file_path.exists():
                     raise FileNotFoundError(file_path)
-                
+
                 single = pd.read_csv(file_path, sep=sep, header=header)
                 datas.append(single)
 
@@ -123,15 +170,67 @@ def read(path: str | Path, datetime_format: str = r"%Y-%m-%d_%H-%M-%S", tos_star
 def process_log(
     df: pd.DataFrame, datetime_format: str = r"%Y-%m-%d_%H-%M-%S", tos_start: Optional[pd.Timestamp] = None, seconds_per_unit: float = 1.0, tzinfo: Optional[str] = None
 ) -> Tuple[pd.DataFrame, dict[str, dict[str, Any]], dict[str, Any]]:
+    """Clean and annotate a raw LabView log dataframe.
+
+    Performs the following steps in order:
+
+    1. Drops rows with a missing ``"timestamp"`` value (typically the
+       trailing blank line written by LabView).
+    2. Parses the ``"timestamp"`` column using the fixed format
+       ``"%d-%m-%Y %H:%M:%S"``.
+    3. Optionally localises timestamps to *tzinfo*.
+    4. Computes the ``"tos"`` column as elapsed time since *tos_start*,
+       scaled by *seconds_per_unit*.
+    5. Looks up per-channel metadata from :data:`CHANNEL_META`; logs a
+       warning for unknown channels.
+    6. Converts numeric columns that use a comma decimal separator.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Raw dataframe as returned by ``pandas.read_csv``.  Must contain a
+        ``"timestamp"`` column.
+    datetime_format : str, optional
+        ``strptime`` format for file-name-derived timestamps (default is
+        ``r"%Y-%m-%d_%H-%M-%S"``).  Currently unused inside this function
+        but kept for API consistency with :func:`read`.
+    tos_start : pandas.Timestamp, optional
+        Reference time for the ``"tos"`` coordinate.  Defaults to the
+        timestamp of the first (non-null) data row.
+    seconds_per_unit : float, optional
+        Scale factor applied when computing ``tos`` (default is ``1.0``,
+        meaning ``tos`` is in seconds).
+    tzinfo : str or None, optional
+        Timezone name for localising the parsed timestamps.  Pass ``None``
+        to leave them tz-naive (default is ``None``).
+
+    Returns
+    -------
+    pandas.DataFrame
+        Cleaned dataframe with ``"timestamp"`` (``datetime64``) and
+        ``"tos"`` (``float64``) columns plus all original channel columns
+        converted to numeric.
+    dict
+        Mapping of channel name to attribute dict (unit, group, etc.) drawn
+        from :data:`CHANNEL_META`.  Unknown channels receive an empty dict.
+    dict
+        Provenance metadata: ``"setup"``, ``"n_rows"``,
+        ``"filename_timestamp"``, ``"tos_start"``, ``"seconds_per_unit"``.
+
+    Raises
+    ------
+    ValueError
+        If the dataframe does not contain a ``"timestamp"`` column.
+    """
 
     if "timestamp" not in df.columns:
         raise ValueError(
             f"Expected a 'timestamp' column in the data; got {list(df.columns)}"
         )
- 
+
     # Drop rows with missing timestamps (typically the trailing blank line)
     df = df.dropna(subset=["timestamp"]).reset_index(drop=True)
- 
+
     df["timestamp"] = pd.to_datetime(
         df["timestamp"], format="%d-%m-%Y %H:%M:%S", errors="raise"
     )
@@ -144,7 +243,7 @@ def process_log(
         tos_start = df["timestamp"].iloc[0]
 
     df["tos"] = (df["timestamp"] - tos_start).dt.total_seconds() / seconds_per_unit
- 
+
     channels = [c for c in df.columns if c != "timestamp"]
     channel_meta: dict[str, dict[str, Any]] = {}
     for ch in channels:
@@ -154,7 +253,7 @@ def process_log(
         else:
             logger.warning("No metadata for channel %r; leaving empty.", ch)
             channel_meta[ch] = {}
-    
+
     file_meta: dict[str, Any] = {
         "setup": "b67_box5",
         "n_rows": len(df),
@@ -162,7 +261,6 @@ def process_log(
         "tos_start": tos_start,
         "seconds_per_unit": seconds_per_unit,
     }
- 
+
     logger.info(f"Processed log with {len(df)} rows and {len(channels)} channels: {channels}")
     return df, channel_meta, file_meta
- 

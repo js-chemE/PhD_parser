@@ -15,12 +15,49 @@ logger.setLevel(logging.DEBUG)
 # --------------------------------------
 
 def read_export(filepath: str | Path):
-    """
-    Extracts header, data, and footer sections from the txt file.
+    """Parse a Mettler Toledo TGA E2290 ``.txt`` export file.
+
+    Reads and extracts header, curve data, results, sample, and method
+    sections from the file, returning them in a single dictionary.
+
+    Parameters
+    ----------
+    filepath : str or Path
+        Path to the ``.txt`` export file produced by the E2290 software.
+
+    Returns
+    -------
+    dict
+        Dictionary with keys:
+
+        ``"curve_name"`` : str
+            Name of the measurement curve.
+        ``"saved_at"`` : pandas.Timestamp
+            Date/time the file was saved.
+        ``"performed_at"`` : pandas.Timestamp
+            Date/time the experiment was performed.
+        ``"data"`` : pandas.DataFrame
+            Tabular measurement data (columns include ``Ts`` and
+            ``Value``).
+        ``"units"`` : list of str
+            Physical units for each data column.
+        ``"results"`` : str
+            Raw results section text.
+        ``"sample_name"`` : str or None
+            Name of the measured sample.
+        ``"weight"`` : float or None
+            Initial sample mass in milligrams.
+        ``"method"`` : str
+            Raw method section text.
+
+    Raises
+    ------
+    ValueError
+        When ``filepath`` does not have a ``.txt`` extension.
     """
     if not isinstance(filepath, Path):
         filepath = Path(filepath)
-        
+
     if not filepath.suffix == ".txt":
         raise ValueError("File must be a .txt file")
 
@@ -42,14 +79,51 @@ def read_export(filepath: str | Path):
 # Process Header, Data, Footer
 # --------------------------------------
 def extract_lines(filepath: str | Path) -> List[str]:
+    """Read a text file and return its lines.
+
+    Parameters
+    ----------
+    filepath : str or Path
+        Path to the file to read.
+
+    Returns
+    -------
+    list of str
+        All lines of the file including newline characters.
+    """
     if not isinstance(filepath, Path):
         filepath = Path(filepath)
-        
+
     with open(filepath, "r") as f:
         lines = f.readlines()
     return lines
 
 def split_sections(lines: List[str]) -> Tuple[List[str], List[str], List[str], List[str], List[str]]:
+    """Partition raw file lines into the five E2290 export sections.
+
+    Sections are identified by their sentinel header tokens:
+    ``"Curve Name:"``, ``"Curve Values:"``, ``"Results:"``,
+    ``"Sample:"``, and ``"Method:"``.
+
+    Parameters
+    ----------
+    lines : list of str
+        Raw lines as returned by :func:`extract_lines`.
+
+    Returns
+    -------
+    header_lines : list of str
+        Lines belonging to the header section (excluding sentinel).
+    data_lines : list of str
+        Lines belonging to the curve-values section (excluding
+        sentinel).
+    results_lines : list of str
+        Lines belonging to the results section (excluding sentinel).
+    sample_lines : list of str
+        Lines belonging to the sample section (excluding sentinel).
+    method_lines : list of str
+        Lines belonging to the method section (excluding sentinel).
+    """
     header_lines = []
     data_lines = []
     results_lines = []
@@ -85,8 +159,24 @@ def split_sections(lines: List[str]) -> Tuple[List[str], List[str], List[str], L
     return header_lines[1:], data_lines[1:], results_lines[1:], sample_lines[1:], method_lines[1:]
 
 def parse_data_lines(lines: List[str]) -> Tuple[pd.DataFrame, List[str]]:
-    """
-    Extracts data from the data section.
+    """Parse the curve-values section into a DataFrame and a units list.
+
+    Expects the first line to contain whitespace-separated column names,
+    the second line to contain bracketed unit strings, and subsequent
+    lines to contain numeric data.
+
+    Parameters
+    ----------
+    lines : list of str
+        Lines from the ``"Curve Values:"`` section (sentinel excluded).
+
+    Returns
+    -------
+    df : pandas.DataFrame
+        Parsed numerical data with column names taken from the first
+        line.
+    units : list of str
+        Physical units for each column (brackets stripped).
     """
     for line in lines:
         line = line.strip()
@@ -100,6 +190,22 @@ def parse_data_lines(lines: List[str]) -> Tuple[pd.DataFrame, List[str]]:
 
 
 def parse_header_lines(lines: List[str]) -> Tuple[str, pd.Timestamp, pd.Timestamp]:
+    """Extract curve name and timestamps from the header section.
+
+    Parameters
+    ----------
+    lines : list of str
+        Lines from the header section (sentinel excluded).
+
+    Returns
+    -------
+    curve_name : str
+        Name of the measurement curve.
+    saved_at : pandas.Timestamp
+        Date/time the file was saved.
+    performed_at : pandas.Timestamp
+        Date/time the experiment was performed.
+    """
     curve_name = None
     performed_at = None
 
@@ -118,6 +224,20 @@ def parse_header_lines(lines: List[str]) -> Tuple[str, pd.Timestamp, pd.Timestam
     return curve_name, saved_at, performed_at # type: ignore
 
 def parse_sample_lines(lines: List[str]) -> Tuple[str | None, float | None]:
+    """Extract the sample name and initial mass from the sample section.
+
+    Parameters
+    ----------
+    lines : list of str
+        Lines from the ``"Sample:"`` section (sentinel excluded).
+
+    Returns
+    -------
+    sample_name : str or None
+        Name of the measured sample, or ``None`` if absent.
+    weight : float or None
+        Initial sample mass in milligrams, or ``None`` if absent.
+    """
     sample_name = None
     weight = None
 

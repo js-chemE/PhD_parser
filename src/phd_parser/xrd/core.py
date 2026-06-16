@@ -13,6 +13,25 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 class XRDData(BaseModel):
+    """Pydantic model for X-ray diffraction (XRD) data.
+
+    Wraps an :class:`xarray.DataArray` whose primary coordinate is the
+    2θ angle in degrees.  The array may be 1-D ``(angle,)`` for a
+    single scan or 2-D ``(scan, angle)`` for a time-series experiment.
+    All processing methods return a new ``XRDData`` instance
+    (immutable API).
+
+    Parameters
+    ----------
+    da : xarray.DataArray
+        Intensity data with dims ``('angle',)`` or ``('scan', 'angle')``.
+        The ``angle`` coordinate must be present and in degrees (2θ).
+        Optional additional coords: ``'tos'`` (seconds elapsed) and
+        ``'timestamp'`` (absolute datetimes).
+    metadata : dict, optional
+        Raw metadata extracted from the source file.
+    """
+
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         validate_assignment=True,
@@ -65,25 +84,59 @@ class XRDData(BaseModel):
 
     @property
     def ndim(self) -> int:
+        """Number of dimensions of the underlying DataArray (1 or 2).
+
+        Returns
+        -------
+        int
+            ``1`` for a single scan, ``2`` for a time-series dataset.
+        """
         return self.da.ndim
 
     @property
     def shape(self) -> tuple[int, ...]:
+        """Shape of the underlying DataArray.
+
+        Returns
+        -------
+        tuple of int
+            Dimension sizes in the same order as :attr:`da`.dims.
+        """
         return tuple(self.da.shape)
 
     @property
     def values(self) -> npt.NDArray:
+        """Raw intensity values as a NumPy array.
+
+        Returns
+        -------
+        ndarray
+            Intensity data with the same shape as :attr:`shape`.
+        """
         return self.da.values
 
     @property
     def angle(self) -> npt.NDArray:
-        """2θ angle in degrees."""
+        """2θ angle in degrees.
+
+        Returns
+        -------
+        ndarray
+            1-D array of 2θ values in degrees.
+        """
         return self.da.coords["angle"].values
 
 
     @property
     def timestamps(self) -> Optional[pd.DatetimeIndex]:
-        """Absolute timestamps per scan, or None."""
+        """Absolute timestamps per scan, or None.
+
+        Returns
+        -------
+        pandas.DatetimeIndex or None
+            Per-scan datetimes when the ``'timestamp'`` coordinate is
+            present, otherwise ``None``.
+        """
         if "timestamp" in self.da.coords:
             return pd.DatetimeIndex(self.da.coords["timestamp"].values)
         return None
@@ -94,27 +147,52 @@ class XRDData(BaseModel):
 
     @cached_property
     def angle_rad(self) -> npt.NDArray:
-        """2θ angle in radians."""
+        """2θ angle in radians.
+
+        Returns
+        -------
+        ndarray
+            1-D array of 2θ values converted to radians.
+        """
         return np.deg2rad(self.angle)
 
     @cached_property
     def theta_deg(self) -> npt.NDArray:
-        """θ (Bragg angle) in degrees."""
+        """θ (Bragg angle) in degrees.
+
+        Returns
+        -------
+        ndarray
+            1-D array equal to ``angle / 2``.
+        """
         return self.angle / 2.0
 
     @cached_property
     def theta_rad(self) -> npt.NDArray:
-        """θ (Bragg angle) in radians."""
+        """θ (Bragg angle) in radians.
+
+        Returns
+        -------
+        ndarray
+            1-D array of Bragg angles converted to radians.
+        """
         return np.deg2rad(self.theta_deg)
 
     def d_spacing(self, wavelength_angstrom: float = 1.5406) -> npt.NDArray:
-        """
-        d-spacing in Ångströms via Bragg's law: d = λ / (2 sin θ).
+        """Compute d-spacing in Ångströms via Bragg's law: d = λ / (2 sin θ).
+
+        Points where sin θ = 0 (i.e. 2θ = 0°) are returned as ``nan``
+        to avoid division by zero.
 
         Parameters
         ----------
-        wavelength_angstrom : float
-            X-ray wavelength in Å. Defaults to Cu Kα₁ (1.5406 Å).
+        wavelength_angstrom : float, optional
+            X-ray wavelength in Å (default is Cu Kα₁, 1.5406 Å).
+
+        Returns
+        -------
+        ndarray
+            d-spacing values in Ångströms, same length as :attr:`angle`.
         """
         sin_theta = np.sin(self.theta_rad)
         # Avoid division by zero at angle=0
@@ -123,13 +201,17 @@ class XRDData(BaseModel):
         return d
 
     def q_vector(self, wavelength_angstrom: float = 1.5406) -> npt.NDArray:
-        """
-        Scattering vector magnitude Q in Å⁻¹: Q = 4π sin θ / λ.
+        """Compute the scattering vector magnitude Q in Å⁻¹: Q = 4π sin θ / λ.
 
         Parameters
         ----------
-        wavelength_angstrom : float
-            X-ray wavelength in Å. Defaults to Cu Kα₁ (1.5406 Å).
+        wavelength_angstrom : float, optional
+            X-ray wavelength in Å (default is Cu Kα₁, 1.5406 Å).
+
+        Returns
+        -------
+        ndarray
+            Q values in Å⁻¹, same length as :attr:`angle`.
         """
         return (4.0 * np.pi * np.sin(self.theta_rad)) / wavelength_angstrom
 
@@ -138,7 +220,19 @@ class XRDData(BaseModel):
     # ----------------------------------------------------------------
 
     def sort(self, ascending: bool = True) -> "XRDData":
-        """Return a new XRDData with angles sorted."""
+        """Return a new XRDData with angles sorted.
+
+        Parameters
+        ----------
+        ascending : bool, optional
+            When ``True`` (default) sort from smallest to largest 2θ;
+            ``False`` reverses the order.
+
+        Returns
+        -------
+        XRDData
+            New instance with the angle axis sorted.
+        """
         da_sorted = self.da.sortby("angle", ascending=ascending)
         return XRDData(da=da_sorted, metadata=self.metadata)
 
@@ -147,7 +241,23 @@ class XRDData(BaseModel):
         min_deg: Optional[float] = None,
         max_deg: Optional[float] = None,
     ) -> "XRDData":
-        """Slice to a 2θ window [min_deg, max_deg]."""
+        """Slice data to a 2θ window [min_deg, max_deg].
+
+        Both bounds are inclusive.  Omitting a bound leaves that end
+        of the range open.
+
+        Parameters
+        ----------
+        min_deg : float, optional
+            Lower 2θ bound in degrees.
+        max_deg : float, optional
+            Upper 2θ bound in degrees.
+
+        Returns
+        -------
+        XRDData
+            New instance restricted to the specified angular range.
+        """
         mask = np.ones(self.angle.size, dtype=bool)
         if min_deg is not None:
             mask &= self.angle >= min_deg
@@ -166,6 +276,24 @@ class XRDData(BaseModel):
     def smooth_savgol(
         self, window_length: int = 11, polyorder: int = 3
     ) -> "XRDData":
+        """Smooth intensities with a Savitzky-Golay filter.
+
+        For 2-D data the filter is applied independently along each
+        scan row.
+
+        Parameters
+        ----------
+        window_length : int, optional
+            Length of the filter window in data points (default is 11).
+        polyorder : int, optional
+            Polynomial order used to fit within each window
+            (default is 3).
+
+        Returns
+        -------
+        XRDData
+            New instance with smoothed intensity values.
+        """
         from scipy.signal import savgol_filter
 
         if self.ndim == 1:
@@ -183,6 +311,24 @@ class XRDData(BaseModel):
         return XRDData(da=da_s, metadata=self.metadata)
 
     def smooth_gaussian(self, sigma_deg: float = 0.05) -> "XRDData":
+        """Smooth intensities with a Gaussian filter.
+
+        The standard deviation ``sigma_deg`` is given in degrees and
+        converted to index units based on the mean angular step size.
+        For 2-D data the filter is applied independently along each
+        scan row.
+
+        Parameters
+        ----------
+        sigma_deg : float, optional
+            Standard deviation of the Gaussian kernel in degrees
+            (default is 0.05).
+
+        Returns
+        -------
+        XRDData
+            New instance with smoothed intensity values.
+        """
         from scipy.ndimage import gaussian_filter1d
 
         # Convert sigma from degrees to index units
@@ -204,6 +350,26 @@ class XRDData(BaseModel):
         return XRDData(da=da_s, metadata=self.metadata)
 
     def smooth_moving(self, window_size: int = 5) -> "XRDData":
+        """Smooth intensities with a uniform moving-average filter.
+
+        For 2-D data the filter is applied independently along each
+        scan row using ``numpy.convolve`` in ``'same'`` mode.
+
+        Parameters
+        ----------
+        window_size : int, optional
+            Number of data points to average (default is 5).
+
+        Returns
+        -------
+        XRDData
+            New instance with smoothed intensity values.
+
+        Raises
+        ------
+        ValueError
+            When ``window_size`` is less than 1.
+        """
         if window_size < 1:
             raise ValueError("window_size must be >= 1")
         kernel = np.ones(window_size) / window_size
@@ -238,16 +404,22 @@ class XRDData(BaseModel):
         normalize: bool = False,
         metadata: Optional[dict[str, Any]] = None,
     ) -> "XRDData":
-        """
-        Read a Bruker/E1290-style two-column XY file.
+        """Read a Bruker/E1290-style two-column XY file.
 
         Parameters
         ----------
-        filepath : path-like
-        normalize : bool
-            If True, divide intensity by its maximum on load.
+        filepath : str or Path
+            Path to the ``.xy`` file to parse.
+        normalize : bool, optional
+            When ``True``, divide intensity by its maximum on load
+            (default is ``False``).
         metadata : dict, optional
-            Additional metadata to attach.
+            Additional metadata to attach to the returned instance.
+
+        Returns
+        -------
+        XRDData
+            Parsed dataset with angle in degrees and intensity values.
         """
         from phd_parser.xrd.xrd_e1290 import read_xy_e1290
 

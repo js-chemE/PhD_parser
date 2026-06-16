@@ -15,6 +15,18 @@ logger = logging.getLogger(__name__)
 
 
 class LVData(BaseModel):
+    """Pydantic wrapper for LabView process-data exported as a tab-separated log.
+
+    The backing store is an ``xr.Dataset`` with a single ``tos`` dimension
+    (elapsed seconds since ``tos_start``).  Each recorded channel is a data
+    variable whose ``.attrs`` carry per-channel metadata (unit, group, species,
+    location, etc.).  Absolute timestamps are derived on demand from ``tos``
+    plus ``tos_start``; they are not stored as a coordinate.
+
+    All processing methods are immutable: they return a new ``LVData`` instance
+    and leave the original unchanged.
+    """
+
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         validate_assignment=True,
@@ -60,19 +72,49 @@ class LVData(BaseModel):
 
     @property
     def channels(self) -> list[str]:
+        """Names of all data variables (channels) in the dataset.
+
+        Returns
+        -------
+        list of str
+            Ordered list of channel names as they appear in the underlying
+            ``xr.Dataset``.
+        """
         return list(self.ds.data_vars)
 
     @property
     def n_samples(self) -> int:
+        """Number of time samples along the ``tos`` dimension.
+
+        Returns
+        -------
+        int
+            Length of the ``tos`` coordinate.
+        """
         return int(self.ds.sizes["tos"])
 
     @property
     def tos(self) -> npt.NDArray:
+        """Elapsed seconds since ``tos_start`` for each sample.
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D array of elapsed seconds (the ``tos`` coordinate values).
+        """
         # Elapsed seconds since tos_start (the single source of truth in the Dataset)
         return self.ds.coords["tos"].values
 
     @property
     def tos_start(self) -> Optional[pd.Timestamp]:
+        """Absolute start time of the run, parsed from ``metadata``.
+
+        Returns
+        -------
+        pandas.Timestamp or None
+            Start timestamp, or ``None`` if ``"tos_start"`` is absent from
+            ``metadata``.
+        """
         # Parsed on demand from metadata ISO string — survives all transformations
         raw = self.metadata.get("tos_start")
         if raw is None:
@@ -81,6 +123,14 @@ class LVData(BaseModel):
 
     @property
     def timestamps(self) -> Optional[pd.DatetimeIndex]:
+        """Absolute datetime for every sample, derived from ``tos`` and ``tos_start``.
+
+        Returns
+        -------
+        pandas.DatetimeIndex or None
+            Index of absolute timestamps, or ``None`` when ``tos_start`` is
+            unavailable.
+        """
         # Derived on demand from tos + tos_start; not stored as a coordinate
         if self.tos_start is None:
             return None
@@ -88,6 +138,14 @@ class LVData(BaseModel):
 
     @property
     def sampling_interval(self) -> Optional[float]:
+        """Median time step between consecutive samples, in seconds.
+
+        Returns
+        -------
+        float or None
+            Median of ``numpy.diff(tos)``, or ``None`` when fewer than two
+            samples are present.
+        """
         # Median spacing in seconds; None if only one sample
         if self.n_samples < 2:
             return None
@@ -98,16 +156,63 @@ class LVData(BaseModel):
     # ----------------------------------------------------------------
 
     def get_channel(self, name: str) -> npt.NDArray:
+        """Return the raw data array for a single channel.
+
+        Parameters
+        ----------
+        name : str
+            Channel name as it appears in ``self.channels``.
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D array of channel values along the ``tos`` dimension.
+
+        Raises
+        ------
+        KeyError
+            If ``name`` is not present in the dataset.
+        """
         if name not in self.ds.data_vars:
             raise KeyError(f"Channel {name!r} not found. Available: {self.channels}")
         return self.ds[name].values
 
     def get_channel_unit(self, name: str) -> Optional[str]:
+        """Return the physical unit string stored in a channel's attributes.
+
+        Parameters
+        ----------
+        name : str
+            Channel name as it appears in ``self.channels``.
+
+        Returns
+        -------
+        str or None
+            Value of the ``"unit"`` attribute, or ``None`` if the attribute is
+            absent.
+
+        Raises
+        ------
+        KeyError
+            If ``name`` is not present in the dataset.
+        """
         if name not in self.ds.data_vars:
             raise KeyError(f"Channel {name!r} not found. Available: {self.channels}")
         return self.ds[name].attrs.get("unit")
 
     def filter_by_group(self, group: str) -> list[str]:
+        """Return channel names whose ``"group"`` attribute matches *group*.
+
+        Parameters
+        ----------
+        group : str
+            Group label to filter on (e.g. ``"temperature"``, ``"flow"``).
+
+        Returns
+        -------
+        list of str
+            Channel names (possibly empty) whose ``attrs["group"] == group``.
+        """
         return [
             name for name, da in self.ds.data_vars.items()
             if da.attrs.get("group") == group
@@ -118,12 +223,46 @@ class LVData(BaseModel):
     # ----------------------------------------------------------------
 
     def select_channels(self, channels: List[str]) -> "LVData":
+        """Return a new ``LVData`` containing only the specified channels.
+
+        Parameters
+        ----------
+        channels : list of str
+            Channel names to keep.
+
+        Returns
+        -------
+        LVData
+            New instance whose dataset is restricted to *channels*.
+
+        Raises
+        ------
+        KeyError
+            If any name in *channels* is not present in the dataset.
+        """
         missing = [c for c in channels if c not in self.ds.data_vars]
         if missing:
             raise KeyError(f"Channel(s) not found: {missing}. Available: {self.channels}")
         return LVData(ds=self.ds[channels], metadata=self.metadata)
 
     def select_group(self, group: str) -> "LVData":
+        """Return a new ``LVData`` containing only channels belonging to *group*.
+
+        Parameters
+        ----------
+        group : str
+            Group label to select (e.g. ``"flow"``, ``"pressure"``).
+
+        Returns
+        -------
+        LVData
+            New instance restricted to channels in the given group.
+
+        Raises
+        ------
+        ValueError
+            If no channels belong to *group*.
+        """
         names = self.filter_by_group(group)
         if not names:
             raise ValueError(f"No channels in group {group!r}")
@@ -134,6 +273,24 @@ class LVData(BaseModel):
         min_s: Optional[float] = None,
         max_s: Optional[float] = None,
     ) -> "LVData":
+        """Return a new ``LVData`` sliced to a time-on-stream window.
+
+        Parameters
+        ----------
+        min_s : float, optional
+            Lower bound of ``tos`` in seconds (inclusive).  If the value
+            exceeds the data range, the first sample is used and a warning
+            is emitted.
+        max_s : float, optional
+            Upper bound of ``tos`` in seconds (inclusive).  If the value is
+            below the data range, the last sample is used and a warning is
+            emitted.
+
+        Returns
+        -------
+        LVData
+            New instance containing only samples within ``[min_s, max_s]``.
+        """
         ds = self.ds
         tos = ds.coords["tos"].values
         if min_s is not None:
@@ -158,6 +315,26 @@ class LVData(BaseModel):
         step_s: float,
         method: Literal["mean", "median", "first", "last"] = "mean",
     ) -> "LVData":
+        """Bin samples into equal-width time intervals and aggregate.
+
+        Parameters
+        ----------
+        step_s : float
+            Bin width in seconds.
+        method : {"mean", "median", "first", "last"}, optional
+            Aggregation function applied within each bin (default is
+            ``"mean"``).
+
+        Returns
+        -------
+        LVData
+            New instance on a uniform ``tos`` grid with bin-centre coordinates.
+
+        Raises
+        ------
+        ValueError
+            If *step_s* is not positive.
+        """
         if step_s <= 0:
             raise ValueError("step_s must be > 0")
 
@@ -184,6 +361,23 @@ class LVData(BaseModel):
         )
 
     def smooth_moving(self, window_size: int = 5) -> "LVData":
+        """Apply a uniform moving-average filter to every channel.
+
+        Parameters
+        ----------
+        window_size : int, optional
+            Number of samples in the rectangular kernel (default is ``5``).
+
+        Returns
+        -------
+        LVData
+            New instance with smoothed channel values; ``tos`` is unchanged.
+
+        Raises
+        ------
+        ValueError
+            If *window_size* is less than 1.
+        """
         if window_size < 1:
             raise ValueError("window_size must be >= 1")
         kernel = np.ones(window_size) / window_size
@@ -197,17 +391,50 @@ class LVData(BaseModel):
     # ----------------------------------------------------------------
 
     def to_dataframe(self, with_timestamps: bool = False) -> pd.DataFrame:
+        """Convert the dataset to a ``pandas.DataFrame`` indexed by ``tos``.
+
+        Parameters
+        ----------
+        with_timestamps : bool, optional
+            If ``True`` and ``tos_start`` is available, a ``"timestamp"``
+            column is prepended with absolute datetimes (default is ``False``).
+
+        Returns
+        -------
+        pandas.DataFrame
+            DataFrame with one column per channel, indexed by elapsed seconds.
+        """
         df = self.ds.to_dataframe()
         if with_timestamps and self.timestamps is not None:
             df.insert(0, "timestamp", self.timestamps)
         return df
 
     def to_csv(self, filepath: Union[str, Path]) -> None:
+        """Write the dataset to a CSV file.
+
+        If ``tos_start`` is available, an absolute ``"timestamp"`` column is
+        included automatically.
+
+        Parameters
+        ----------
+        filepath : str or pathlib.Path
+            Destination file path.
+        """
         filepath = Path(filepath)
         self.to_dataframe(with_timestamps=self.tos_start is not None).to_csv(filepath)
         logger.debug("Saved CSV → %s", filepath)
 
     def to_netcdf(self, filepath: Union[str, Path]) -> None:
+        """Persist the dataset to a NetCDF file.
+
+        ``tos_start`` is stored in ``ds.attrs`` (via ``metadata``) and
+        round-trips automatically on reload.
+
+        Parameters
+        ----------
+        filepath : str or pathlib.Path
+            Destination file path.
+        """
         # tos_start in ds.attrs (via metadata) round-trips automatically
         self.ds.to_netcdf(filepath)
         logger.debug("Saved NetCDF → %s", filepath)
@@ -225,6 +452,41 @@ class LVData(BaseModel):
         channel_meta: Optional[dict[str, dict[str, Any]]] = None,
         metadata: Optional[dict[str, Any]] = None,
     ) -> "LVData":
+        """Construct an ``LVData`` from a ``pandas.DataFrame``.
+
+        The ``tos`` coordinate is computed as elapsed seconds from
+        *tos_start* (or the first timestamp when omitted).  Timezone
+        awareness is reconciled automatically between the timestamp column
+        and *tos_start*.
+
+        Parameters
+        ----------
+        df : pandas.DataFrame
+            Source dataframe.  Must contain a datetime-parseable column
+            named *timestamp_col*.
+        timestamp_col : str, optional
+            Name of the column holding absolute timestamps (default is
+            ``"timestamp"``).
+        tos_start : pandas.Timestamp, optional
+            Reference time for computing ``tos``.  Defaults to the first
+            timestamp in the column.
+        channel_meta : dict, optional
+            Mapping of channel name to attribute dict (e.g.
+            ``{"T": {"unit": "K", "group": "temperature"}}``).
+        metadata : dict, optional
+            Additional provenance key/value pairs stored in ``self.metadata``
+            and ``ds.attrs``.
+
+        Returns
+        -------
+        LVData
+            New instance built from *df*.
+
+        Raises
+        ------
+        ValueError
+            If *timestamp_col* is not a column of *df*.
+        """
         if timestamp_col not in df.columns:
             raise ValueError(f"Column {timestamp_col!r} not found in dataframe")
 
@@ -279,6 +541,18 @@ class LVData(BaseModel):
 
     @classmethod
     def from_netcdf(cls, filepath: Union[str, Path]) -> "LVData":
+        """Load an ``LVData`` from a NetCDF file previously saved with ``to_netcdf``.
+
+        Parameters
+        ----------
+        filepath : str or pathlib.Path
+            Path to the NetCDF file.
+
+        Returns
+        -------
+        LVData
+            Reconstructed instance.
+        """
         ds = xr.open_dataset(filepath)
         return cls(ds=ds, metadata=dict(ds.attrs))
 
@@ -288,7 +562,22 @@ class LVData(BaseModel):
         filepath: Union[str, Path],
         tos_start: Optional[pd.Timestamp] = None,
     ) -> "LVData":
-        """Parse a LabView export from building 67, box 5 (high-pressure setup)."""
+        """Parse a LabView export from building 67, box 5 (high-pressure setup).
+
+        Parameters
+        ----------
+        filepath : str or pathlib.Path
+            Path to a single tab-separated ``.txt`` file or a directory
+            containing multiple such files to be concatenated.
+        tos_start : pandas.Timestamp, optional
+            Reference time for computing ``tos``.  Defaults to the timestamp
+            of the first data row.
+
+        Returns
+        -------
+        LVData
+            New instance populated with all channels found in the file(s).
+        """
         df, channel_meta, file_meta = read_b67box5(
             filepath,
             tos_start=None,

@@ -11,6 +11,26 @@ logger = logging.getLogger(__name__)
 
 
 class TGAData(BaseModel):
+    """Pydantic model for thermogravimetric analysis (TGA) data.
+
+    Wraps paired temperature and mass arrays and provides immutable
+    processing methods.  All transformations return a new ``TGAData``
+    instance rather than mutating ``self``.
+
+    Parameters
+    ----------
+    temperature : ndarray of float64
+        Temperature values in Kelvin.
+    mass : ndarray of float64
+        Sample mass values in milligrams.
+    mass_init : float or int, optional
+        Initial sample mass in milligrams used to compute
+        :attr:`mass_fraction`.  When ``None`` the fraction is zero.
+    baseline : TGAData, optional
+        Baseline dataset stored for provenance after :meth:`correct` is
+        called.
+    """
+
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
     temperature: npt.NDArray[np.float64] = Field(
@@ -32,16 +52,39 @@ class TGAData(BaseModel):
 
     @property
     def mass_fraction(self) -> npt.NDArray[np.float64]:
+        """Mass normalised by the initial sample mass.
+
+        Returns
+        -------
+        ndarray of float64
+            Element-wise ``mass / mass_init``.  Returns an array of
+            zeros when :attr:`mass_init` is ``None``.
+        """
         if self.mass_init is None:
             return np.zeros_like(self.mass)
         return self.mass / self.mass_init
 
     @property
     def derivative(self) -> npt.NDArray[np.float64]:
+        """Numerical derivative of mass with respect to temperature (dm/dT).
+
+        Returns
+        -------
+        ndarray of float64
+            Gradient of :attr:`mass` along :attr:`temperature` in mg K⁻¹.
+        """
         return np.gradient(self.mass, self.temperature)
 
     @property
     def derivative_fraction(self) -> npt.NDArray[np.float64]:
+        """Numerical derivative of mass fraction with respect to temperature.
+
+        Returns
+        -------
+        ndarray of float64
+            Gradient of :attr:`mass_fraction` along :attr:`temperature`
+            in K⁻¹.
+        """
         return np.gradient(self.mass_fraction, self.temperature)
 
     # ----------------------------------------------------------------------
@@ -49,6 +92,29 @@ class TGAData(BaseModel):
     # ----------------------------------------------------------------------
 
     def cut_front(self, index: int | None = None, temperature: float | None = None) -> "TGAData":
+        """Remove data points before a given index or temperature.
+
+        Exactly one of ``index`` or ``temperature`` must be supplied.
+
+        Parameters
+        ----------
+        index : int, optional
+            Integer array index; all points at positions ``>= index``
+            are kept.
+        temperature : float, optional
+            Temperature threshold in Kelvin; all points with
+            ``temperature >= threshold`` are kept.
+
+        Returns
+        -------
+        TGAData
+            New instance containing only the retained data points.
+
+        Raises
+        ------
+        ValueError
+            When neither ``index`` nor ``temperature`` is provided.
+        """
         if index is not None:
             return TGAData(
                 temperature=self.temperature[index:],
@@ -67,6 +133,29 @@ class TGAData(BaseModel):
         raise ValueError("Either index or temperature must be provided.")
 
     def cut_back(self, index: int | None = None, temperature: float | None = None) -> "TGAData":
+        """Remove data points after a given index or temperature.
+
+        Exactly one of ``index`` or ``temperature`` must be supplied.
+
+        Parameters
+        ----------
+        index : int, optional
+            Integer array index; all points at positions ``< index``
+            are kept.
+        temperature : float, optional
+            Temperature threshold in Kelvin; all points with
+            ``temperature <= threshold`` are kept.
+
+        Returns
+        -------
+        TGAData
+            New instance containing only the retained data points.
+
+        Raises
+        ------
+        ValueError
+            When neither ``index`` nor ``temperature`` is provided.
+        """
         if index is not None:
             return TGAData(
                 temperature=self.temperature[:index],
@@ -85,6 +174,22 @@ class TGAData(BaseModel):
         raise ValueError("Either index or temperature must be provided.")
 
     def correct(self, baseline: "TGAData") -> "TGAData":
+        """Subtract a baseline measurement interpolated onto the sample temperature axis.
+
+        The baseline mass is linearly interpolated to match
+        :attr:`temperature` before subtraction.
+
+        Parameters
+        ----------
+        baseline : TGAData
+            Blank or reference measurement to subtract.
+
+        Returns
+        -------
+        TGAData
+            New instance with corrected mass and ``baseline`` stored
+            for provenance.
+        """
         corrected_mass = self.mass - np.interp(
             self.temperature, baseline.temperature, baseline.mass
         )
@@ -97,6 +202,22 @@ class TGAData(BaseModel):
         )
 
     def smooth(self, window_length: int = 11, polyorder: int = 2) -> "TGAData":
+        """Smooth the mass signal with a Savitzky-Golay filter.
+
+        Parameters
+        ----------
+        window_length : int, optional
+            Length of the filter window in number of data points
+            (default is 11).
+        polyorder : int, optional
+            Polynomial order used to fit within each window
+            (default is 2).
+
+        Returns
+        -------
+        TGAData
+            New instance with the smoothed mass array.
+        """
         from scipy.signal import savgol_filter
         return TGAData(
             temperature=self.temperature.copy(),
@@ -116,6 +237,24 @@ class TGAData(BaseModel):
         baseline_path: Optional[str | Path] = None,
         in_kelvin: bool = True,
     ) -> "TGAData":
+        """Load TGA data from a Mettler Toledo E2290 ``.txt`` export.
+
+        Parameters
+        ----------
+        path : str or Path
+            Path to the E2290 ``.txt`` export file.
+        baseline_path : str or Path, optional
+            Path to a blank/reference E2290 file.  When provided the
+            baseline is automatically subtracted via :meth:`correct`.
+        in_kelvin : bool, optional
+            When ``True`` (default) temperature values are converted from
+            °C to K by adding 273.15.
+
+        Returns
+        -------
+        TGAData
+            Parsed (and optionally baseline-corrected) dataset.
+        """
         from phd_parser.tga.e2290 import read_export
 
         path = Path(path)

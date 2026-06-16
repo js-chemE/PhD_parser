@@ -20,6 +20,42 @@ pytest tests/raman/test_core.py::test_function_name
 
 The project uses `uv` for dependency management. The lockfile is `uv.lock`; add new dependencies via `uv add <package>`.
 
+## Docstrings
+
+All public classes, methods, functions, and properties must have a NumPy/SciPy-style docstring:
+
+```python
+def example(param1: int, param2: str = "default") -> list:
+    """Short one-line summary.
+
+    Optional extended description (only when non-obvious).
+
+    Parameters
+    ----------
+    param1 : int
+        Description of param1.
+    param2 : str, optional
+        Description of param2 (default is "default").
+
+    Returns
+    -------
+    list
+        Description of the return value.
+
+    Raises
+    ------
+    ValueError
+        When and why this is raised.
+    """
+```
+
+Rules:
+- One-line summary on the opening `"""` line.
+- Skip the `Parameters` section for zero-argument methods/properties.
+- Skip the `Returns` section for `None`-returning methods.
+- `Raises` only when the function actually raises.
+- Private helpers (leading `_`) do not need docstrings.
+
 ## Architecture
 
 **PhD_parser** is a data-parsing library for experimental equipment used in catalysis research (Urakawa group, TU Delft). It is under active development and the API changes frequently.

@@ -53,6 +53,13 @@ class ScanType(IntEnum):
 
 
 class UnitType(IntEnum):
+    """Physical unit codes used in Renishaw WDF files.
+
+    Each member maps to a numeric identifier stored in the binary WDF header.
+    Helper methods convert a member to a human-readable label, an SI
+    conversion factor, or a physical dimension string.
+    """
+
     Arbitrary        = 0
     RamanShift       = 1   # cm-1
     Wavelength       = 2   # nm
@@ -81,22 +88,48 @@ class UnitType(IntEnum):
     Microseconds     = 25
 
     def label(self):
+        """Return a human-readable unit label string.
+
+        Returns
+        -------
+        str
+            Unicode unit label (e.g. ``"cm⁻¹"``, ``"nm"``, ``"K"``).
+            Falls back to the enum member name for unmapped values.
+        """
         _map = {
             1: "cm⁻¹", 2: "nm", 3: "nm", 4: "eV", 5: "µm",
             8: "mm", 9: "m", 10: "K", 11: "Pa", 12: "s",
             13: "ms", 19: "°", 20: "rad", 21: "°C",
         }
         return _map.get(self.value, self.name)
-    
+
     def si_factor(self):
+        """Return the multiplicative factor that converts this unit to SI.
+
+        Returns
+        -------
+        float
+            Factor such that ``value_in_unit * si_factor()`` gives the value
+            in the corresponding SI base unit.  Returns ``1`` for unmapped
+            or dimensionless units.
+        """
         _map = {
             1: 1e2, 2: 1e-9, 3: 1e-9, 4: 1.60218e-19, 5: 1e-6,
             8: 1e-3, 9: 1, 10: 1, 11: 1, 12: 1,
             13: 1e-3, 19: 1, 20: 1, 21: 1,
         }
         return _map.get(self.value, 1)
-    
+
     def dimension(self):
+        """Return the physical dimension string for this unit.
+
+        Returns
+        -------
+        str
+            Dimension name (e.g. ``"length⁻¹"``, ``"energy"``,
+            ``"temperature"``).  Falls back to the enum member name for
+            unmapped values.
+        """
         _map = {
             1: "length⁻¹", 2: "length", 3: "length", 4: "energy", 5: "length",
             8: "length", 9: "length", 10: "temperature", 11: "pressure", 12: "time",
@@ -165,7 +198,13 @@ class _Off(IntEnum):
 
 @dataclass
 class WDFResult(BaseException):
-    """Container for all data extracted from a .wdf file."""
+    """Container for all data extracted from a Renishaw ``.wdf`` file.
+
+    Populated by :func:`read_export_wdf`.  Fields cover core spectral data,
+    measurement geometry, instrumental parameters, optional stage coordinates,
+    and provenance metadata.
+    """
+
     # Core spectral data
     wavenumber:       np.ndarray = field(default_factory=lambda: np.array([]))
     data:             np.ndarray = field(default_factory=lambda: np.array([]))
@@ -420,6 +459,31 @@ def _reshape_data(result: WDFResult):
 # =============================================================================
 
 def read_export_wdf(filename: str | Path) -> WDFResult:
+    """Parse a Renishaw WiRe binary WDF file and return all extracted data.
+
+    Reads the WDF1 header, XLST (wavenumber axis), DATA, and optional ORGN
+    (stage coordinates / timestamps) and WMAP (map geometry) blocks.  The
+    flat data array is reshaped to ``(height, width, n_spectral)`` for maps
+    or ``(n_spectra, n_spectral)`` for series before being returned.
+
+    Parameters
+    ----------
+    filename : str or pathlib.Path
+        Path to the ``.wdf`` binary file.
+
+    Returns
+    -------
+    WDFResult
+        Dataclass populated with the spectral data, measurement geometry,
+        instrumental parameters, optional stage coordinates, and metadata
+        parsed from the file.
+
+    Raises
+    ------
+    ValueError
+        When one or more of the required blocks (``WDF1``, ``DATA``,
+        ``XLST``) are absent from the file.
+    """
     if not isinstance(filename, Path):
         filename = Path(filename)
 
@@ -448,12 +512,31 @@ def read_export_wdf(filename: str | Path) -> WDFResult:
 # ================================================
 
 def read_export_txt(file_path: str | Path) -> Dict[str, Any]:
-    """
-    Main function to read and parse the Renishaw export file.
-    Returns a dictionary with 'meta' and 'data' keys.
+    """Parse a Renishaw WiRe plain-text export file.
+
+    The first row of the file is skipped (header); the remaining rows are
+    expected to contain two tab-separated columns: Raman shift in cm⁻¹ and
+    intensity.
+
+    Parameters
+    ----------
+    file_path : str or pathlib.Path
+        Path to the Renishaw ``.txt`` export file.
+
+    Returns
+    -------
+    dict
+        Dictionary with two keys:
+
+        ``"data"`` : pandas.DataFrame
+            DataFrame with columns ``"wavenumber"`` (Raman shift in cm⁻¹,
+            float) and ``"intensity"`` (float).
+        ``"meta"`` : dict
+            Provenance metadata containing ``"instrument"``, ``"folder"``,
+            and ``"filename"``.
     """
     data = np.loadtxt(file_path, dtype=str, encoding="utf-8", skiprows=1)
-    
+
     df = pd.DataFrame(data[1:], columns=["wavenumber", "intensity"])
     df["wavenumber"] = df["wavenumber"].astype(float, errors="ignore") # this is actually raman shift in cm-1
     df["intensity"] = df["intensity"].astype(float, errors="ignore")
