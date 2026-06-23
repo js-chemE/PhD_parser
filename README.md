@@ -268,7 +268,7 @@ Low-level parser in `phd_parser.tga.e2290`:
 
 ### Infrared
 
-The `IRData` class is the core container for infrared spectroscopy data. It wraps an `xarray.Dataset` (`ds`) with wavenumbers stored in SI units (m⁻¹) internally. The primary spectrum is `ds["data"]`; an optional `ds["background"]` (always single-beam, 1-D) is stored alongside it. All metadata lives in `ds.attrs`. Two data layouts are supported: `(wavenumber,)` for a single spectrum and `(scan, wavenumber)` for a time series, with an optional `tos` coordinate (seconds) on the `scan` dimension. Absolute acquisition timestamps are reconstructed on demand from `tos_start + tos` and are never stored as a coordinate.
+The `IRData` class is the core container for infrared spectroscopy data. It wraps an `xarray.Dataset` (`ds`) with wavenumbers stored in SI units (m⁻¹) internally. The primary spectrum is `ds["data"]`; an optional `ds["background"]` (always single-beam, 1-D) is stored alongside it, and an optional `ds["baseline"]` (same shape as `data`) holds the cumulative curve removed by baseline correction. All metadata lives in `ds.attrs`. Two data layouts are supported: `(wavenumber,)` for a single spectrum and `(scan, wavenumber)` for a time series, with an optional `tos` coordinate (seconds) on the `scan` dimension. Absolute acquisition timestamps are reconstructed on demand from `tos_start + tos` and are never stored as a coordinate.
 
 Every spectrum carries a `data_type` attribute that records the physical representation:
 
@@ -293,7 +293,9 @@ Every spectrum carries a `data_type` attribute that records the physical represe
 - Cached unit conversions: `wavelength`, `wavelength_nm`, `wavelength_mum`, `frequency`, `energy`, `energy_eV`, `energy_kJ_per_mol`
 - Time: `tos`, `tos_start`, `timestamps`
 - Background: `has_background`, `background` (numpy array), `background_data_type`
+- Baseline: `has_baseline`, `baseline` (numpy array, same shape as `values`), `data_unbaselined` (`values + baseline`, i.e. the spectrum before baseline correction)
 - Scan retrieval: `get_scan`, `get_scan_by_tos`, `get_scan_by_tos_average`, `get_evolution`
+- Baseline retrieval: `get_baseline_scan`, `get_baseline_by_tos`
 
 **Background management (all immutable — return a new `IRData`)**
 
@@ -305,6 +307,17 @@ The background is always stored as `single_beam`. When a background is already s
 - `set_background(background, data_type)` — force-assign a background without recalculating values (drops any existing background first)
 - `del_background()` — remove the background without changing data values
 
+**Baseline management (all immutable — return a new `IRData`)**
+
+`correct_offset`, `correct_pchip`, and `correct_baseline` don't just subtract a curve — they accumulate it into `ds["baseline"]`, so the pre-correction spectrum is never lost.
+
+- `data_unbaselined` — the spectrum as it was before any baseline correction (`values + baseline`)
+- `unbaseline()` — returns a new `IRData` with `data` set back to `data_unbaselined` and the baseline cleared, so the regular getters (`get_scan`, `get_scan_by_tos`, `get_evolution`, …) transparently return pre-correction values, e.g. `ir.unbaseline().get_scan_by_tos(3600)`
+- `get_baseline_scan(scan_index)` / `get_baseline_by_tos(target_tos)` — fetch the stored baseline curve itself, mirroring `get_scan` / `get_scan_by_tos`
+- `del_baseline()` — remove the stored baseline without changing data values
+
+A stored baseline is dropped automatically (with a logger warning) whenever it would no longer be valid: switching `data_type` (`to_absorbance()`, etc.), switching to a different background, or combining two spectra with `+`/`-`. Re-run `correct_baseline()` afterward if you still need it.
+
 **Type conversion (all immutable — return a new `IRData`)**
 
 Conversions follow experiment type: transmission-side (`single_beam → transmittance → absorbance`) and reflection-side (`single_beam → reflectance → log_1_r → kubelka_munk`) are distinct. `absorbance → reflectance` is supported for the common case where OMNIC stores DRIFTS data labelled as absorbance.
@@ -315,10 +328,10 @@ Conversions follow experiment type: transmission-side (`single_beam → transmit
 - `to_log_1_r()` — from `single_beam` (needs background), `reflectance`, `absorbance`, or `kubelka_munk`
 - `to_kubelka_munk()` — from any reflectance-reachable type; routes through `to_reflectance()` internally
 
-**Processing (all immutable — return a new `IRData`; background is propagated automatically)**
+**Processing (all immutable — return a new `IRData`; background and baseline are propagated automatically)**
 - Selection: `sort`, `select_by_idx`, `select_by_tos`, `select_wavenumber_range`, `select_tos_range`, `assign_tos_start`
 - Smoothing: `smooth_savgol`, `smooth_gaussian`, `smooth_moving`
-- Baseline correction: `correct_offset`, `correct_pchip`, `correct_baseline`, `reapply_baseline`
+- Baseline correction: `correct_offset`, `correct_pchip`, `correct_baseline`, `reapply_baseline`, `unbaseline`, `del_baseline`
 - Averaging: `average_scans`, `average_scans_by_tos`
 - Normalisation: `normalise_max`, `normalise_integral`, `normalise_reference`, `normalise_reference_scan`, `normalise_reference_by_tos`, `normalise_value_range`, `normalise_value`
 - Arithmetic: `+`, `-` between compatible `IRData` objects
@@ -373,6 +386,12 @@ ir = (
     .correct_baseline(anchor_range_cm, control_points_cm)            # PCHIP baseline correction
     .select_wavenumber_range(1000, 3900)                             # discard noisy edges
 )
+
+# --- Inspect the baseline correction itself ---
+tos = 1 * 3600
+spectrum_uncorrected = ir.unbaseline().get_scan_by_tos(tos)   # spectrum before correction
+baseline_curve = ir.get_baseline_by_tos(tos)                  # the curve that was subtracted
+# spectrum_uncorrected - baseline_curve == ir.get_scan_by_tos(tos)
 
 # Inspect a single averaged scan at 100 min TOS
 spectrum = ir.get_scan_by_tos_average(100 * 60, direction="center", number_of_scans=10)

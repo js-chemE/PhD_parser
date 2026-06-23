@@ -41,8 +41,9 @@ class IRData(BaseModel):
         Dataset containing a ``"data"`` variable with dims ``('wavenumber',)``
         for a single spectrum or ``('scan', 'wavenumber')`` for a time series.
         Wavenumber coordinate is in m⁻¹. An optional ``'tos'`` coordinate
-        (elapsed seconds, attached to the ``scan`` dim) and a ``'background'``
-        variable (1-D, single_beam) may also be present.  Dataset-level attrs
+        (elapsed seconds, attached to the ``scan`` dim), a ``'background'``
+        variable (1-D, single_beam), and a ``'baseline'`` variable (same dims
+        as ``'data'``) may also be present.  Dataset-level attrs
         hold ``data_type``, ``wavenumber_unit``, ``tos_start`` (ISO string),
         and provenance keys written by processing methods.
     """
@@ -87,6 +88,8 @@ class IRData(BaseModel):
             raise ValueError("2-D Dataset 'data' variable must have dims ('scan', 'wavenumber')")
         if "background" in v:
             cls._validate_background_var(v)
+        if "baseline" in v:
+            cls._validate_baseline_var(v)
         return v
 
     @classmethod
@@ -98,6 +101,15 @@ class IRData(BaseModel):
             raise ValueError(f"Background variable must be 1-D, got {bg.ndim}-D")
         if not np.allclose(bg.coords["wavenumber"].values, ds["data"].coords["wavenumber"].values):
             raise ValueError("Background wavenumber axis does not match data wavenumber axis")
+
+    @classmethod
+    def _validate_baseline_var(cls, ds: xr.Dataset) -> None:
+        bl = ds["baseline"]
+        data = ds["data"]
+        if bl.dims != data.dims:
+            raise ValueError(f"Baseline variable dims {bl.dims} must match data dims {data.dims}")
+        if bl.shape != data.shape:
+            raise ValueError(f"Baseline variable shape {bl.shape} must match data shape {data.shape}")
 
     @model_validator(mode="after")
     def validate_attrs(self) -> "IRData":
@@ -248,6 +260,45 @@ class IRData(BaseModel):
         return self.ds["background"].attrs.get("data_type")
 
     @property
+    def has_baseline(self) -> bool:
+        """Whether a baseline curve is stored in the dataset.
+
+        Returns
+        -------
+        bool
+            ``True`` if ``ds['baseline']`` exists.
+        """
+        return "baseline" in self.ds
+
+    @property
+    def baseline(self) -> Optional[npt.NDArray]:
+        """Stored baseline curve, in the units of the current ``data_type``.
+
+        Returns
+        -------
+        numpy.ndarray or None
+            Array with the same shape as ``values``, or ``None`` if no
+            baseline has been subtracted.
+        """
+        if "baseline" not in self.ds:
+            return None
+        return self.ds["baseline"].values
+
+    @property
+    def data_unbaselined(self) -> npt.NDArray:
+        """Spectral values before baseline subtraction (``data + baseline``).
+
+        Returns
+        -------
+        numpy.ndarray
+            Array with the same shape as ``values``.  Equal to ``values``
+            unchanged if no baseline has been subtracted.
+        """
+        if not self.has_baseline:
+            return self.values.copy()
+        return self.values + self.baseline
+
+    @property
     def timestamps(self) -> Optional[pd.DatetimeIndex]:
         """Absolute datetime of each scan derived from ``tos`` and ``tos_start``.
 
@@ -380,6 +431,36 @@ class IRData(BaseModel):
             )
         return self.ds["data"].isel(scan=scan_index).values
 
+    def get_baseline_scan(self, scan_index: int) -> npt.NDArray:
+        """Return the stored baseline curve of a single scan by integer index.
+
+        Parameters
+        ----------
+        scan_index : int
+            Zero-based index of the scan to retrieve.
+
+        Returns
+        -------
+        numpy.ndarray
+            1-D array of shape ``(n_wavenumber,)``.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D (no scan dimension) or if no baseline is stored.
+        IndexError
+            If ``scan_index`` is outside ``[0, n_scan)``.
+        """
+        if self.ndim == 1:
+            raise ValueError("get_baseline_scan requires 2-D data")
+        if not self.has_baseline:
+            raise ValueError("No baseline has been stored; run correct_baseline() first.")
+        if not (0 <= scan_index < self.shape[0]):
+            raise IndexError(
+                f"scan_index {scan_index} out of bounds for {self.shape[0]} scans"
+            )
+        return self.ds["baseline"].isel(scan=scan_index).values
+
     def get_scan_by_tos(
         self,
         target_tos: Union[float, Sequence[float]],
@@ -416,23 +497,48 @@ class IRData(BaseModel):
             raise ValueError("get_scan_by_tos requires 2-D data")
         if self.tos is None:
             raise ValueError("get_scan_by_tos requires 'tos' coordinate")
+        return self._select_var_by_tos(self.ds["data"], target_tos, method, tolerance_seconds)
 
-        scalar_input = np.ndim(target_tos) == 0
-        targets = [float(target_tos)] if scalar_input else [float(t) for t in target_tos]
+    def get_baseline_by_tos(
+        self,
+        target_tos: Union[float, Sequence[float]],
+        method: Literal["nearest", "linear"] = "nearest",
+        tolerance_seconds: Optional[float] = 10,
+    ) -> Union[npt.NDArray]:
+        """Return the stored baseline curve(s) nearest to one or more target elapsed-time values.
 
-        def _fetch_one(t: float) -> npt.NDArray:
-            if tolerance_seconds is not None:
-                nearest_dist = float(np.abs(self.tos - t).min())
-                if nearest_dist > tolerance_seconds:
-                    raise ValueError(
-                        f"Requested tos {t:.1f}s is {nearest_dist:.1f}s from the nearest scan "
-                        f"(tolerance: {tolerance_seconds:.1f}s)"
-                    )
-            return self.ds["data"].sel(tos=t, method=method).values
+        Parameters
+        ----------
+        target_tos : float or sequence of float
+            Target elapsed time(s) in seconds.
+        method : {'nearest', 'linear'}, optional
+            Interpolation method passed to ``xarray.DataArray.sel``
+            (default is ``'nearest'``).
+        tolerance_seconds : float or None, optional
+            Maximum allowed distance between a target and the nearest scan.
+            Raises ``ValueError`` when exceeded.  Pass ``None`` to disable
+            (default is ``10``).
 
-        results = np.vstack([_fetch_one(t) for t in targets])
-        return results[0] if scalar_input else results
+        Returns
+        -------
+        numpy.ndarray
+            Shape ``(n_wavenumber,)`` for a scalar target or
+            ``(n_targets, n_wavenumber)`` for a sequence.
 
+        Raises
+        ------
+        ValueError
+            If the data are 1-D, if no baseline is stored, if no ``'tos'``
+            coordinate is present, or if any target exceeds
+            ``tolerance_seconds`` from the nearest scan.
+        """
+        if self.ndim == 1:
+            raise ValueError("get_baseline_by_tos requires 2-D data")
+        if not self.has_baseline:
+            raise ValueError("No baseline has been stored; run correct_baseline() first.")
+        if self.tos is None:
+            raise ValueError("get_baseline_by_tos requires 'tos' coordinate")
+        return self._select_var_by_tos(self.ds["baseline"], target_tos, method, tolerance_seconds)
 
     def get_scan_by_tos_average(
         self,
@@ -790,6 +896,41 @@ class IRData(BaseModel):
         return self._del_background()._set_background(bg_sb)
 
     # ----------------------------------------------------------------
+    # Immutable — baseline
+    # ----------------------------------------------------------------
+
+    def del_baseline(self) -> "IRData":
+        """Remove the stored baseline curve without changing data values.
+
+        Returns
+        -------
+        IRData
+            New instance with the ``'baseline'`` variable dropped.
+        """
+        return self._del_baseline()
+
+    def unbaseline(self) -> "IRData":
+        """Return a new instance with the baseline added back into ``data`` and dropped.
+
+        Lets the regular getters (``get_scan``, ``get_scan_by_tos``,
+        ``get_evolution``, ...) return pre-correction values, e.g.
+        ``ir.unbaseline().get_scan_by_tos(120)``.
+
+        Returns
+        -------
+        IRData
+            New instance with ``data`` equal to ``data_unbaselined`` and no
+            stored baseline.  Returns ``self`` unchanged if no baseline is
+            stored.
+        """
+        if not self.has_baseline:
+            return self
+        ds_new = self._build_ds(
+            self.wavenumber, self.data_unbaselined, tos=self.tos, attrs=dict(self.ds.attrs)
+        )
+        return IRData(ds=self._carry_background(ds_new))
+
+    # ----------------------------------------------------------------
     # Immutable — selection and sorting
     # ----------------------------------------------------------------
 
@@ -823,7 +964,7 @@ class IRData(BaseModel):
             tos=new_tos,
             attrs=attrs,
         )
-        return IRData(ds=self._carry_background(ds))
+        return IRData(ds=self._carry_baseline(self._carry_background(ds)))
 
     def sort(self, by: str | Sequence[str] = "wavenumber", ascending: bool = True) -> "IRData":
         """Return a new instance with coordinates sorted.
@@ -945,7 +1086,9 @@ class IRData(BaseModel):
             tos=da.coords["tos"].values if "tos" in da.coords else None,
             attrs=dict(self.ds.attrs),
         )
-        return IRData(ds=self._slice_background_to(ds_new))
+        ds_new = self._slice_background_to(ds_new)
+        ds_new = self._slice_baseline_to(ds_new)
+        return IRData(ds=ds_new)
 
     def select_tos_range(
         self,
@@ -974,28 +1117,24 @@ class IRData(BaseModel):
         if self.tos is None:
             raise ValueError("select_tos_range requires a 'tos' coordinate")
 
-        da = self.ds["data"]
+        # Operate on the whole Dataset so 'background' and 'baseline' (if present) are
+        # carried through the scan-axis selection automatically.
+        ds_new = self.ds
         if min_s is not None:
-            tos = da.coords["tos"].values
+            tos = ds_new.coords["tos"].values
             if not np.any(tos >= min_s):
                 min_s = tos[0]
                 logger.warning(f"min_s {min_s:.1f}s is greater than all 'tos' values; using min_s={min_s:.1f}s instead")
-            da = da.isel(scan=tos >= min_s)
+            ds_new = ds_new.isel(scan=tos >= min_s)
         if max_s is not None:
-            tos = da.coords["tos"].values
+            tos = ds_new.coords["tos"].values
             if not np.any(tos <= max_s):
                 max_s = tos[-1]
                 logger.warning(f"max_s {max_s:.1f}s is less than all 'tos' values; using max_s={max_s:.1f}s instead")
-            da = da.isel(scan=tos <= max_s)
+            ds_new = ds_new.isel(scan=tos <= max_s)
 
         # tos values are absolute elapsed seconds, so tos_start + tos[i] remains valid
-        ds_new = self._build_ds(
-            wavenumber_si=da.coords["wavenumber"].values,
-            values=da.values,
-            tos=da.coords["tos"].values,
-            attrs=dict(self.ds.attrs),
-        )
-        return IRData(ds=self._carry_background(ds_new))
+        return IRData(ds=ds_new)
 
     # ----------------------------------------------------------------
     # Immutable — smoothing
@@ -1018,13 +1157,15 @@ class IRData(BaseModel):
         """
         from scipy.signal import savgol_filter
 
-        if self.ndim == 1:
-            smoothed = savgol_filter(self.values, window_length, polyorder)
-        else:
-            smoothed = np.apply_along_axis(
-                lambda m: savgol_filter(m, window_length, polyorder), axis=1, arr=self.values
-            )
+        def _filter(arr: npt.NDArray) -> npt.NDArray:
+            if arr.ndim == 1:
+                return savgol_filter(arr, window_length, polyorder)
+            return np.apply_along_axis(lambda m: savgol_filter(m, window_length, polyorder), axis=1, arr=arr)
+
+        smoothed = _filter(self.values)
+        smoothed_baseline = _filter(self.baseline) if self.has_baseline else None
         ds_new = self._build_ds(self.wavenumber, smoothed, tos=self.tos, attrs=dict(self.ds.attrs))
+        ds_new = self._with_baseline(ds_new, smoothed_baseline)
         return IRData(ds=self._carry_background(ds_new))
 
     def smooth_gaussian(self, sigma_cm: float) -> "IRData":
@@ -1043,13 +1184,16 @@ class IRData(BaseModel):
         from scipy.ndimage import gaussian_filter1d
 
         sigma_si = sigma_cm * 100.0
-        if self.ndim == 1:
-            smoothed = gaussian_filter1d(self.values, sigma=sigma_si)
-        else:
-            smoothed = np.apply_along_axis(
-                lambda m: gaussian_filter1d(m, sigma=sigma_si), axis=1, arr=self.values
-            )
+
+        def _filter(arr: npt.NDArray) -> npt.NDArray:
+            if arr.ndim == 1:
+                return gaussian_filter1d(arr, sigma=sigma_si)
+            return np.apply_along_axis(lambda m: gaussian_filter1d(m, sigma=sigma_si), axis=1, arr=arr)
+
+        smoothed = _filter(self.values)
+        smoothed_baseline = _filter(self.baseline) if self.has_baseline else None
         ds_new = self._build_ds(self.wavenumber, smoothed, tos=self.tos, attrs=dict(self.ds.attrs))
+        ds_new = self._with_baseline(ds_new, smoothed_baseline)
         return IRData(ds=self._carry_background(ds_new))
 
     def smooth_moving(self, window_size: int = 5) -> "IRData":
@@ -1074,13 +1218,16 @@ class IRData(BaseModel):
             raise ValueError("window_size must be >= 1")
 
         kernel = np.ones(window_size) / window_size
-        if self.ndim == 1:
-            smoothed = np.convolve(self.values, kernel, mode="same")
-        else:
-            smoothed = np.apply_along_axis(
-                lambda m: np.convolve(m, kernel, mode="same"), axis=1, arr=self.values
-            )
+
+        def _filter(arr: npt.NDArray) -> npt.NDArray:
+            if arr.ndim == 1:
+                return np.convolve(arr, kernel, mode="same")
+            return np.apply_along_axis(lambda m: np.convolve(m, kernel, mode="same"), axis=1, arr=arr)
+
+        smoothed = _filter(self.values)
+        smoothed_baseline = _filter(self.baseline) if self.has_baseline else None
         ds_new = self._build_ds(self.wavenumber, smoothed, tos=self.tos, attrs=dict(self.ds.attrs))
+        ds_new = self._with_baseline(ds_new, smoothed_baseline)
         return IRData(ds=self._carry_background(ds_new))
 
     # ----------------------------------------------------------------
@@ -1102,7 +1249,9 @@ class IRData(BaseModel):
         Returns
         -------
         IRData
-            New instance with the offset removed.
+            New instance with the offset removed.  The subtracted offset is
+            added to (or stored as) ``ds['baseline']``; recover the
+            pre-correction values via ``data_unbaselined``.
 
         Raises
         ------
@@ -1120,12 +1269,17 @@ class IRData(BaseModel):
             )
 
         if self.ndim == 1:
-            corrected = self.values - self.values[mask].mean()
+            offset = self.values[mask].mean()
+            offset_arr = np.full_like(self.values, offset)
         else:
-            corrected = self.values - self.values[:, mask].mean(axis=1, keepdims=True)
+            offset = self.values[:, mask].mean(axis=1, keepdims=True)
+            offset_arr = np.broadcast_to(offset, self.values.shape).copy()
+        corrected = self.values - offset_arr
 
+        new_baseline = self._accumulate_baseline(offset_arr)
         new_attrs = {**self.ds.attrs, "baseline_anchor_range_cm": list(anchor_range_cm)}
         ds_new = self._build_ds(wn, corrected, tos=self.tos, attrs=new_attrs)
+        ds_new = self._with_baseline(ds_new, new_baseline)
         return IRData(ds=self._carry_background(ds_new))
 
     def correct_pchip(
@@ -1147,7 +1301,9 @@ class IRData(BaseModel):
         Returns
         -------
         IRData
-            New instance with the PCHIP baseline subtracted.
+            New instance with the PCHIP baseline subtracted.  The subtracted
+            curve is added to (or stored as) ``ds['baseline']``; recover the
+            pre-correction values via ``data_unbaselined``.
         """
         from scipy.interpolate import PchipInterpolator
 
@@ -1155,7 +1311,7 @@ class IRData(BaseModel):
         wn_cm = wn_si / 100.0
         cps = np.sort(np.asarray(control_points_cm, dtype=float))
 
-        def _subtract_pchip(spectrum_1d: np.ndarray) -> np.ndarray:
+        def _pchip_curve(spectrum_1d: np.ndarray) -> np.ndarray:
             x_knots = np.empty(len(cps))
             y_knots = np.empty(len(cps))
             for j, cp_cm in enumerate(cps):
@@ -1164,19 +1320,22 @@ class IRData(BaseModel):
                 hi = min(len(spectrum_1d), idx + point_avg_half_width + 1)
                 x_knots[j] = wn_cm[idx]
                 y_knots[j] = spectrum_1d[lo:hi].mean()
-            return spectrum_1d - PchipInterpolator(x_knots, y_knots)(wn_cm)
+            return PchipInterpolator(x_knots, y_knots)(wn_cm)
 
         if self.ndim == 1:
-            corrected = _subtract_pchip(self.values)
+            pchip_curve = _pchip_curve(self.values)
         else:
-            corrected = np.apply_along_axis(_subtract_pchip, axis=1, arr=self.values)
+            pchip_curve = np.apply_along_axis(_pchip_curve, axis=1, arr=self.values)
+        corrected = self.values - pchip_curve
 
+        new_baseline = self._accumulate_baseline(pchip_curve)
         new_attrs = {
             **self.ds.attrs,
             "baseline_pchip_control_points_cm": sorted(control_points_cm),
             "baseline_pchip_half_width": point_avg_half_width,
         }
         ds_new = self._build_ds(wn_si, corrected, tos=self.tos, attrs=new_attrs)
+        ds_new = self._with_baseline(ds_new, new_baseline)
         return IRData(ds=self._carry_background(ds_new))
 
     def correct_baseline(
@@ -1211,7 +1370,9 @@ class IRData(BaseModel):
         Returns
         -------
         IRData
-            New instance with the baseline removed.
+            New instance with the baseline removed.  The cumulative baseline
+            curve is stored in ``ds['baseline']``; recover the
+            pre-correction values via ``data_unbaselined``.
         """
         # Step 1: offset, step 2: PCHIP, step 3: optional second offset (mirrors DRIFTS behaviour)
         result = self.correct_offset(anchor_range_cm)
@@ -1238,7 +1399,17 @@ class IRData(BaseModel):
         anchor_range_cm = self.ds.attrs.get("baseline_anchor_range_cm")
         if anchor_range_cm is None:
             raise ValueError("No baseline parameters found in attributes.")
-        return self.correct_baseline(
+
+        # Restore the unbaselined values first so correct_baseline() isn't applied on top
+        # of the previously stored baseline (which would double-correct).
+        base = self
+        if self.has_baseline:
+            restored_ds = self._build_ds(
+                self.wavenumber, self.data_unbaselined, tos=self.tos, attrs=dict(self.ds.attrs)
+            )
+            base = IRData(ds=self._carry_background(restored_ds))
+
+        return base.correct_baseline(
             anchor_range_cm=tuple(anchor_range_cm),
             control_points_cm=self.ds.attrs.get("baseline_pchip_control_points_cm"),
             point_avg_half_width=self.ds.attrs.get("baseline_pchip_half_width", 0),
@@ -1287,6 +1458,13 @@ class IRData(BaseModel):
             .reshape(n_averaged, number_of_scans, -1)
             .mean(axis=1)
         )
+        new_baseline = None
+        if self.has_baseline:
+            new_baseline = (
+                self.baseline[: n_averaged * number_of_scans]
+                .reshape(n_averaged, number_of_scans, -1)
+                .mean(axis=1)
+            )
 
         new_tos = None
         if self.tos is not None:
@@ -1302,6 +1480,7 @@ class IRData(BaseModel):
 
         # tos values remain absolute elapsed seconds, so tos_start stays valid
         ds_new = self._build_ds(self.wavenumber, new_values, tos=new_tos, attrs=dict(self.ds.attrs))
+        ds_new = self._with_baseline(ds_new, new_baseline)
         return IRData(ds=self._carry_background(ds_new))
 
     def average_scans_by_tos(
@@ -1372,6 +1551,20 @@ class IRData(BaseModel):
 
         new_values = np.vstack(averaged_list)  # (n_targets, n_wavenumber)
 
+        new_baseline = None
+        if self.has_baseline:
+            baseline_ir = IRData(ds=self._build_ds(self.wavenumber, self.baseline, tos=self.tos, attrs={}))
+            bl_averaged = baseline_ir.get_scan_by_tos_average(
+                target_tos=target_tos,
+                method=method,
+                tolerance_seconds=tolerance_seconds,
+                number_of_scans=number_of_scans,
+                time_window=time_window,
+                direction=direction,
+            )
+            bl_list = [bl_averaged] if scalar_input else bl_averaged
+            new_baseline = np.vstack(bl_list)
+
         # Anchor tos: the nearest actual tos to each target becomes the new coord
         tos_values = self.tos
         new_tos = np.array(targets)
@@ -1394,6 +1587,7 @@ class IRData(BaseModel):
             tos=new_tos,
             attrs=new_attrs,
         )
+        ds_new = self._with_baseline(ds_new, new_baseline)
         return IRData(ds=self._carry_background(ds_new))
 
     # ----------------------------------------------------------------
@@ -1414,7 +1608,9 @@ class IRData(BaseModel):
             logger.warning("Maximum value is zero; returning original data without normalisation")
             return self
         new_values = self.values / max_val
+        new_baseline = self.baseline / max_val if self.has_baseline else None
         ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=dict(self.ds.attrs))
+        ds_new = self._with_baseline(ds_new, new_baseline)
         return IRData(ds=self._carry_background(ds_new))
 
     def normalise_integral(self) -> "IRData":
@@ -1431,7 +1627,9 @@ class IRData(BaseModel):
             logger.warning("Integral is zero for some scans; returning original data without normalisation")
             return self
         new_values = self.values / integral[..., np.newaxis]
+        new_baseline = self.baseline / integral[..., np.newaxis] if self.has_baseline else None
         ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=dict(self.ds.attrs))
+        ds_new = self._with_baseline(ds_new, new_baseline)
         return IRData(ds=self._carry_background(ds_new))
 
     def normalise_reference(self, reference: npt.NDArray) -> "IRData":
@@ -1463,7 +1661,9 @@ class IRData(BaseModel):
             return self
 
         new_values = self.values / reference
+        new_baseline = self.baseline / reference if self.has_baseline else None
         ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=dict(self.ds.attrs))
+        ds_new = self._with_baseline(ds_new, new_baseline)
         return IRData(ds=self._carry_background(ds_new))
 
     def normalise_reference_scan(self, scan_index: int) -> "IRData":
@@ -1544,8 +1744,13 @@ class IRData(BaseModel):
         if old_max == old_min:
             logger.warning("All values are the same; returning original data without normalisation")
             return self
-        new_values = (self.values - old_min) / (old_max - old_min) * (new_max - new_min) + new_min
+        scale = (new_max - new_min) / (old_max - old_min)
+        new_values = (self.values - old_min) * scale + new_min
+        # Baseline is scaled (not shifted) so that data + baseline transforms consistently:
+        # the shift applies once to data, while the additive baseline only needs rescaling.
+        new_baseline = self.baseline * scale if self.has_baseline else None
         ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=dict(self.ds.attrs))
+        ds_new = self._with_baseline(ds_new, new_baseline)
         return IRData(ds=self._carry_background(ds_new))
 
     def normalise_value(self, factor: float) -> "IRData":
@@ -1566,7 +1771,9 @@ class IRData(BaseModel):
             logger.warning("Normalisation factor is zero; returning original data without normalisation")
             return self
         new_values = self.values / factor
+        new_baseline = self.baseline / factor if self.has_baseline else None
         ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=dict(self.ds.attrs))
+        ds_new = self._with_baseline(ds_new, new_baseline)
         return IRData(ds=self._carry_background(ds_new))
 
     # ----------------------------------------------------------------
@@ -1574,6 +1781,9 @@ class IRData(BaseModel):
     # ----------------------------------------------------------------
 
     def _convert(self, new_values: npt.NDArray, new_data_type: IRDataType) -> "IRData":
+        self._warn_drop_baseline(
+            f"converting data_type to '{new_data_type}' invalidates the baseline curve"
+        )
         new_attrs = {**self.ds.attrs, "data_type": new_data_type}
         ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=new_attrs)
         return IRData(ds=self._carry_background(ds_new))
@@ -2460,7 +2670,8 @@ class IRData(BaseModel):
         tos_info = f", tos={self.tos[0]:.1f}–{self.tos[-1]:.1f}s" if self.tos is not None else ""
         ts_info = f", tos_start={self.tos_start}" if self.tos_start is not None else ""
         bg_info = f", background={self.background_data_type}" if self.has_background else ""
-        return f"IRData(data_type={self.data_type}, shape={self.shape}, wavenumber={wn_range}{tos_info}{ts_info}{bg_info})"
+        bl_info = ", baseline=stored" if self.has_baseline else ""
+        return f"IRData(data_type={self.data_type}, shape={self.shape}, wavenumber={wn_range}{tos_info}{ts_info}{bg_info}{bl_info})"
 
     def __len__(self) -> int:
         return self.ds.sizes.get("scan", 1)
@@ -2469,6 +2680,8 @@ class IRData(BaseModel):
         if not isinstance(other, IRData):
             return NotImplemented
         self._check_compatible(other, "add")
+        self._warn_drop_baseline("combining two IRData via __add__ invalidates either baseline")
+        other._warn_drop_baseline("combining two IRData via __add__ invalidates either baseline")
         new_attrs = {**self.ds.attrs, **other.ds.attrs}
         ds_new = self._build_ds(self.wavenumber, self.values + other.values, tos=self.tos, attrs=new_attrs)
         return IRData(ds=self._carry_background(ds_new))
@@ -2477,6 +2690,8 @@ class IRData(BaseModel):
         if not isinstance(other, IRData):
             return NotImplemented
         self._check_compatible(other, "subtract")
+        self._warn_drop_baseline("combining two IRData via __sub__ invalidates either baseline")
+        other._warn_drop_baseline("combining two IRData via __sub__ invalidates either baseline")
         new_attrs = {**self.ds.attrs, **other.ds.attrs}
         ds_new = self._build_ds(self.wavenumber, self.values - other.values, tos=self.tos, attrs=new_attrs)
         return IRData(ds=self._carry_background(ds_new))
@@ -2504,6 +2719,7 @@ class IRData(BaseModel):
         return IRData(ds=self.ds.assign({"background": self._make_bg_da(bg_single_beam)}))
 
     def _switch_background(self, new_bg: npt.NDArray) -> "IRData":
+        self._warn_drop_baseline("switching background recalculates data values")
         new_values = self._recalculate_with_new_background(new_bg)
         new_attrs = dict(self.ds.attrs)
         ds_new = self._build_ds(self.wavenumber, new_values, tos=self.tos, attrs=new_attrs)
@@ -2567,6 +2783,69 @@ class IRData(BaseModel):
             return ds
         bg_sliced = self.ds["background"].sel(wavenumber=ds.coords["wavenumber"])
         return ds.assign({"background": bg_sliced})
+
+    def _del_baseline(self) -> "IRData":
+        if "baseline" not in self.ds:
+            return self
+        return IRData(ds=self.ds.drop_vars("baseline"))
+
+    def _accumulate_baseline(self, increment: npt.NDArray) -> npt.NDArray:
+        """Add increment to the existing stored baseline, or return it as the new baseline."""
+        if self.has_baseline:
+            return self.baseline + increment
+        return increment
+
+    def _with_baseline(self, ds: xr.Dataset, baseline_values: Optional[npt.NDArray]) -> xr.Dataset:
+        """Attach baseline_values to ds, shaped/coordinated like ds['data']."""
+        if baseline_values is None:
+            return ds
+        da = xr.DataArray(
+            data=baseline_values, coords=ds["data"].coords, dims=ds["data"].dims, name="baseline"
+        )
+        return ds.assign({"baseline": da})
+
+    def _carry_baseline(self, ds: xr.Dataset) -> xr.Dataset:
+        """Copy baseline variable from self into ds unchanged (dims/shape must match)."""
+        if "baseline" in self.ds:
+            return ds.assign({"baseline": self.ds["baseline"]})
+        return ds
+
+    def _slice_baseline_to(self, ds: xr.Dataset) -> xr.Dataset:
+        """Slice baseline to match ds's wavenumber coordinate, then copy into ds."""
+        if "baseline" not in self.ds:
+            return ds
+        bl_sliced = self.ds["baseline"].sel(wavenumber=ds.coords["wavenumber"])
+        return ds.assign({"baseline": bl_sliced})
+
+    def _warn_drop_baseline(self, reason: str) -> None:
+        if self.has_baseline:
+            logger.warning(
+                f"Dropping stored baseline: {reason}. Re-run baseline correction afterward if needed."
+            )
+
+    def _select_var_by_tos(
+        self,
+        var: xr.DataArray,
+        target_tos: Union[float, Sequence[float]],
+        method: Literal["nearest", "linear"],
+        tolerance_seconds: Optional[float],
+    ) -> npt.NDArray:
+        """Select scan(s) of var nearest to one or more target tos values (shared by get_scan_by_tos/get_baseline_by_tos)."""
+        scalar_input = np.ndim(target_tos) == 0
+        targets = [float(target_tos)] if scalar_input else [float(t) for t in target_tos]
+
+        def _fetch_one(t: float) -> npt.NDArray:
+            if tolerance_seconds is not None:
+                nearest_dist = float(np.abs(self.tos - t).min())
+                if nearest_dist > tolerance_seconds:
+                    raise ValueError(
+                        f"Requested tos {t:.1f}s is {nearest_dist:.1f}s from the nearest scan "
+                        f"(tolerance: {tolerance_seconds:.1f}s)"
+                    )
+            return var.sel(tos=t, method=method).values
+
+        results = np.vstack([_fetch_one(t) for t in targets])
+        return results[0] if scalar_input else results
 
     def _check_compatible(self, other: "IRData", op: str) -> None:
         if self.wavenumber.shape != other.wavenumber.shape or not np.allclose(self.wavenumber, other.wavenumber):
