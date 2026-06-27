@@ -540,6 +540,59 @@ class IRData(BaseModel):
             raise ValueError("get_baseline_by_tos requires 'tos' coordinate")
         return self._select_var_by_tos(self.ds["baseline"], target_tos, method, tolerance_seconds)
 
+    def get_id_by_tos(
+        self,
+        target_tos: Union[float, Sequence[float]],
+        method: Literal["nearest", "linear"] = "nearest",
+        tolerance_seconds: Optional[float] = 10,
+    ) -> Union[int, npt.NDArray]:
+        """Return the scan id(s) nearest to one or more target elapsed-time values.
+
+        Parameters
+        ----------
+        target_tos : float or sequence of float
+            Target elapsed time(s) in seconds.
+        method : {'nearest', 'linear'}, optional
+            Interpolation method passed to ``xarray.DataArray.sel``
+            (default is ``'nearest'``).
+        tolerance_seconds : float or None, optional
+            Maximum allowed distance between a target and the nearest scan.
+            Raises ``ValueError`` when exceeded.  Pass ``None`` to disable
+            (default is ``10``).
+
+        Returns
+        -------
+        int or numpy.ndarray
+            Scan id (the ``'scan'`` coordinate value) for a scalar target,
+            or an array of scan ids for a sequence of targets.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D, if no ``'tos'`` coordinate is present, or if
+            any target exceeds ``tolerance_seconds`` from the nearest scan.
+        """
+        if self.ndim == 1:
+            raise ValueError("get_id_by_tos requires 2-D data")
+        if self.tos is None:
+            raise ValueError("get_id_by_tos requires 'tos' coordinate")
+
+        scalar_input = np.ndim(target_tos) == 0
+        targets = [float(target_tos)] if scalar_input else [float(t) for t in target_tos]
+
+        def _id_for(t: float) -> int:
+            if tolerance_seconds is not None:
+                nearest_dist = float(np.abs(self.tos - t).min())
+                if nearest_dist > tolerance_seconds:
+                    raise ValueError(
+                        f"Requested tos {t:.1f}s is {nearest_dist:.1f}s from the nearest scan "
+                        f"(tolerance: {tolerance_seconds:.1f}s)"
+                    )
+            return int(self.ds["scan"].sel(tos=t, method=method).item())
+
+        ids = np.array([_id_for(t) for t in targets], dtype=int)
+        return int(ids[0]) if scalar_input else ids
+
     def get_scan_by_tos_average(
         self,
         target_tos: Union[float, Sequence[float]],
