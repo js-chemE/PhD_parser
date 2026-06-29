@@ -495,6 +495,55 @@ Low-level parser for `.asc` files in `phd_parser.massspec.quadstar`:
 - Builds a `column_map` (original → new name, unit, source datablock) stored on the metadata dict so downstream code (e.g. `MSData.from_quadstar_asc`) can route columns to the correct block — m/z columns go to `block_0`, everything else to `block_N` auxiliary blocks
 - Optionally drops per-channel `Threshold` columns (`drop_threshold_cols=True` by default at the `MSData` constructor level)
 
+---
+
+### Physisorption (N₂ physisorption / BET)
+
+The `PhysisorptionData` class is the core, instrument-agnostic container for a single gas-physisorption isotherm *branch* — relative pressure (P/P₀) versus quantity adsorbed (cm³/g STP) — wrapped exactly like a single Raman spectrum or XRD pattern elsewhere in this repo. There is no "branch" concept in the type itself: a reading that produces both adsorption and desorption returns two separate instances. The BET surface-area fit is modelled directly alongside the curve it was derived from (conventionally the adsorption branch), since virtually every physisorption analysis method agrees on it. Other instrument-specific analyses — t-Plot, BJH pore-size distribution, the sample log — are not modelled as typed accessors yet; they are preserved verbatim under `.report` for later use.
+
+**Constructors**
+- `from_arrays` — build from raw numpy arrays (`relative_pressure`, `quantity_adsorbed`, optional `bet` dict, optional `attrs`)
+- `from_netcdf` — load a previously saved NetCDF file
+- `from_tristar_xls` — read a Micromeritics TriStar II 3020 multi-report `.XLS` export; returns a `dict` with `"adsorption"`/`"desorption"` keys (whichever branches were present), only the isotherm and BET results are modelled directly, the rest of the parsed report is stashed under `.report` on each branch
+
+**Accessors**
+- `relative_pressure`, `values`, `n_points` — the isotherm curve and its length
+- `bet`, `surface_area_bet` — BET fit results (surface area, slope, y-intercept, C constant, monolayer capacity, correlation coefficient, molecular cross-sectional area, each with `*_error`/`*_unit` siblings where applicable) and the headline surface area in m²/g; `None` on a branch with no BET fit
+- `report` — raw, instrument-specific report data preserved for provenance (e.g. t-Plot/BJH/sample log for a TriStar export); stored JSON-encoded internally so it survives NetCDF round-trips
+
+**Lookups**
+- `get_quantity_adsorbed(target_relative_pressure, method, tolerance)` — quantity adsorbed at one or more relative-pressure values; nearest/linear selection with an optional tolerance check, scalar in → scalar out
+
+**Export**
+- `to_netcdf` — round-trippable NetCDF preserving the isotherm, BET results, and the full raw report
+
+**Typical workflow**
+
+```python
+from pathlib import Path
+import phd_parser as pp
+
+xls_file = Path("path/to/2026-N-198.XLS")
+
+branches = pp.physisorption.PhysisorptionData.from_tristar_xls(xls_file)
+adsorption = branches["adsorption"]
+
+print(adsorption.surface_area_bet)                                  # BET surface area, m²/g
+q_half = adsorption.get_quantity_adsorbed(0.5)                       # quantity adsorbed at P/P₀ = 0.5
+
+# Everything else MicroActive reported is still there, just not typed yet:
+t_plot = adsorption.report["analyses"]["t_plot"]
+sample_log = adsorption.report["sample_log"]
+```
+
+#### TriStar II 3020 (Micromeritics)
+
+Low-level parser in `phd_parser.physisorption.tristar`:
+
+- `read_export` — parses a MicroActive "print selected reports to Excel" `.XLS` export, where every selected report is laid out as its own block of columns separated by a literal `"|"` divider column, all sharing the same row grid
+- A generic state machine handles each block's `key: value` metadata rows, free-text notes, and at most one data table (header row + rows until the next blank row) — including the quirk where a sample-name caption row sits directly above the real column header
+- Returns `{"data": {"adsorption": {...}, "desorption": {...}}, "bet": cleaned BET results, "meta": {"header", "summary", "analyses", "sample_log"}}`, where each branch in `"data"` is a `{"relative_pressure", "quantity_adsorbed"}` dict ready to pass into `PhysisorptionData.from_arrays(**branch)`, and `"analyses"` groups each property/analysis (`isotherm`, `bet`, `t_plot`, `bjh_adsorption`, `bjh_desorption`) into its own `{"report", "plots"}` dict
+
 ## References
 
 [^1]: Travert, A., & Fernandez, C. (2025). *SpectroChemPy* (Version 0.8.4) [Computer software]. Laboratoire Catalyse and Spectrochemistry (LCS), Normandie Université/CNRS. https://github.com/spectrochempy/spectrochempy (CeCILL-B licence)

@@ -268,9 +268,10 @@ def read_export(filepath: Union[str, Path]) -> dict[str, Any]:
         Dict with keys:
 
         ``"data"`` : dict
-            Isotherm arrays: ``"p_rel_ads"``, ``"q_ads"``, ``"p_rel_des"``,
-            ``"q_des"`` (``numpy.ndarray`` of float, branch omitted if the
-            Isotherm Tabular Report section is absent).
+            Up to two keys, ``"adsorption"`` and ``"desorption"``, each a
+            ``{"relative_pressure": ndarray, "quantity_adsorbed": ndarray}``
+            dict (branch omitted if the Isotherm Tabular Report section is
+            absent).
         ``"bet"`` : dict or None
             Cleaned BET scalar results (see :func:`_extract_bet`), or
             ``None`` if no BET Report section was found.
@@ -396,15 +397,15 @@ def _extract_bet(section: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
         "y_intercept": _scalar_value(s, "Y-intercept"),
         "y_intercept_error": _scalar_error(s, "Y-intercept"),
         "c_constant": _scalar_value(s, "C"),
-        "qm": _scalar_value(s, "Qm"),
-        "qm_unit": _scalar_unit(s, "Qm"),
+        "monolayer_capacity": _scalar_value(s, "Qm"),
+        "monolayer_capacity_unit": _scalar_unit(s, "Qm"),
         "correlation_coefficient": _scalar_value(s, "Correlation coefficient"),
         "cross_sectional_area": _scalar_value(s, "Molecular cross-sectional area"),
         "cross_sectional_area_unit": _scalar_unit(s, "Molecular cross-sectional area"),
     }
 
 
-def _extract_isotherm(section: Optional[dict[str, Any]]) -> dict[str, np.ndarray]:
+def _extract_isotherm(section: Optional[dict[str, Any]]) -> dict[str, dict[str, np.ndarray]]:
     """Split the Isotherm Tabular Report table into adsorption/desorption branches.
 
     The branch turnover is the row of maximum relative pressure; everything
@@ -420,31 +421,36 @@ def _extract_isotherm(section: Optional[dict[str, Any]]) -> dict[str, np.ndarray
     Returns
     -------
     dict
-        Mapping with keys ``"p_rel_ads"``, ``"q_ads"``, ``"p_rel_des"``,
-        ``"q_des"`` (empty dict if ``section`` is ``None`` or has no table).
+        Mapping with keys ``"adsorption"`` and/or ``"desorption"``, each a
+        ``{"relative_pressure": ndarray, "quantity_adsorbed": ndarray}``
+        dict (empty dict if ``section`` is ``None`` or has no table) —
+        shaped so it can be passed straight into
+        ``PhysisorptionData.from_arrays(**branch)``.
     """
     if section is None or section["table"] is None:
         return {}
 
     table = section["table"]
     df = pd.DataFrame(table["rows"], columns=table["columns"])
-    p_rel = pd.to_numeric(df["Relative Pressure (P/Po)"], errors="coerce").to_numpy()
-    q = pd.to_numeric(df["Quantity Adsorbed (cm\xb3/g STP)"], errors="coerce").to_numpy()
+    relative_pressure = pd.to_numeric(df["Relative Pressure (P/Po)"], errors="coerce").to_numpy()
+    quantity_adsorbed = pd.to_numeric(
+        df["Quantity Adsorbed (cm\xb3/g STP)"], errors="coerce"
+    ).to_numpy()
 
-    valid = ~(np.isnan(p_rel) | np.isnan(q))
-    p_rel, q = p_rel[valid], q[valid]
-    if p_rel.size == 0:
+    valid = ~(np.isnan(relative_pressure) | np.isnan(quantity_adsorbed))
+    relative_pressure, quantity_adsorbed = relative_pressure[valid], quantity_adsorbed[valid]
+    if relative_pressure.size == 0:
         return {}
 
-    split = int(np.argmax(p_rel)) + 1
-    p_rel_ads, q_ads = p_rel[:split], q[:split]
-    p_rel_des, q_des = p_rel[split:], q[split:]
+    split = int(np.argmax(relative_pressure)) + 1
+    branches = {
+        "adsorption": (relative_pressure[:split], quantity_adsorbed[:split]),
+        "desorption": (relative_pressure[split:], quantity_adsorbed[split:]),
+    }
 
-    out: dict[str, np.ndarray] = {}
-    if p_rel_ads.size:
-        order = np.argsort(p_rel_ads)
-        out["p_rel_ads"], out["q_ads"] = p_rel_ads[order], q_ads[order]
-    if p_rel_des.size:
-        order = np.argsort(p_rel_des)
-        out["p_rel_des"], out["q_des"] = p_rel_des[order], q_des[order]
+    out: dict[str, dict[str, np.ndarray]] = {}
+    for name, (p_rel, q) in branches.items():
+        if p_rel.size:
+            order = np.argsort(p_rel)
+            out[name] = {"relative_pressure": p_rel[order], "quantity_adsorbed": q[order]}
     return out

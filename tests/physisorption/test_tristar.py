@@ -62,14 +62,17 @@ def test_parse_value_none_and_nan():
 def test_read_export_data_keys():
     result = read_export(MOCK_FILE_PATH)
     data = result["data"]
-    assert set(data.keys()) == {"p_rel_ads", "q_ads", "p_rel_des", "q_des"}
-    for arr in data.values():
-        assert isinstance(arr, np.ndarray)
-    assert data["p_rel_ads"].shape == data["q_ads"].shape
-    assert data["p_rel_des"].shape == data["q_des"].shape
+    assert set(data.keys()) == {"adsorption", "desorption"}
+    for branch in data.values():
+        assert set(branch.keys()) == {"relative_pressure", "quantity_adsorbed"}
+        for arr in branch.values():
+            assert isinstance(arr, np.ndarray)
+        assert branch["relative_pressure"].shape == branch["quantity_adsorbed"].shape
+
+    adsorption = data["adsorption"]["relative_pressure"]
     # ascending, within [0, 1]
-    assert np.all(np.diff(data["p_rel_ads"]) > 0)
-    assert np.all((data["p_rel_ads"] >= 0) & (data["p_rel_ads"] <= 1))
+    assert np.all(np.diff(adsorption) > 0)
+    assert np.all((adsorption >= 0) & (adsorption <= 1))
 
 
 def test_read_export_meta_top_level_keys():
@@ -146,6 +149,7 @@ def test_read_export_bet_values():
     assert bet["surface_area"] == pytest.approx(105.1138)
     assert bet["surface_area_error"] == pytest.approx(0.4825)
     assert bet["correlation_coefficient"] == pytest.approx(0.9997172)
+    assert bet["monolayer_capacity"] == pytest.approx(24.1498)
 
 
 def test_extract_bet_returns_none_for_missing_section():
@@ -165,5 +169,5 @@ def test_extract_isotherm_splits_at_turnover():
     out = _extract_isotherm(section)
     # the adsorption branch includes the turnover point, so its maximum
     # relative pressure must be at least as high as the desorption branch's
-    assert out["p_rel_ads"].max() >= out["p_rel_des"].max()
-    assert out["q_ads"].min() > 0
+    assert out["adsorption"]["relative_pressure"].max() >= out["desorption"]["relative_pressure"].max()
+    assert out["adsorption"]["quantity_adsorbed"].min() > 0

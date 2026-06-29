@@ -56,6 +56,10 @@ Rules:
 - `Raises` only when the function actually raises.
 - Private helpers (leading `_`) do not need docstrings.
 
+## Naming
+
+Use full, unabbreviated names for fields, columns, properties, and variables — `relative_pressure`, not `p_rel`; `quantity_adsorbed`, not `q`; `temperature`, not `temp`. Established names of the technique or method itself are fine to keep as-is (`BET`, `BJH`, `XRD`, `IR`, `MS`, `TGA`) — these are not abbreviations of a longer phrase, they're what the method is actually called.
+
 ## Architecture
 
 **PhD_parser** is a data-parsing library for experimental equipment used in catalysis research (Urakawa group, TU Delft). It is under active development and the API changes frequently.
@@ -72,6 +76,7 @@ Each instrument type lives in its own subpackage under `src/phd_parser/`:
 | `infrared` | `IRData` | `xr.DataArray` |
 | `tga` | `TGAData` | two NumPy arrays |
 | `massspec` | `MSData` | `xr.Dataset` |
+| `physisorption` | `PhysisorptionData` | `xr.Dataset` |
 | `xps` | *(no core class yet)* | — |
 
 Every subpackage follows the same structure:
@@ -106,3 +111,7 @@ Each module stores its primary axis in SI units; convenience properties expose c
 ### LabView channel metadata
 
 `LVData` stores per-channel metadata (unit, group, species, location) in `xr.DataArray.attrs`. The single dimension is `tos` (elapsed seconds since run start).
+
+### Physisorption isotherm shape
+
+`PhysisorptionData` wraps a *single* isotherm branch — one `xr.DataArray` named `quantity_adsorbed`, dims `("relative_pressure",)` — exactly like a single Raman spectrum or XRD pattern elsewhere in this repo. There is no "branch" concept baked into the type: a reading that produces both adsorption and desorption (e.g. `from_tristar_xls`) returns a `dict[str, PhysisorptionData]` with keys `"adsorption"`/`"desorption"` instead of one dual-branch object. The BET fit (conventionally derived from the adsorption branch) is modelled directly as `.attrs["bet"]`, since every physisorption instrument and analysis method agrees on it. Everything else a parser extracts (t-Plot, BJH, sample log, instrument header) is preserved verbatim under `.attrs["report"]` (JSON-encoded so both survive NetCDF round-trips) rather than given dedicated properties. Parser modules (e.g. `tristar.py`) should still extract as much as the source format offers; the core class only grows new typed accessors when one is actually needed.
