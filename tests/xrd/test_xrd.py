@@ -3,6 +3,7 @@ from phd_parser.xrd.xrd_e1290 import read_xy_e1290
 from phd_parser.xrd.core import XRDData
 import numpy as np
 import numpy.typing as npt
+import xarray as xr
 import os
 
 @pytest.fixture
@@ -30,27 +31,29 @@ def test_read_xrd_e1290(sample_e1290_path):
 def test_xrd(mock_angle_data, mock_intensity_data):
     angle = mock_angle_data
     intensity = mock_intensity_data
-    # Create a mock XRD instance
-    xrd_instance = XRD(angle=angle, intensity=intensity)
+    # Create a mock XRDData instance
+    da = xr.DataArray(intensity, coords={"angle": angle}, dims=["angle"])
+    xrd_instance = XRDData(da=da)
 
-    assert isinstance(xrd_instance, XRD)
+    assert isinstance(xrd_instance, XRDData)
     assert np.array_equal(xrd_instance.angle, angle)
-    assert np.array_equal(xrd_instance.intensity, intensity)
+    assert np.array_equal(xrd_instance.values, intensity)
 
 def test_xrd_mismatched_lengths(mock_angle_data, mock_intensity_data): # Intentionally mismatched lengths
     angle = mock_angle_data
     intensity = mock_intensity_data[:-1]
     # Test for mismatched angle and intensity lengths
     with pytest.raises(ValueError):
-        XRD(angle=angle, intensity=intensity)
+        da = xr.DataArray(intensity, coords={"angle": angle}, dims=["angle"])
+        XRDData(da=da)
 
 def test_xrd_from_e1290():
     # Path to a sample XRD file for testing
     sample_file = os.path.join(os.path.dirname(__file__), 'xrd_mock_e1290.xy')
 
-    # Create XRD instance from the sample file
-    xrd_instance = XRD.from_e1290(sample_file)
+    # Create XRDData instance from the sample file
+    xrd_instance = XRDData.from_e1290(sample_file)
 
-    assert isinstance(xrd_instance, XRD)
+    assert isinstance(xrd_instance, XRDData)
     assert xrd_instance.angle.size > 0
-    assert xrd_instance.intensity.size > 0
+    assert xrd_instance.values.size > 0

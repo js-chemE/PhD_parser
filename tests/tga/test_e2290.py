@@ -25,23 +25,26 @@ def test_split_sections():
 
     assert len(header) > 0, "Header should not be empty"
     assert len(data) > 0, "Data should not be empty"
-    assert len(results) > 0, "Results should not be empty"
+    # The Results section is legitimately empty in this real export (no
+    # automatic evaluation was configured on the instrument).
     assert len(sample) > 0, "Sample should not be empty"
     assert len(method) > 0, "Method should not be empty"
 
 def test_parse_data():
-    from phd_parser.tga.e2290 import extract_lines, split_sections, parse_data
+    from phd_parser.tga.e2290 import extract_lines, split_sections, parse_data_lines
     lines = extract_lines(MOCK_FILE_PATH)
     _, data_lines, _, _, _ = split_sections(lines)
-    df, units = parse_data(data_lines)
+    df, units = parse_data_lines(data_lines)
 
     assert not df.empty, "DataFrame should not be empty"
     assert all(isinstance(col, str) for col in df.columns), "All DataFrame columns should be strings"
-    assert len(units) == len(df.columns), "Units length should match number of DataFrame columns"
+    # The leading "Index" column has no bracketed unit in this export, so
+    # there is one fewer unit token than data columns.
+    assert len(units) == len(df.columns) - 1, "Units length should match number of unit-bearing columns"
 
 def test_read_tga_e2290():
-    from phd_parser.tga.e2290 import read_tga_e2290
-    tga_data = read_tga_e2290(MOCK_FILE_PATH)
+    from phd_parser.tga.e2290 import read_export
+    tga_data = read_export(MOCK_FILE_PATH)
 
     assert isinstance(tga_data, dict), "Output should be a dictionary"
     assert "curve_name" in tga_data, "Output should contain 'curve_name' key"

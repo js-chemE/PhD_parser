@@ -1094,6 +1094,7 @@ dependencies = [
     { name = "scipy" },
     { name = "spectrochempy" },
     { name = "xarray" },
+    { name = "xlrd" },
 ]
 
 [package.metadata]
@@ -1112,6 +1113,7 @@ requires-dist = [
     { name = "scipy", specifier = ">=1.17.1" },
     { name = "spectrochempy", specifier = ">=0.8.1" },
     { name = "xarray", specifier = ">=2026.4.0" },
+    { name = "xlrd", specifier = ">=2.0.2" },
 ]
 
 [[package]]
