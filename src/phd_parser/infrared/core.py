@@ -1143,6 +1143,51 @@ class IRData(BaseModel):
         ds_new = self._slice_baseline_to(ds_new)
         return IRData(ds=ds_new)
 
+    def select_wavenumber_index_range(
+        self,
+        min_idx: Optional[int] = None,
+        max_idx: Optional[int] = None,
+    ) -> "IRData":
+        """Return a new instance restricted to a wavenumber sub-range selected by position.
+
+        Unlike ``select_wavenumber_range``, bounds are given as zero-based
+        positional indices into the wavenumber axis rather than cm⁻¹ values.
+
+        Parameters
+        ----------
+        min_idx : int or None, optional
+            Lower bound index (inclusive).  ``None`` means index ``0``.
+        max_idx : int or None, optional
+            Upper bound index (inclusive).  ``None`` means the last index.
+
+        Returns
+        -------
+        IRData
+            New instance with the wavenumber axis truncated and the background
+            sliced to match.
+
+        Raises
+        ------
+        IndexError
+            If ``min_idx`` or ``max_idx`` is outside ``[0, n_wavenumber)``.
+        """
+        n = self.shape[-1]
+        lo = 0 if min_idx is None else min_idx
+        hi = n - 1 if max_idx is None else max_idx
+        if not (0 <= lo < n) or not (0 <= hi < n):
+            raise IndexError(f"index range [{lo}, {hi}] out of bounds for {n} wavenumber points")
+
+        da = self.ds["data"].isel(wavenumber=slice(lo, hi + 1))
+        ds_new = self._build_ds(
+            wavenumber_si=da.coords["wavenumber"].values,
+            values=da.values,
+            tos=da.coords["tos"].values if "tos" in da.coords else None,
+            attrs=dict(self.ds.attrs),
+        )
+        ds_new = self._slice_background_to(ds_new)
+        ds_new = self._slice_baseline_to(ds_new)
+        return IRData(ds=ds_new)
+
     def select_tos_range(
         self,
         min_s: Optional[float] = None,
@@ -1187,6 +1232,52 @@ class IRData(BaseModel):
             ds_new = ds_new.isel(scan=tos <= max_s)
 
         # tos values are absolute elapsed seconds, so tos_start + tos[i] remains valid
+        return IRData(ds=ds_new)
+
+    def select_scan_id_range(
+        self,
+        min_id: Optional[int] = None,
+        max_id: Optional[int] = None,
+    ) -> "IRData":
+        """Return a new instance restricted to scans within a scan-id sub-range.
+
+        Unlike ``select_tos_range``, bounds are given as scan ids (the
+        ``'scan'`` coordinate, see ``get_id_by_tos``) rather than elapsed time.
+
+        Parameters
+        ----------
+        min_id : int or None, optional
+            Lower bound on the scan id (inclusive).  ``None`` means no lower bound.
+        max_id : int or None, optional
+            Upper bound on the scan id (inclusive).  ``None`` means no upper bound.
+
+        Returns
+        -------
+        IRData
+            New instance containing only the scans within the specified id range.
+
+        Raises
+        ------
+        ValueError
+            If the data are 1-D (no scan dimension).
+        """
+        if self.ndim == 1:
+            raise ValueError("select_scan_id_range requires 2-D data")
+
+        ds_new = self.ds
+        if min_id is not None:
+            scan_ids = ds_new.coords["scan"].values
+            if not np.any(scan_ids >= min_id):
+                min_id = int(scan_ids[0])
+                logger.warning(f"min_id {min_id} is greater than all scan ids; using min_id={min_id} instead")
+            ds_new = ds_new.isel(scan=scan_ids >= min_id)
+        if max_id is not None:
+            scan_ids = ds_new.coords["scan"].values
+            if not np.any(scan_ids <= max_id):
+                max_id = int(scan_ids[-1])
+                logger.warning(f"max_id {max_id} is less than all scan ids; using max_id={max_id} instead")
+            ds_new = ds_new.isel(scan=scan_ids <= max_id)
+
         return IRData(ds=ds_new)
 
     # ----------------------------------------------------------------
