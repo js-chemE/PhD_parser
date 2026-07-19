@@ -2719,6 +2719,7 @@ class IRData(BaseModel):
         delta_time_seconds: Optional[float] = None,
         tos_start: Optional[Union[pd.Timestamp, str]] = None,
         strict_tos_start: bool = True,
+        backend: Literal["auto", "spectrochempy", "omnic"] = "auto",
     ) -> "IRData":
         """Load one or more Thermo OMNIC ``.spa`` files into an IRData.
 
@@ -2746,6 +2747,12 @@ class IRData(BaseModel):
             Raise ``ValueError`` if the ``tos_start`` from file metadata
             cannot be parsed when ``True``; log a warning and skip it when
             ``False`` (default is ``True``).
+        backend : {"auto", "spectrochempy", "omnic"}, optional
+            Low-level file reader to use.  ``"auto"`` (default) tries
+            spectrochempy first and falls back to the built-in omnic parser
+            when spectrochempy is not installed.  ``"spectrochempy"`` forces
+            the spectrochempy reader (raises ``ImportError`` if not available).
+            ``"omnic"`` forces the built-in binary parser.
 
         Returns
         -------
@@ -2759,11 +2766,31 @@ class IRData(BaseModel):
             the OMNIC y-axis label is not in the known mapping, or if
             ``strict_tos_start`` is ``True`` and ``tos_start`` cannot be
             parsed.
+        ImportError
+            If ``backend="spectrochempy"`` and spectrochempy is not installed.
         """
         if delta_time_seconds is not None and tos_start is not None:
             raise ValueError("Specify either 'delta_time_seconds' or 'tos_start', not both.")
 
-        raw = omnic.read_spa(filepath, delta_time_seconds=delta_time_seconds, tos_start=tos_start)
+        from phd_parser.infrared import spectrochempy as _scp_parser
+
+        if backend == "spectrochempy":
+            raw = _scp_parser.read_spa(
+                filepath, delta_time_seconds=delta_time_seconds, tos_start=tos_start
+            )
+        elif backend == "omnic":
+            raw = omnic.read_spa(filepath, delta_time_seconds=delta_time_seconds, tos_start=tos_start)
+        else:  # "auto"
+            try:
+                raw = _scp_parser.read_spa(
+                    filepath, delta_time_seconds=delta_time_seconds, tos_start=tos_start
+                )
+                logger.debug("from_omnic_spa: using spectrochempy backend")
+            except ImportError:
+                logger.debug("spectrochempy not available; falling back to built-in omnic parser")
+                raw = omnic.read_spa(
+                    filepath, delta_time_seconds=delta_time_seconds, tos_start=tos_start
+                )
 
         wavenumber_si = np.asarray(raw["data"]["x"]) * wavenumber_2SI_factor
         values = np.asarray(raw["data"]["v"], dtype=float)
