@@ -180,6 +180,99 @@ def read_spa(
     return result
 
 
+def read_nddataset(
+    nd,
+    delta_time_seconds: Optional[float] = None,
+    tos_start: Optional[Union[pd.Timestamp, str]] = None,
+) -> dict:
+    """Convert a spectrochempy ``NDDataset`` to the standard parser dict.
+
+    Accepts any ``NDDataset`` regardless of how it was created — from a file,
+    from spectrochempy processing, or built programmatically — and returns the
+    same ``{"data": ..., "meta": ...}`` structure as :func:`read_spa`, so the
+    result feeds directly into :meth:`~phd_parser.infrared.IRData.from_scp`.
+
+    Parameters
+    ----------
+    nd : spectrochempy.NDDataset
+        Dataset to convert.  ``nd.x`` must be the wavenumber axis (cm⁻¹) and
+        ``nd.data`` must be 2-D ``(n_scans, n_wavenumber)``.
+    delta_time_seconds : float or None, optional
+        Fixed time step in seconds between consecutive scans.  Mutually
+        exclusive with ``tos_start``.
+    tos_start : pandas.Timestamp or str or None, optional
+        Absolute start time used to anchor elapsed-time values extracted from
+        the dataset's y-axis timestamps.  Mutually exclusive with
+        ``delta_time_seconds``.
+
+    Returns
+    -------
+    dict
+        ``"data"`` → ``"x"`` (cm⁻¹, ascending), ``"v"`` (1-D for a single
+        scan, 2-D ``(n_scans, n_wavenumber)`` otherwise), optionally ``"tos"``
+        (elapsed seconds).  ``"meta"`` → ``"vlabel"``, ``"vunit"``,
+        ``"xlabel"``, ``"xunit"``, ``"n_points"``, ``"min_x"``, ``"max_x"``,
+        ``"tos_start"``.
+
+    Raises
+    ------
+    ValueError
+        If both ``delta_time_seconds`` and ``tos_start`` are supplied.
+    """
+    if delta_time_seconds is not None and tos_start is not None:
+        raise ValueError("Specify either 'delta_time_seconds' or 'tos_start', not both.")
+
+    # wavenumber: cm⁻¹, ensure ascending
+    x_cm = np.asarray(nd.x.data).ravel()
+    values = np.asarray(nd.data)  # always 2-D (n_scans, n_wavenumber) from spectrochempy
+
+    if x_cm[0] > x_cm[-1]:
+        x_cm = x_cm[::-1]
+        values = values[:, ::-1]
+
+    n_scans = values.shape[0]
+    single = n_scans == 1
+
+    # vlabel
+    title = (nd.title or "").strip()
+    vlabel = _SCP_TITLE_TO_VLABEL.get(title.lower(), title or "absorbance")
+
+    # tos: spectrochempy timestamps only (no filename fallback here)
+    tos: Optional[np.ndarray] = None
+    resolved_tos_start: Optional[pd.Timestamp] = None
+
+    if not single:
+        if delta_time_seconds is not None:
+            tos = np.arange(n_scans, dtype=float) * delta_time_seconds
+        else:
+            scp_times = _extract_scp_timestamps(nd)
+            if scp_times is not None:
+                t0 = pd.Timestamp(tos_start) if tos_start is not None else scp_times[0]
+                resolved_tos_start = t0
+                tos = np.array([(t - t0).total_seconds() for t in scp_times], dtype=float)
+            elif tos_start is not None:
+                resolved_tos_start = pd.Timestamp(tos_start)
+
+    if single:
+        values = values.squeeze()
+
+    meta: dict = {
+        "vlabel": vlabel,
+        "vunit": str(nd.units) if nd.units is not None else None,
+        "xlabel": "wavenumber",
+        "xunit": "cm^-1",
+        "n_points": int(x_cm.size),
+        "min_x": float(x_cm.min()),
+        "max_x": float(x_cm.max()),
+        "tos_start": resolved_tos_start,
+    }
+
+    result: dict = {"data": {"x": x_cm, "v": values}, "meta": meta}
+    if tos is not None:
+        result["data"]["tos"] = tos
+    return result
+
+
 def _extract_scp_timestamps(nd) -> Optional[list[pd.Timestamp]]:
     """Try to pull per-scan acquisition datetimes out of a spectrochempy NDDataset.
 

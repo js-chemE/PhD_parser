@@ -158,3 +158,77 @@ def test_from_omnic_spa_auto_uses_spectrochempy_when_available():
     np.testing.assert_allclose(
         np.sort(ir_auto.wavenumber_per_cm), np.sort(ir_scp.wavenumber_per_cm), rtol=1e-4
     )
+
+
+# ----------------------------------------------------------------
+# IRData.from_scp
+# ----------------------------------------------------------------
+
+def test_from_scp_single_spectrum():
+    import spectrochempy as scp
+    from phd_parser.infrared import IRData
+
+    nd = scp.read_omnic(MOCK_SINGLE_FILE_PATH)
+    ir = IRData.from_scp(nd)
+
+    assert ir.ndim == 1
+    assert ir.data_type is not None
+    assert ir.wavenumber.size > 0
+    assert ir.values.size == ir.wavenumber.size
+
+
+def test_from_scp_multi_scan():
+    import spectrochempy as scp
+    from phd_parser.infrared import IRData
+
+    files = sorted(MOCK_DIR_PATH.glob("*.spa"))
+    nd = scp.read_omnic(*files)
+    ir = IRData.from_scp(nd)
+
+    assert ir.ndim == 2
+    assert ir.shape[0] == len(files)
+    assert ir.shape[1] == ir.wavenumber.size
+
+
+def test_from_scp_wavenumber_in_si_units():
+    import spectrochempy as scp
+    from phd_parser.infrared import IRData
+
+    nd = scp.read_omnic(MOCK_SINGLE_FILE_PATH)
+    ir = IRData.from_scp(nd)
+
+    # wavenumber stored in m⁻¹; typical mid-IR range ~40 000–400 000 m⁻¹
+    assert ir.wavenumber.min() > 1e4
+    assert ir.wavenumber.max() < 1e6
+
+
+def test_from_scp_matches_from_omnic_spa():
+    import spectrochempy as scp
+    from phd_parser.infrared import IRData
+
+    nd = scp.read_omnic(MOCK_SINGLE_FILE_PATH)
+    ir_scp = IRData.from_scp(nd)
+    ir_omnic = IRData.from_omnic_spa(MOCK_SINGLE_FILE_PATH, backend="omnic")
+
+    sort_scp = np.argsort(ir_scp.wavenumber_per_cm)
+    sort_omnic = np.argsort(ir_omnic.wavenumber_per_cm)
+    np.testing.assert_allclose(
+        ir_scp.wavenumber_per_cm[sort_scp], ir_omnic.wavenumber_per_cm[sort_omnic], rtol=1e-4
+    )
+    np.testing.assert_allclose(
+        ir_scp.values[sort_scp], ir_omnic.values[sort_omnic], rtol=1e-4
+    )
+    assert ir_scp.data_type == ir_omnic.data_type
+
+
+def test_from_scp_delta_time_seconds():
+    import spectrochempy as scp
+    from phd_parser.infrared import IRData
+
+    files = sorted(MOCK_DIR_PATH.glob("*.spa"))
+    nd = scp.read_omnic(*files)
+    ir = IRData.from_scp(nd, delta_time_seconds=30.0)
+
+    assert ir.tos is not None
+    assert ir.tos[0] == pytest.approx(0.0)
+    np.testing.assert_allclose(np.diff(ir.tos), 30.0)

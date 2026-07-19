@@ -2831,6 +2831,93 @@ class IRData(BaseModel):
 
         return cls(ds=ds)
 
+    @classmethod
+    def from_scp(
+        cls,
+        nd,
+        wavenumber_2SI_factor: float = 100.0,
+        delta_time_seconds: Optional[float] = None,
+        tos_start: Optional[Union[pd.Timestamp, str]] = None,
+        strict_tos_start: bool = True,
+    ) -> "IRData":
+        """Construct an ``IRData`` from a spectrochempy ``NDDataset``.
+
+        Accepts any ``NDDataset`` — freshly read from a file, the result of
+        spectrochempy processing, or built programmatically — and converts it
+        to an immutable ``IRData``.  The wavenumber axis must be in cm⁻¹
+        (the default for all OMNIC and most other spectrochempy readers).
+
+        Parameters
+        ----------
+        nd : spectrochempy.NDDataset
+            Source dataset.  ``nd.x`` is taken as the wavenumber axis and
+            ``nd.data`` as the spectral values.
+        wavenumber_2SI_factor : float, optional
+            Multiplicative factor converting the dataset's x-axis to m⁻¹
+            (default is ``100.0``, for cm⁻¹ → m⁻¹).
+        delta_time_seconds : float or None, optional
+            Fixed time step between consecutive scans used to build the
+            ``tos`` coordinate.  Mutually exclusive with ``tos_start``
+            (default is ``None``).
+        tos_start : pandas.Timestamp or str or None, optional
+            Absolute start time used to anchor tos values extracted from
+            the dataset's y-axis timestamps.  Mutually exclusive with
+            ``delta_time_seconds`` (default is ``None``).
+        strict_tos_start : bool, optional
+            Raise ``ValueError`` when ``tos_start`` cannot be parsed if
+            ``True``; log a warning and continue if ``False`` (default is
+            ``True``).
+
+        Returns
+        -------
+        IRData
+            New instance.  Single-scan datasets (``nd.data.shape[0] == 1``)
+            produce a 1-D instance; multi-scan datasets produce a 2-D
+            ``(scan, wavenumber)`` instance.
+
+        Raises
+        ------
+        ValueError
+            If both ``delta_time_seconds`` and ``tos_start`` are supplied, or
+            if the dataset title has no known ``data_type`` mapping.
+        """
+        from phd_parser.infrared import spectrochempy as _scp_parser
+
+        raw = _scp_parser.read_nddataset(
+            nd, delta_time_seconds=delta_time_seconds, tos_start=tos_start
+        )
+
+        wavenumber_si = np.asarray(raw["data"]["x"]) * wavenumber_2SI_factor
+        values = np.asarray(raw["data"]["v"], dtype=float)
+        tos = np.asarray(raw["data"]["tos"], dtype=float) if "tos" in raw["data"] else None
+
+        parsed_tos_start: Optional[pd.Timestamp] = None
+        if tos_start is not None:
+            parsed_tos_start = pd.Timestamp(tos_start)
+        elif (raw_ts := raw["meta"].get("tos_start")) is not None:
+            try:
+                parsed_tos_start = pd.Timestamp(raw_ts)
+            except Exception as exc:
+                if strict_tos_start:
+                    raise ValueError(f"Could not parse tos_start '{raw_ts}': {exc}") from exc
+                logger.warning("Ignoring unparseable tos_start '%s': %s", raw_ts, exc)
+
+        attrs: dict[str, Any] = {}
+        if parsed_tos_start is not None:
+            attrs["tos_start"] = parsed_tos_start.isoformat()
+
+        vlabel = raw["meta"].get("vlabel", "")
+        data_type = _OMNIC_VLABEL_TO_DATA_TYPE.get(vlabel)
+        if data_type is None:
+            raise ValueError(
+                f"spectrochempy dataset title '{vlabel}' has no known data_type mapping. "
+                f"Known mappings: {list(_OMNIC_VLABEL_TO_DATA_TYPE)}."
+            )
+        attrs["data_type"] = data_type
+
+        ds = cls._build_ds(wavenumber_si, values, tos=tos, attrs=attrs)
+        return cls(ds=ds)
+
     # ----------------------------------------------------------------
     # Dunder helpers
     # ----------------------------------------------------------------
