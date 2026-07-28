@@ -60,6 +60,14 @@ Rules:
 
 Use full, unabbreviated names for fields, columns, properties, and variables — `relative_pressure`, not `p_rel`; `quantity_adsorbed`, not `q`; `temperature`, not `temp`. Established names of the technique or method itself are fine to keep as-is (`BET`, `BJH`, `XRD`, `IR`, `MS`, `TGA`) — these are not abbreviations of a longer phrase, they're what the method is actually called.
 
+### Combining two datasets
+
+Three different operations, three different names — never mix them up:
+
+- **extend** — joining along the energy-related axis (wavenumber, Raman shift, 2θ, m/z), i.e. widening the spectral range.
+- **merge** — joining along the *other* axis (scan/time), i.e. appending more scans of the same spectral range. `IRData.merge` / `IRData.merge_all`.
+- **vstack** — taking already 2-D data and stacking it along a *new*, additional dimension.
+
 ## Architecture
 
 **PhD_parser** is a data-parsing library for experimental equipment used in catalysis research (Urakawa group, TU Delft). It is under active development and the API changes frequently.
@@ -73,7 +81,7 @@ Each instrument type lives in its own subpackage under `src/phd_parser/`:
 | `labview` | `LVData` | `xr.Dataset` |
 | `raman` | `RamanData` | `xr.DataArray` |
 | `xrd` | `XRDData` | `xr.DataArray` |
-| `infrared` | `IRData` | `xr.DataArray` |
+| `infrared` | `IRData` | `xr.Dataset` |
 | `tga` | `TGAData` | two NumPy arrays |
 | `massspec` | `MSData` | `xr.Dataset` |
 | `physisorption` | `PhysisorptionData` | `xr.Dataset` |
@@ -95,6 +103,12 @@ Every subpackage follows the same structure:
 
 **Cached properties for derived quantities.** Expensive conversions (Raman shift per cm⁻¹, XRD d-spacing, IR wavenumber per cm⁻¹, MS trace indexing) are implemented as `@cached_property` so they are computed once and reused.
 
+**`with_` / `set_` / `del_` mean specific things.** `with_X` applies X *and* recalculates whatever else must change so the physical meaning of the data is preserved (`with_background` recomputes the values; `with_tos_start` rebases `tos` so the absolute timestamps survive). `set_X` force-assigns X and recalculates nothing. `del_X` removes X and leaves the data alone. Keep this trio consistent when adding new state to a class.
+
+**One time origin, four operations.** Every class with a `tos_start` (`LVData`, `IRData`, `MSData`) exposes `with_tos_start` / `set_tos_start` / `del_tos_start` / `move_tos_start_by(delta)`, with identical semantics and docstrings. `move_tos_start_by` is defined as `with_tos_start(tos_start + delta)`, so a *later* origin means *smaller* `tos` values. `RamanData` has `tos` but no origin; `XRDData` stores absolute timestamps as a coordinate instead.
+
+**Instrument exports drift over time.** The same setup gains or renames a column between runs (e.g. LabView b67 box 5 gained `F1 CO PV` in 2026-07). A parser must read old *and* new files, and a directory may hold both: concatenate on the union of the columns and leave NaN where a file did not record a channel. An unrecognised column is skipped with a warning naming it — never a hard failure, and never silently carried through as un-parsed strings.
+
 ### Spectral axis conventions
 
 Each module stores its primary axis in SI units; convenience properties expose common alternative units:
@@ -108,9 +122,13 @@ Each module stores its primary axis in SI units; convenience properties expose c
 
 `MSData` wraps an `xr.Dataset` with a shared `cycle` dimension. `block_0` holds m/z channels (`cycle × mz`); additional datablocks hold auxiliary sensors (`cycle × ch_N`). Processing history is appended to `ds.attrs["trace_corrections"]`.
 
+### IR background and merging
+
+`IRData` keeps the background as a separate 1-D `single_beam` variable (`ds["background"]`), never folded into the data, so `data_type` conversions and background switches are reversible. `merge` (scan axis) follows from that: two measurements are only comparable across a spectrometer restart in raw detector units, so it requires `single_beam` on both sides — the exception being two segments that already share an identical background. It keeps exactly one background (the pre-experiment one, i.e. the chronologically first segment's), orders segments by absolute timestamp rather than by `tos`, and rebases the later segment's `tos` onto the first's `tos_start`.
+
 ### LabView channel metadata
 
-`LVData` stores per-channel metadata (unit, group, species, location) in `xr.DataArray.attrs`. The single dimension is `tos` (elapsed seconds since run start).
+`LVData` stores per-channel metadata (unit, group, species, location) in `xr.DataArray.attrs`. The single dimension is `tos` (elapsed seconds since run start). Channels absent from `b67box5.CHANNEL_META` are dropped on read (see *Instrument exports drift over time*); adding a channel means adding its metadata entry.
 
 ### Physisorption isotherm shape
 

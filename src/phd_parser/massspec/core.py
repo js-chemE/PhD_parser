@@ -26,6 +26,12 @@ def _channel_dim(block_id: int) -> str:
     """Name of the channel dim for a given block."""
     return "mz" if block_id == PRIMARY_BLOCK_ID else f"ch_{block_id}"
 
+def _to_timedelta(delta: Union[float, pd.Timedelta, str]) -> pd.Timedelta:
+    """Read a plain number as seconds; hand anything else to pandas.Timedelta."""
+    if isinstance(delta, (int, float, np.integer, np.floating)) and not isinstance(delta, bool):
+        return pd.Timedelta(seconds=float(delta))
+    return pd.Timedelta(delta)
+
 class MSData(BaseModel):
     """Mass-spectrometry data container backed by an ``xr.Dataset``.
 
@@ -513,6 +519,120 @@ class MSData(BaseModel):
         da = self._block(block_id)
         dim = _channel_dim(block_id)
         return da.sel({dim: channel}, method=method)
+
+    # ----------------------------------------------------------------
+    # Immutable — time origin (tos_start)
+    # ----------------------------------------------------------------
+
+    def with_tos_start(self, tos_start: Union[pd.Timestamp, str]) -> "MSData":
+        """Re-anchor ``tos`` to a new origin, leaving every absolute timestamp unchanged.
+
+        Moves the zero of the ``tos`` axis: each value is shifted by minus the
+        distance the origin moved, so ``tos_start + tos`` still resolves to the
+        moment each cycle was actually recorded.  This is what you want when
+        the experiment's reference point changes (e.g. aligning to when gas
+        flow started rather than when the MS did).
+
+        Parameters
+        ----------
+        tos_start : pandas.Timestamp or str
+            New absolute origin.  Strings are parsed by ``pandas.Timestamp``.
+
+        Returns
+        -------
+        MSData
+            New instance with the new origin and rebased ``tos`` values.  If no
+            origin was set before, ``tos`` is left untouched and simply
+            anchored to the new one.
+
+        See Also
+        --------
+        set_tos_start : Replace the origin *without* touching ``tos``.
+        move_tos_start_by : Move the origin by a relative amount.
+        """
+        new_tos_start = pd.Timestamp(tos_start)
+        old_tos_start = self.tos_start
+
+        ds = self.ds.copy()
+        if old_tos_start is None:
+            logger.info(
+                f"No previous tos_start: keeping tos as-is and anchoring it to {new_tos_start}."
+            )
+        elif "tos" in ds.coords:
+            shift_seconds = (new_tos_start - old_tos_start).total_seconds()
+            ds = ds.assign_coords(tos=ds.coords["tos"] - shift_seconds)
+        ds.attrs = {**self.ds.attrs, "tos_start": new_tos_start.isoformat()}
+        return MSData(ds=ds)
+
+    def set_tos_start(self, tos_start: Union[pd.Timestamp, str]) -> "MSData":
+        """Replace the origin without touching ``tos`` — every absolute timestamp moves.
+
+        Use this to correct a wrong origin: the elapsed times are right, the
+        wall-clock they were anchored to was not.
+
+        Parameters
+        ----------
+        tos_start : pandas.Timestamp or str
+            New absolute origin.  Strings are parsed by ``pandas.Timestamp``.
+
+        Returns
+        -------
+        MSData
+            New instance with the new origin and unchanged ``tos`` values.
+
+        See Also
+        --------
+        with_tos_start : Re-anchor ``tos`` so the absolute timestamps survive.
+        """
+        ds = self.ds.copy()
+        ds.attrs = {**self.ds.attrs, "tos_start": pd.Timestamp(tos_start).isoformat()}
+        return MSData(ds=ds)
+
+    def del_tos_start(self) -> "MSData":
+        """Drop the origin, keeping ``tos`` as a purely relative axis.
+
+        Returns
+        -------
+        MSData
+            New instance without a ``tos_start``; ``timestamps`` becomes
+            ``None``.  Returns an equivalent instance if none was set.
+        """
+        attrs = dict(self.ds.attrs)
+        attrs.pop("tos_start", None)
+        ds = self.ds.copy()
+        ds.attrs = attrs
+        return MSData(ds=ds)
+
+    def move_tos_start_by(self, delta: Union[float, pd.Timedelta, str]) -> "MSData":
+        """Move the origin by a relative amount and re-anchor ``tos`` to it.
+
+        Equivalent to ``with_tos_start(tos_start + delta)``: absolute
+        timestamps never change, so moving the origin *later* by ``delta``
+        makes every ``tos`` value *smaller* by ``delta``.  Pass a negative
+        ``delta`` to move the origin earlier and grow the ``tos`` values.
+
+        Parameters
+        ----------
+        delta : float or pandas.Timedelta or str
+            How far to move the origin.  A plain number is read as seconds;
+            anything else is passed to ``pandas.Timedelta`` (e.g. ``"90s"``,
+            ``"1h30min"``).
+
+        Returns
+        -------
+        MSData
+            New instance with the moved origin and rebased ``tos`` values.
+
+        Raises
+        ------
+        ValueError
+            If no ``tos_start`` is set, so there is nothing to move.
+        """
+        if self.tos_start is None:
+            raise ValueError(
+                "No tos_start to move. Anchor the data first with set_tos_start(...)."
+            )
+        return self.with_tos_start(self.tos_start + _to_timedelta(delta))
 
     # ----------------------------------------------------------------
     # Immutable slicing

@@ -14,9 +14,24 @@ def test_read_spa_single():
     assert x is not None, "X data should not be None"
     assert v is not None, "V (intensity) data should not be None"
     assert x.ndim == 1, f"X data should be 1D, but got shape {x.shape}"
-    assert v.ndim == 1, f"V data should be 1D for a single spectrum, but got shape {v.shape}"
-    assert v.size == x.size, f"X and V data should have the same number of points, but got X size {x.size} and V size {v.size}"
+    # A single file is the one-element case of a series, so V stays 2-D.
+    assert v.ndim == 2, f"V data should be 2D with one row, but got shape {v.shape}"
+    assert v.shape[0] == 1, f"V data should hold exactly one spectrum, but got shape {v.shape}"
+    assert v.shape[1] == x.size, f"X and V data should have the same number of points, but got X size {x.size} and V shape {v.shape}"
+    assert raw["data"]["tos"] is not None, "A single file should still carry a tos"
     assert meta is not None, "Metadata should not be None"
+
+def test_read_spa_empty_dir_raises(tmp_path):
+    import pytest
+    from phd_parser.infrared.omnic import read_spa
+    with pytest.raises(FileNotFoundError, match="No .spa files"):
+        read_spa(tmp_path)
+
+def test_read_spa_missing_file_raises(tmp_path):
+    import pytest
+    from phd_parser.infrared.omnic import read_spa
+    with pytest.raises(FileNotFoundError):
+        read_spa(tmp_path / "nope.spa")
 
 def test_read_spa_dir():
     from phd_parser.infrared.omnic import read_spa
@@ -37,11 +52,14 @@ def test_read_spa_single_irdata():
 
     assert ir_data.wavenumber is not None, "Wavenumber data should not be None"
     assert ir_data.values is not None, "Intensity data should not be None"
-    assert ir_data.ndim == 1, f"Data should be 1D (single spectrum), but got shape {ir_data.shape}"
-    assert ir_data.values.size == ir_data.wavenumber.size, (
+    # Same structure as a series: (scan, wavenumber) with one scan.
+    assert ir_data.ndim == 2, f"Data should be 2D (scan, wavenumber), but got shape {ir_data.shape}"
+    assert ir_data.shape[0] == 1, f"A single file should give one scan, but got shape {ir_data.shape}"
+    assert ir_data.shape[1] == ir_data.wavenumber.size, (
         f"Wavenumber and intensity data should have the same number of points, "
-        f"but got wavenumber size {ir_data.wavenumber.size} and values size {ir_data.values.size}"
+        f"but got wavenumber size {ir_data.wavenumber.size} and shape {ir_data.shape}"
     )
+    assert ir_data.tos is not None and ir_data.tos.size == 1, "A single file should still carry a tos"
     assert ir_data.ds.attrs.get("data_type") is not None, "data_type attribute should not be None"
 
 def test_read_spa_dir_irdata():

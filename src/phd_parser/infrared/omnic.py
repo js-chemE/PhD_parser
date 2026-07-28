@@ -364,37 +364,24 @@ def read_spa(
 
 
     # ---- normalize ----
+    # A single file is just a one-element series: it takes the same code path so
+    # that tos/tos_start are applied and the returned structure is identical.
     if isinstance(path, (str, Path)):
         p = Path(path)
 
         if p.is_dir():
             files = list({f.resolve() for f in p.glob("*.spa")})
+            if not files:
+                raise FileNotFoundError(f"No .spa files found in directory {p}")
         else:
-            r = _read_spa_single(p)
-
-            meta = {
-                "vunit": r["vunit"],
-                "vlabel": r["vlabel"],
-                "xlabel": r["xlabel"],
-                "xunit": r["xunit"],
-                "n_points": len(r["x"]),
-                "min_x": float(r["x"][0]),
-                "max_x": float(r["x"][-1]),
-                "name": [r["name"]],
-                "path": [r["path"]],
-                "datetime": [r["datetime"]],
-            }
-
-            return {
-                "data": {
-                    "x": r["x"],
-                    "v": r["v"], #.reshape(1, -1),
-                },
-                "meta": meta,
-            }
+            if not p.exists():
+                raise FileNotFoundError(p)
+            files = [p.resolve()]
 
     else:
-        files = [Path(p).resolve() for p in path]
+        files = [Path(f).resolve() for f in path]
+        if not files:
+            raise FileNotFoundError("No .spa files given: the supplied path list is empty")
 
     # ---- optional sorting ----
     if sort_key is not None:

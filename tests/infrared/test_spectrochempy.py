@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 import pytest
 
 MOCK_DIR_PATH = Path(os.path.dirname(__file__)) / "omnic-test-data"
@@ -85,7 +86,7 @@ def test_spectral_values_agree_with_phd_parser():
     phd_wn_order = np.argsort(ir.wavenumber_per_cm)
 
     scp_values = nd.data.squeeze()[scp_wn_order]
-    phd_values = ir.values[phd_wn_order]
+    phd_values = ir.values[0][phd_wn_order]
 
     np.testing.assert_allclose(scp_values, phd_values, rtol=1e-4)
 
@@ -110,8 +111,11 @@ def test_scan_count_agrees_with_phd_parser():
 def test_from_omnic_spa_backend_spectrochempy_single():
     from phd_parser.infrared import IRData
 
+    # A single file is the one-element case of a series: same structure.
     ir = IRData.from_omnic_spa(MOCK_SINGLE_FILE_PATH, backend="spectrochempy")
-    assert ir.ndim == 1
+    assert ir.ndim == 2
+    assert ir.shape[0] == 1
+    assert ir.tos is not None and ir.tos.size == 1
     assert ir.data_type is not None
     assert ir.wavenumber.size > 0
 
@@ -128,8 +132,32 @@ def test_from_omnic_spa_backend_omnic_single():
     from phd_parser.infrared import IRData
 
     ir = IRData.from_omnic_spa(MOCK_SINGLE_FILE_PATH, backend="omnic")
-    assert ir.ndim == 1
+    assert ir.ndim == 2
+    assert ir.shape[0] == 1
+    assert ir.tos is not None and ir.tos.size == 1
     assert ir.data_type is not None
+
+
+def test_from_omnic_spa_single_and_directory_have_the_same_structure():
+    from phd_parser.infrared import IRData
+
+    single = IRData.from_omnic_spa(MOCK_SINGLE_FILE_PATH)
+    series = IRData.from_omnic_spa(MOCK_DIR_PATH)
+
+    assert single.ds["data"].dims == series.ds["data"].dims
+    assert set(single.ds.coords) == set(series.ds.coords)
+
+
+def test_from_omnic_spa_single_file_applies_tos_start():
+    from phd_parser.infrared import IRData
+
+    tos_start = pd.Timestamp("2026-03-26 12:00:00", tz="UTC")
+    ir = IRData.from_omnic_spa(MOCK_SINGLE_FILE_PATH, tos_start=tos_start, backend="omnic")
+
+    assert ir.tos_start == tos_start
+    assert ir.tos.size == 1
+    # tos is the offset of the acquisition from tos_start, not a dropped coordinate.
+    assert ir.timestamps is not None and len(ir.timestamps) == 1
 
 
 def test_from_omnic_spa_backends_produce_same_result():
@@ -144,9 +172,65 @@ def test_from_omnic_spa_backends_produce_same_result():
     sort_scp = np.argsort(ir_scp.wavenumber_per_cm)
     sort_omnic = np.argsort(ir_omnic.wavenumber_per_cm)
     np.testing.assert_allclose(
-        ir_scp.values[sort_scp], ir_omnic.values[sort_omnic], rtol=1e-4
+        ir_scp.values[0][sort_scp], ir_omnic.values[0][sort_omnic], rtol=1e-4
     )
     assert ir_scp.data_type == ir_omnic.data_type
+
+
+def test_from_omnic_spa_rejects_unknown_backend():
+    from phd_parser.infrared import IRData
+
+    with pytest.raises(ValueError, match="Unknown backend"):
+        IRData.from_omnic_spa(MOCK_SINGLE_FILE_PATH, backend="spectroscopy")
+
+
+def test_from_omnic_spa_rejects_a_second_positional_argument():
+    from phd_parser.infrared import IRData
+
+    # Guards against from_omnic_spa(dir, filename) silently landing the
+    # filename in wavenumber_2SI_factor.
+    with pytest.raises(TypeError):
+        IRData.from_omnic_spa(MOCK_DIR_PATH, MOCK_SINGLE_FILE_PATH.name)
+
+
+def test_from_omnic_spa_empty_directory_raises(tmp_path):
+    from phd_parser.infrared import IRData
+
+    for backend in ("omnic", "spectrochempy"):
+        with pytest.raises(FileNotFoundError, match="No .spa files"):
+            IRData.from_omnic_spa(tmp_path, backend=backend)
+
+
+def test_from_omnic_spa_missing_file_raises(tmp_path):
+    from phd_parser.infrared import IRData
+
+    for backend in ("omnic", "spectrochempy"):
+        with pytest.raises(FileNotFoundError):
+            IRData.from_omnic_spa(tmp_path / "nope.spa", backend=backend)
+
+
+def test_single_file_read_is_usable_as_a_background():
+    from phd_parser.infrared import IRData
+
+    background = IRData.from_omnic_spa(MOCK_SINGLE_FILE_PATH, backend="omnic")
+    series = IRData.from_omnic_spa(MOCK_DIR_PATH, backend="omnic")
+
+    # The test files are absorbance; label the background explicitly so the
+    # assignment is about the one-scan shape, not the type conversion.
+    with_bg = series.with_background(background, data_type="single_beam")
+
+    assert with_bg.has_background
+    assert with_bg.ds["background"].ndim == 1
+    np.testing.assert_allclose(with_bg.background, background.values[0])
+
+
+def test_multi_scan_background_is_rejected():
+    from phd_parser.infrared import IRData
+
+    series = IRData.from_omnic_spa(MOCK_DIR_PATH, backend="omnic")
+
+    with pytest.raises(ValueError, match="single spectrum"):
+        series.with_background(series, data_type="single_beam")
 
 
 def test_from_omnic_spa_auto_uses_spectrochempy_when_available():
@@ -171,10 +255,13 @@ def test_from_scp_single_spectrum():
     nd = scp.read_omnic(MOCK_SINGLE_FILE_PATH)
     ir = IRData.from_scp(nd)
 
-    assert ir.ndim == 1
+    # One scan is the one-element case of a series, not a special 1-D layout.
+    assert ir.ndim == 2
+    assert ir.shape[0] == 1
+    assert ir.tos is not None and ir.tos.size == 1
     assert ir.data_type is not None
     assert ir.wavenumber.size > 0
-    assert ir.values.size == ir.wavenumber.size
+    assert ir.values.shape[1] == ir.wavenumber.size
 
 
 def test_from_scp_multi_scan():
@@ -216,7 +303,7 @@ def test_from_scp_matches_from_omnic_spa():
         ir_scp.wavenumber_per_cm[sort_scp], ir_omnic.wavenumber_per_cm[sort_omnic], rtol=1e-4
     )
     np.testing.assert_allclose(
-        ir_scp.values[sort_scp], ir_omnic.values[sort_omnic], rtol=1e-4
+        ir_scp.values[0][sort_scp], ir_omnic.values[0][sort_omnic], rtol=1e-4
     )
     assert ir_scp.data_type == ir_omnic.data_type
 

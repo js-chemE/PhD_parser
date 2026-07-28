@@ -46,6 +46,34 @@ ir  = pp.infrared.IRData.from_omnic_spa(dir_spa, tos_start=tos_start)
 
 Because every instrument shares the same `tos_start`, a single `tos` value means the same moment in all three datasets — making cross-instrument alignment trivial.
 
+#### Changing the origin afterwards
+
+`LVData`, `IRData` and `MSData` each expose the same four immutable methods, mirroring the `with_` / `set_` / `del_` trio used for backgrounds. The distinction that matters is **what stays fixed**:
+
+| Method | What it changes | What stays fixed |
+|---|---|---|
+| `with_tos_start(tos_start)` | re-anchors: `tos` shifts by minus the distance the origin moved | the absolute timestamps — every sample keeps the wall-clock it was recorded at |
+| `set_tos_start(tos_start)` | stamps a new origin, `tos` untouched | the `tos` values — the absolute timestamps all move with the origin |
+| `del_tos_start()` | drops the origin | `tos`, which becomes a purely relative axis (`timestamps` → `None`) |
+| `move_tos_start_by(delta)` | `with_tos_start(tos_start + delta)` | the absolute timestamps |
+
+Use `with_tos_start` when the *reference point* of the experiment changes — e.g. re-zeroing time to when gas flow started rather than when logging did. Use `set_tos_start` when the elapsed times are right but the wall-clock they were anchored to was wrong.
+
+```python
+# Re-zero all three datasets to the moment reaction gas hit the reactor.
+t_reaction = pd.Timestamp("2026-04-21 15:12:30", tz="Europe/Amsterdam")
+lv, ms, ir = (d.with_tos_start(t_reaction) for d in (lv_raw, ms_raw, ir_raw))
+# tos == 0 now means the same instant everywhere; timestamps are unchanged.
+
+# Nudge the origin 90 s later (equivalently: shift every tos down by 90 s).
+ir = ir.move_tos_start_by(90)          # seconds
+ir = ir.move_tos_start_by("1h30min")   # or any pandas.Timedelta / string
+```
+
+Mind the sign: moving the origin **later** makes every `tos` value **smaller**. Pass a negative `delta` to move the origin earlier and grow the `tos` values.
+
+`RamanData` carries a `tos` coordinate but no origin, and `XRDData` stores absolute timestamps as a coordinate instead — neither has this family.
+
 ---
 
 ### Immutable transformations — every method returns a new object
@@ -111,6 +139,7 @@ The `LVData` class is the core container for LabView process data. It wraps an `
 
 **Processing (all immutable — return a new `LVData`)**
 - Selection: `select_channels`, `select_group`, `select_tos_range`
+- Time origin: `with_tos_start`, `set_tos_start`, `del_tos_start`, `move_tos_start_by` (see [Changing the origin afterwards](#changing-the-origin-afterwards))
 - Resampling: `resample` (bin into fixed-width time steps; `mean`, `median`, `first`, or `last` aggregation)
 - Smoothing: `smooth_moving` (centered moving average)
 
@@ -151,10 +180,15 @@ lv_raw = pp.labview.LVData.from_netcdf(Path("path/to/cache.nc"))
 
 Low-level parser in `phd_parser.labview.b67box5`:
 
-- `read` — reads a single tab-separated file or a whole directory of `.txt`/`.csv` files and concatenates them; returns `(df, channel_meta, file_meta)`
+- `read` — reads a single tab-separated file or a whole directory of `.txt`/`.csv` files in filename order and concatenates them; returns `(df, channel_meta, file_meta)`
 - Timestamps parsed with format `%d-%m-%Y %H:%M:%S` and localised to `Europe/Amsterdam` by default
-- Known channels with full metadata: reactor temperature (`Reactor T PV`, °C), analytics pressure (`Analytic P PV`, bar(a)), vent pressure (`Vent P PV`, bar(g)), mass-flow controllers for two lines (`F1`/`F2`) carrying He, H₂, CO₂, and Ar (all mL/min), and a feed valve state (`Feed`)
-- Unknown columns are passed through with an empty metadata dict and a warning
+- Known channels with full metadata: reactor temperature (`Reactor T PV`, °C), analytics pressure (`Analytic P PV`, bar(a)), vent pressure (`Vent P PV`, bar(g)), mass-flow controllers for two lines (`F1` carrying He, H₂, CO₂ and CO; `F2` carrying He, H₂, CO₂ and Ar, all mL/min), and a feed valve state (`Feed`)
+- Values use a comma decimal separator and are converted to float on read
+
+**The export changes over time — both old and new files are readable.** The channel set has grown at least once (`F1 CO PV` was added in 2026-07), so files recorded months apart carry different columns:
+
+- A directory holding files from either side of such a change concatenates on the *union* of the columns; a channel a given file did not record is NaN over that file's rows, and a warning names which file was missing which channel
+- Columns the parser does not recognise are **skipped** with a warning naming them, rather than breaking the read. Add them to `CHANNEL_META` in `phd_parser.labview.b67box5` to read them in with proper metadata, or pass `keep_unknown_channels=True` to `from_b67_box5_txt` / `read` to keep them with empty metadata
 
 ---
 
@@ -285,7 +319,12 @@ Every spectrum carries a `data_type` attribute that records the physical represe
 - `from_arrays` — build from raw numpy arrays (wavenumber in cm⁻¹, values, optional `tos`, `tos_start`, `data_type`)
 - `from_xarray` — wrap an existing `xr.DataArray` or `xr.Dataset`
 - `from_netcdf` — load a previously saved NetCDF file
-- `from_omnic_spa` — read Thermo OMNIC `.spa` files (single file or directory); `data_type` is mapped automatically from the OMNIC header; unknown types raise `ValueError`
+- `from_omnic_spa` — read Thermo OMNIC `.spa` files (single file or directory); `data_type` is mapped automatically from the OMNIC header; unknown types raise `ValueError`. `backend` selects the low-level reader: `"auto"` (default) uses SpectroChemPy when installed and falls back to the built-in binary parser, `"spectrochempy"` forces it, `"omnic"` forces the built-in one
+- `from_scp` — wrap an existing SpectroChemPy `NDDataset`, however it was produced (read from a file, processed, or built programmatically)
+
+> **One file is just a one-element series.** Reading a single `.spa` gives the same structure as reading a directory — 2-D `(scan, wavenumber)` with one scan and a `tos` coordinate — so `tos_start` applies either way and nothing downstream has to special-case it. A one-scan instance is accepted anywhere a single spectrum is expected, e.g. `series.with_background(background_from_one_file)`.
+>
+> Every argument after the path is **keyword-only** on `from_omnic_spa` / `from_scp`: `from_omnic_spa(dir, filename)` used to land `filename` in `wavenumber_2SI_factor` and multiply the axis by a string. Join the path yourself — `from_omnic_spa(dir / filename)`. A path that exists but holds no `.spa` file raises `FileNotFoundError` naming the directory, and an unknown `backend` value raises instead of silently falling back to `"auto"`.
 
 **Accessors**
 - Spectrum: `values`, `ndim`, `shape`, `data_type`
@@ -327,9 +366,61 @@ Conversions follow experiment type: transmission-side (`single_beam → transmit
 - `to_absorbance()` — from `single_beam` (needs background) or `transmittance`
 - `to_log_1_r()` — from `single_beam` (needs background), `reflectance`, `absorbance`, or `kubelka_munk`
 - `to_kubelka_munk()` — from any reflectance-reachable type; routes through `to_reflectance()` internally
+- `to_single_beam()` — the inverse of all of the above: re-applies the stored background to get back to raw detector units (needs a background)
+
+**Merging two measurements (all immutable — return a new `IRData`)**
+
+When a run has to be interrupted — the spectrometer is restarted mid-experiment and a *second* background is recorded — the experiment ends up split across two files. `merge` joins them back into one along the scan (time) axis.
+
+Nomenclature used throughout the repo: **merge** joins along the scan/time axis, **extend** would join along the energy axis (wavenumber), and **vstack** would stack 2-D data along a new dimension.
+
+- `merge(other, ...)` — combine two measurements into one
+- `IRData.merge_all(items, ...)` — fold `merge` over any number of measurements
+
+Merging is only defined on `single_beam` data: two segments recorded against *different* backgrounds are not comparable in any background-derived unit, so anything else raises — unless both segments happen to carry an identical background, which is allowed. Run `to_single_beam()` on both first, merge, then apply one common background.
+
+The decisions `merge` makes for you:
+
+| | |
+|---|---|
+| **order** | Segments are ordered by the *absolute* time of their first scan, not by `tos` — two files each starting at `tos=0` are only comparable through their `tos_start`. The earlier one is the *first* segment. |
+| **`tos` / `tos_start`** | The merged data keeps the first segment's `tos_start` and leaves its `tos` untouched; the later segment's `tos` is shifted by the difference between the two `tos_start` values, so `timestamps` stays continuous across the join. |
+| **background** | Exactly one survives — by default the first segment's, i.e. the one recorded *before* the experiment, not the mid-experiment one. |
+| **baseline** | Kept only if *both* segments carry one, otherwise dropped with a warning. |
+| **scan ids** | Renumbered `0 … n-1`; a JSON record of the operation is appended to `ds.attrs["merge_log"]`. |
+
+Overrides: `keep_background` (`"first"` / `"last"` / `"none"`, or an explicit array / 1-D `IRData`), `order` (`"auto"` / `"given"`), `sort` (sort merged scans by `tos`; independent of `order`), `tos_offset_seconds` (relate two time axes explicitly — the way to merge segments with no absolute timestamps), `on_overlap` (`"warn"` / `"raise"` / `"ignore"` / `"trim"` the duplicated scans of the second segment), and `wavenumber` (`"strict"` requires identical axes, `"interp"` interpolates the second segment onto the first's grid restricted to the common range).
+
+1-D operands are promoted to a single scan, so two single spectra merge into a 2-D instance and a spectrum can be merged into a series.
+
+```python
+IRData = pp.infrared.IRData
+
+# Before the restart: background recorded at the start of the experiment.
+part_1 = (
+    IRData.from_omnic_spa(dir_before_restart, tos_start=tos_start_1)
+    .with_background(IRData.from_omnic_spa(bg_file_1, tos_start=tos_start_1))
+)
+# After the restart: a second background, recorded mid-experiment.
+part_2 = (
+    IRData.from_omnic_spa(dir_after_restart, tos_start=tos_start_2)
+    .with_background(IRData.from_omnic_spa(bg_file_2, tos_start=tos_start_2))
+)
+
+# One continuous run on one time origin; bg_file_1 survives, bg_file_2 is dropped.
+ir_raw = part_1.merge(part_2)
+
+# If the files were exported as absorbance, go back to raw units first:
+ir_raw = part_1.to_single_beam().merge(part_2.to_single_beam())
+
+# Any number of files, in any order — the chronology decides:
+ir_raw = IRData.merge_all([part_2, part_1, part_3])
+```
 
 **Processing (all immutable — return a new `IRData`; background and baseline are propagated automatically)**
-- Selection: `sort`, `select_by_idx`, `select_by_tos`, `select_wavenumber_range`, `select_tos_range`, `assign_tos_start`
+- Selection: `sort`, `select_by_idx`, `select_by_tos`, `select_wavenumber_range`, `select_wavenumber_index_range`, `select_tos_range`, `select_scan_id_range`
+- Time origin: `with_tos_start`, `set_tos_start`, `del_tos_start`, `move_tos_start_by` (see [Changing the origin afterwards](#changing-the-origin-afterwards))
+- Merging: `merge`, `merge_all` (scan axis; see above)
 - Smoothing: `smooth_savgol`, `smooth_gaussian`, `smooth_moving`
 - Baseline correction: `correct_offset`, `correct_pchip`, `correct_baseline`, `reapply_baseline`, `unbaseline`, `del_baseline`
 - Averaging: `average_scans`, `average_scans_by_tos`
@@ -415,7 +506,7 @@ snr = ir.snr_windows(signal_range_cm=(1500, 1750), noise_range_cm=(1800, 1900))
 
 Low-level parser for `.spa` files in `phd_parser.infrared.omnic`:
 
-- `read_spa` — reads a single `.spa` file, a directory of `.spa` files, or an iterable of paths; returns a dict with stacked `x`, `v`, and `tos` arrays plus metadata (`vlabel`, `vunit`, `xlabel`, `xunit`, datetime list)
+- `read_spa` — reads a single `.spa` file, a directory of `.spa` files, or an iterable of paths; returns a dict with stacked `x`, `v` (always 2-D, one row per file), and `tos` arrays plus metadata (`vlabel`, `vunit`, `xlabel`, `xunit`, datetime list); raises `FileNotFoundError` when the path resolves to no `.spa` file
 - Supports local paths and HTTP(S) URLs
 - Time-of-scan (`tos`) derived from: explicit `tos_start`, a fixed `delta_time_seconds` increment, or the embedded file timestamps (default)
 - Optional `sort_key` for ordering series (default extracts the "Spectrum Index N" pattern from filenames)
@@ -423,6 +514,12 @@ Low-level parser for `.spa` files in `phd_parser.infrared.omnic`:
 - The `vlabel` from the OMNIC header is mapped to `IRDataType` via `_OMNIC_VLABEL_TO_DATA_TYPE`; unknown labels raise `ValueError` with instructions to extend the mapping
 
 Due to the high overhead of SpectroChemPy [^1], this `read_spa` is a stripped-down version of their parser. For further processing beyond raw file reading, I recommend checking them out.
+
+A SpectroChemPy-backed alternative lives in `phd_parser.infrared.spectrochempy` and is used by default when the library is installed (`backend="auto"`):
+
+- `read_spa` — drop-in replacement for the built-in one: same arguments, same returned dict, so callers never need to know which backend ran
+- `read_nddataset` — convert any `NDDataset` (read from a file, processed, or built programmatically) into the same dict; this is what `IRData.from_scp` uses
+- `tos` comes from SpectroChemPy's acquisition timestamps when available, otherwise from the hours encoded in the filenames
 
 ---
 
@@ -444,6 +541,7 @@ The `MSData` class is the core container for mass spectrometry data. It wraps an
 
 **Processing (all immutable — return a new `MSData`)**
 - Selection: `select_tos_range`
+- Time origin: `with_tos_start`, `set_tos_start`, `del_tos_start`, `move_tos_start_by` (see [Changing the origin afterwards](#changing-the-origin-afterwards))
 - Data cleaning: `mask_overloaded` (replace values above a threshold — e.g. detector saturation spikes around 1e38 — with NaN, applied to one block or all)
 - Smoothing: `smooth_trace_rolling` (centered rolling mean along the cycle dimension, configurable window and `min_periods`, applied to one block or all)
 - Baseline / offset correction: `correct_traces` (shift negative m/z traces up to zero, targeted or across all channels of the m/z block), `baseline_subtract` (per-channel mean over a tos window, applied to one block or all)

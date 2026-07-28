@@ -72,9 +72,9 @@ def read_spa(
         Same structure as :func:`phd_parser.infrared.omnic.read_spa`:
 
         ``"data"``
-            ``"x"`` (cm⁻¹, ascending), ``"v"`` (1-D for single file or
-            2-D ``(n_spectra, n_wavenumber)`` for multiple), optionally
-            ``"tos"`` (elapsed seconds, 1-D).
+            ``"x"`` (cm⁻¹, ascending), ``"v"`` (2-D
+            ``(n_spectra, n_wavenumber)``, one row per file), ``"tos"``
+            (elapsed seconds, 1-D).
 
         ``"meta"``
             ``"vlabel"``, ``"vunit"``, ``"xlabel"``, ``"xunit"``,
@@ -85,6 +85,8 @@ def read_spa(
     ------
     ImportError
         If spectrochempy is not installed.
+    FileNotFoundError
+        If *path* does not exist, or resolves to no ``.spa`` file at all.
     ValueError
         If both ``delta_time_seconds`` and ``tos_start`` are supplied.
     """
@@ -94,17 +96,22 @@ def read_spa(
         raise ValueError("Specify either 'delta_time_seconds' or 'tos_start', not both.")
 
     # ---- resolve files ----
+    # A single file is just a one-element series: same code path, same returned
+    # structure, so tos/tos_start are applied either way.
     if isinstance(path, (str, Path)):
         p = Path(path)
         if p.is_dir():
             files = list({f.resolve() for f in p.glob("*.spa")})
-            single = False
+            if not files:
+                raise FileNotFoundError(f"No .spa files found in directory {p}")
         else:
+            if not p.exists():
+                raise FileNotFoundError(p)
             files = [p.resolve()]
-            single = True
     else:
         files = [Path(f).resolve() for f in path]
-        single = len(files) == 1
+        if not files:
+            raise FileNotFoundError("No .spa files given: the supplied path list is empty")
 
     if sort_key is not None and len(files) > 1:
         files = sorted(files, key=sort_key)
@@ -128,38 +135,27 @@ def read_spa(
     tos: Optional[np.ndarray] = None
     resolved_tos_start: Optional[pd.Timestamp] = None
 
-    if not single:
-        if delta_time_seconds is not None:
-            tos = np.arange(len(files), dtype=float) * delta_time_seconds
+    if delta_time_seconds is not None:
+        tos = np.arange(len(files), dtype=float) * delta_time_seconds
+    else:
+        # Try acquisition timestamps from spectrochempy first
+        scp_times = _extract_scp_timestamps(nd)
+        if scp_times is not None:
+            resolved_tos_start = pd.Timestamp(tos_start) if tos_start is not None else scp_times[0]
+            tos = np.array(
+                [(t - resolved_tos_start).total_seconds() for t in scp_times],
+                dtype=float,
+            )
         else:
-            # Try acquisition timestamps from spectrochempy first
-            scp_times = _extract_scp_timestamps(nd)
-            if scp_times is not None:
-                if tos_start is not None:
-                    resolved_tos_start = pd.Timestamp(tos_start)
-                    tos = np.array(
-                        [(t - resolved_tos_start).total_seconds() for t in scp_times],
-                        dtype=float,
-                    )
-                else:
-                    resolved_tos_start = scp_times[0]
-                    tos = np.array(
-                        [(t - resolved_tos_start).total_seconds() for t in scp_times],
-                        dtype=float,
-                    )
+            # Fallback: derive tos from filename-encoded hours
+            raw_tos = np.array(
+                [omnic.extract_spectrum_tos(f) or 0 for f in files], dtype=float
+            )
+            if tos_start is not None:
+                resolved_tos_start = pd.Timestamp(tos_start)
+                tos = raw_tos
             else:
-                # Fallback: derive tos from filename-encoded hours
-                raw_tos = np.array(
-                    [omnic.extract_spectrum_tos(f) or 0 for f in files], dtype=float
-                )
-                if tos_start is not None:
-                    resolved_tos_start = pd.Timestamp(tos_start)
-                    tos = raw_tos
-                else:
-                    tos = raw_tos - raw_tos[0]
-
-    if single:
-        values = values.squeeze()
+                tos = raw_tos - raw_tos[0]
 
     meta: dict = {
         "vlabel": vlabel,
@@ -208,9 +204,9 @@ def read_nddataset(
     Returns
     -------
     dict
-        ``"data"`` → ``"x"`` (cm⁻¹, ascending), ``"v"`` (1-D for a single
-        scan, 2-D ``(n_scans, n_wavenumber)`` otherwise), optionally ``"tos"``
-        (elapsed seconds).  ``"meta"`` → ``"vlabel"``, ``"vunit"``,
+        ``"data"`` → ``"x"`` (cm⁻¹, ascending), ``"v"``
+        (2-D ``(n_scans, n_wavenumber)``, also for a single scan), optionally
+        ``"tos"`` (elapsed seconds).  ``"meta"`` → ``"vlabel"``, ``"vunit"``,
         ``"xlabel"``, ``"xunit"``, ``"n_points"``, ``"min_x"``, ``"max_x"``,
         ``"tos_start"``.
 
@@ -231,30 +227,30 @@ def read_nddataset(
         values = values[:, ::-1]
 
     n_scans = values.shape[0]
-    single = n_scans == 1
 
     # vlabel
     title = (nd.title or "").strip()
     vlabel = _SCP_TITLE_TO_VLABEL.get(title.lower(), title or "absorbance")
 
-    # tos: spectrochempy timestamps only (no filename fallback here)
+    # tos: spectrochempy timestamps only (no filename fallback here).
+    # A one-scan dataset is treated like any other series, so it gets a tos too.
     tos: Optional[np.ndarray] = None
     resolved_tos_start: Optional[pd.Timestamp] = None
 
-    if not single:
-        if delta_time_seconds is not None:
-            tos = np.arange(n_scans, dtype=float) * delta_time_seconds
-        else:
-            scp_times = _extract_scp_timestamps(nd)
-            if scp_times is not None:
-                t0 = pd.Timestamp(tos_start) if tos_start is not None else scp_times[0]
-                resolved_tos_start = t0
-                tos = np.array([(t - t0).total_seconds() for t in scp_times], dtype=float)
-            elif tos_start is not None:
-                resolved_tos_start = pd.Timestamp(tos_start)
+    if delta_time_seconds is not None:
+        tos = np.arange(n_scans, dtype=float) * delta_time_seconds
+    else:
+        scp_times = _extract_scp_timestamps(nd)
+        if scp_times is not None:
+            t0 = pd.Timestamp(tos_start) if tos_start is not None else scp_times[0]
+            resolved_tos_start = t0
+            tos = np.array([(t - t0).total_seconds() for t in scp_times], dtype=float)
+        elif tos_start is not None:
+            resolved_tos_start = pd.Timestamp(tos_start)
 
-    if single:
-        values = values.squeeze()
+    if tos is None and n_scans == 1:
+        # A lone scan has no spacing to infer: it simply sits at the origin.
+        tos = np.zeros(1, dtype=float)
 
     meta: dict = {
         "vlabel": vlabel,
