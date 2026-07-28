@@ -13,6 +13,9 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# OMNIC stores acquisition times as seconds since this epoch, at byte offset 296.
+_SPA_EPOCH = datetime(1899, 12, 31, tzinfo=timezone.utc)
+
 # =========================
 # Basic utilities
 # =========================
@@ -157,6 +160,35 @@ def extract_spectrum_tos_1(path: Union[str, Path]) -> int:
 # Core SPA reader
 # =========================
 
+def read_spa_datetime(path: Union[str, Path]) -> datetime:
+    """Read only the acquisition timestamp recorded inside a ``.spa`` file.
+
+    This is the authoritative time of a scan — accurate to the second, unlike
+    the hours encoded in OMNIC's filenames, which are rounded to two decimals
+    (0.01 h = 36 s) and restart at zero whenever the experiment is restarted.
+    Reads a handful of bytes instead of the whole spectrum, so it is cheap
+    enough to call for every file in a large series.
+
+    Parameters
+    ----------
+    path : str or pathlib.Path
+        Path to the ``.spa`` file.
+
+    Returns
+    -------
+    datetime.datetime
+        Timezone-aware acquisition datetime (UTC).
+    """
+    with _open_file(path) as fid:
+        return _read_datetime(fid)
+
+
+def _read_datetime(fid) -> datetime:
+    """Acquisition datetime from an open .spa file: seconds since 1899-12-31, UTC."""
+    fid.seek(296)
+    return _SPA_EPOCH + timedelta(seconds=int(_read(fid, "uint32")))
+
+
 def _read_spa_single(path: Union[str, Path]) -> Dict[str, Any]:
 
     spectrum_id = extract_spectrum_id(path)
@@ -168,9 +200,7 @@ def _read_spa_single(path: Union[str, Path]) -> Dict[str, Any]:
         name = _read_text(fid, 30, 256)
 
         # ---- timestamp ----
-        fid.seek(296)
-        t = _read(fid, "uint32")
-        date = datetime(1899, 12, 31, tzinfo=timezone.utc) + timedelta(seconds=int(t))
+        date = _read_datetime(fid)
 
         # ---- scan block ----
         pos = 304
@@ -405,12 +435,16 @@ def read_spa(
 
     logger.debug("Started reading TOS data for spectra.")
     if tos_start is not None:
-        try:
-            tos = np.asarray([(r["datetime"] - tos_start).total_seconds() for r in results])
-            logger.debug(f"Calculated time offsets (tos) from 'tos_start'. tos_start={tos_start}, tos[0]={tos[0]}, tos[-1]={tos[-1]}")
-        except Exception as e:
-            logger.error(f"Error calculating time offsets from 'tos_start': {e}")
-            tos = None
+        # The datetimes recorded inside the files are tz-aware (UTC); a naive
+        # tos_start cannot be related to them without guessing a timezone.
+        if tos_start.tzinfo is None and results[0]["datetime"].tzinfo is not None:
+            raise ValueError(
+                f"Cannot anchor the acquisition times ({results[0]['datetime']}) to tos_start "
+                f"({tos_start}): one is timezone-aware and the other is not. Pass a "
+                'timezone-aware tos_start, e.g. pd.Timestamp("2026-07-23 10:00", tz="Europe/Amsterdam").'
+            )
+        tos = np.asarray([(r["datetime"] - tos_start).total_seconds() for r in results])
+        logger.debug(f"Calculated time offsets (tos) from 'tos_start'. tos_start={tos_start}, tos[0]={tos[0]}, tos[-1]={tos[-1]}")
 
     elif delta_time_seconds is not None:
         tos = np.arange(v.shape[0]) * delta_time_seconds

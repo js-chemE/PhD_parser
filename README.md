@@ -383,7 +383,7 @@ The decisions `merge` makes for you:
 
 | | |
 |---|---|
-| **data_type** | Preserved. Non-single-beam data is rebased through single beam, so the second segment's *values* change: they are recomputed against the surviving background. The round trip drops any stored baseline, with a warning. Pass `convert_to_single_beam=False` to raise instead and handle it yourself. |
+| **data_type** | Preserved. Non-single-beam data is rebased through single beam, so the second segment's *values* change: they are recomputed against the surviving background. The round trip drops any stored baseline, with a warning. Pass `convert_to_single_beam=False` to raise instead and handle it yourself. If a segment carries **no** background (OMNIC often exports finished absorbance and nothing else) there is nothing to rebase with: the scans are merged exactly as recorded and a warning says so. `ds.attrs["merge_log"]` records which of the three happened under `rebasing`. |
 | **order** | Segments are ordered by the *absolute* time of their first scan, not by `tos` — two files each starting at `tos=0` are only comparable through their `tos_start`. The earlier one is the *first* segment. |
 | **`tos` / `tos_start`** | The merged data keeps the first segment's `tos_start` and leaves its `tos` untouched; the later segment's `tos` is shifted by the difference between the two `tos_start` values, so `timestamps` stays continuous across the join. |
 | **background** | Exactly one survives — by default the first segment's, i.e. the one recorded *before* the experiment, not the mid-experiment one. |
@@ -393,6 +393,20 @@ The decisions `merge` makes for you:
 Overrides: `keep_background` (`"first"` / `"last"` / `"none"`, or an explicit array / 1-D `IRData`), `order` (`"auto"` / `"given"`), `sort` (sort merged scans by `tos`; independent of `order`), `tos_offset_seconds` (relate two time axes explicitly — the way to merge segments with no absolute timestamps), `on_overlap` (`"warn"` / `"raise"` / `"ignore"` / `"trim"` the duplicated scans of the second segment), `wavenumber` (`"strict"` requires identical axes, `"interp"` interpolates the second segment onto the first's grid restricted to the common range), and `convert_to_single_beam` (`False` refuses the automatic rebasing).
 
 1-D operands are promoted to a single scan, so two single spectra merge into a 2-D instance and a spectrum can be merged into a series.
+
+**Getting the join right without a hand-recorded restart time.** A restart is an emergency, so nobody writes down when the second measurement began — and you don't need them to. Every `.spa` carries the moment it was recorded, so both segments already sit on the instrument clock. Pass the **same** `tos_start` to both reads (or none at all): each segment's `tos` is then its true offset from that one origin, and `merge` orders by `tos_start + tos`, i.e. by when the scans actually happened.
+
+```python
+tos_start = pd.Timestamp("2026-07-23 10:00:00", tz="Europe/Amsterdam")   # one origin, both reads
+part_1 = IRData.from_omnic_spa(dir_before_restart, tos_start=tos_start)
+part_2 = IRData.from_omnic_spa(dir_after_restart,  tos_start=tos_start)   # no restart time needed
+
+ir_raw = part_1.merge(part_2)
+# INFO Joining segments: first ends 2026-07-23 10:23:08+02:00,
+#      second starts 2026-07-23 10:43:52+02:00 (gap 1244.0s).
+```
+
+`merge` logs where the two segments meet, in wall-clock time, and stores the gap in `ds.attrs["merge_log"]` as `gap_seconds` — check it against what happened in the lab. A negative gap means they overlap, which `on_overlap` handles. Never invent a `tos_start` for the second segment by hand: that replaces a measured time with a guess, and is exactly how the two halves end up on top of each other.
 
 ```python
 IRData = pp.infrared.IRData
@@ -507,8 +521,11 @@ snr = ir.snr_windows(signal_range_cm=(1500, 1750), noise_range_cm=(1800, 1900))
 Low-level parser for `.spa` files in `phd_parser.infrared.omnic`:
 
 - `read_spa` — reads a single `.spa` file, a directory of `.spa` files, or an iterable of paths; returns a dict with stacked `x`, `v` (always 2-D, one row per file), and `tos` arrays plus metadata (`vlabel`, `vunit`, `xlabel`, `xunit`, datetime list); raises `FileNotFoundError` when the path resolves to no `.spa` file
+- `read_spa_datetime` — reads *only* the acquisition timestamp out of a `.spa` (a few bytes, cheap enough to call for thousands of files)
 - Supports local paths and HTTP(S) URLs
 - Time-of-scan (`tos`) derived from: explicit `tos_start`, a fixed `delta_time_seconds` increment, or the embedded file timestamps (default)
+
+> **Time comes from inside the file, never from the filename.** OMNIC names its exports `Spectrum Index 412 at 0,90 Hours.spa`, but those hours are rounded to two decimals — 0.01 h = **36 s**, so a dozen consecutive scans share one value — and they **restart at zero every time a new series is started**. Both readers therefore take the per-scan acquisition timestamp recorded inside each `.spa`, which is accurate to the second and absolute. The filename hours survive only as a last-resort fallback, with a warning, when no timestamp can be read at all. This is what makes two separately-recorded measurements land on one honest timeline (see [Merging](#merging-two-measurements-all-immutable--return-a-new-irdata)).
 - Optional `sort_key` for ordering series (default extracts the "Spectrum Index N" pattern from filenames)
 - Extracts core header fields (x/y units, number of points, spectral range) and acquisition datetime
 - The `vlabel` from the OMNIC header is mapped to `IRDataType` via `_OMNIC_VLABEL_TO_DATA_TYPE`; unknown labels raise `ValueError` with instructions to extend the mapping

@@ -328,8 +328,9 @@ class RamanData(BaseModel):
         Returns
         -------
         xarray.DataArray
-            DataArray with a ``scan`` dimension (and optionally a ``shift``
-            dimension when multiple targets are requested).
+            Scalar target in, 1-D out: a ``scan`` dimension only, with the
+            selected shift kept as a scalar coordinate.  A sequence of targets
+            adds a ``shift`` dimension.
 
         Raises
         ------
@@ -340,6 +341,7 @@ class RamanData(BaseModel):
         if "scan" not in self.da.dims:
             raise ValueError("get_evolution requires a 'scan' dimension")
 
+        scalar_input = np.ndim(shift_per_cm) == 0
         targets_si = np.atleast_1d(np.asarray(shift_per_cm, dtype=float)) * 100.0
 
         if tolerance_per_cm is not None:
@@ -353,7 +355,12 @@ class RamanData(BaseModel):
                         f"(tolerance: {tolerance_per_cm:.1f} cm⁻¹)"
                     )
 
-        return self.da.sel(shift=targets_si, method=method)
+        result = self.da.sel(shift=targets_si, method=method)
+        if scalar_input:
+            # Scalar in, scalar out: drop the length-1 shift dim, keeping the
+            # selected shift as a scalar coordinate.
+            result = result.isel(shift=0)
+        return result
 
     def get_map_spectrum(self, x: int, y: int) -> npt.NDArray:
         """Return the spectrum at a specific map pixel.

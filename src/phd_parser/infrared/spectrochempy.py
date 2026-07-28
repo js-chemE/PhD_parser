@@ -137,25 +137,30 @@ def read_spa(
 
     if delta_time_seconds is not None:
         tos = np.arange(len(files), dtype=float) * delta_time_seconds
+        resolved_tos_start = pd.Timestamp(tos_start) if tos_start is not None else None
     else:
-        # Try acquisition timestamps from spectrochempy first
-        scp_times = _extract_scp_timestamps(nd)
-        if scp_times is not None:
-            resolved_tos_start = pd.Timestamp(tos_start) if tos_start is not None else scp_times[0]
-            tos = np.array(
-                [(t - resolved_tos_start).total_seconds() for t in scp_times],
-                dtype=float,
+        acquisition_times = _acquisition_times(nd, files)
+        if acquisition_times is not None:
+            resolved_tos_start = (
+                pd.Timestamp(tos_start) if tos_start is not None else acquisition_times[0]
             )
+            tos = _elapsed_seconds(acquisition_times, resolved_tos_start)
         else:
-            # Fallback: derive tos from filename-encoded hours
+            # Last resort: the hours encoded in the filenames. Rounded to two
+            # decimals (0.01 h = 36 s) and restarted at zero on every OMNIC
+            # restart, so this cannot place two series on a common axis.
+            logger.warning(
+                "No acquisition timestamps available for %d file(s); falling back to the hours "
+                "encoded in the filenames, which are rounded to 36 s and restart at zero for "
+                "every new series. Do not rely on this axis to merge separate measurements.",
+                len(files),
+            )
             raw_tos = np.array(
                 [omnic.extract_spectrum_tos(f) or 0 for f in files], dtype=float
             )
+            tos = raw_tos - raw_tos[0]
             if tos_start is not None:
                 resolved_tos_start = pd.Timestamp(tos_start)
-                tos = raw_tos
-            else:
-                tos = raw_tos - raw_tos[0]
 
     meta: dict = {
         "vlabel": vlabel,
@@ -267,6 +272,35 @@ def read_nddataset(
     if tos is not None:
         result["data"]["tos"] = tos
     return result
+
+
+def _acquisition_times(nd, files: list[Path]) -> Optional[list[pd.Timestamp]]:
+    """When each scan was actually recorded, in scan order.
+
+    Prefers spectrochempy's own acquisition labels and falls back to the
+    timestamp stored inside each ``.spa`` file — never to the filename, whose
+    encoded hours are rounded to 36 s and restart at zero for every new series.
+    """
+    scp_times = _extract_scp_timestamps(nd)
+    if scp_times is not None and len(scp_times) == len(files):
+        return scp_times
+
+    try:
+        return [pd.Timestamp(omnic.read_spa_datetime(f)) for f in files]
+    except Exception as exc:  # noqa: BLE001 — any unreadable file falls through
+        logger.debug("Could not read acquisition timestamps from the .spa files: %s", exc)
+        return None
+
+
+def _elapsed_seconds(times: list[pd.Timestamp], origin: pd.Timestamp) -> np.ndarray:
+    """Seconds from origin to each timestamp, with a clear error on tz mismatch."""
+    if (origin.tzinfo is None) != (times[0].tzinfo is None):
+        raise ValueError(
+            f"Cannot anchor the acquisition times ({times[0]}) to tos_start ({origin}): one is "
+            "timezone-aware and the other is not. Pass a timezone-aware tos_start, e.g. "
+            'pd.Timestamp("2026-07-23 10:00", tz="Europe/Amsterdam").'
+        )
+    return np.array([(t - origin).total_seconds() for t in times], dtype=float)
 
 
 def _extract_scp_timestamps(nd) -> Optional[list[pd.Timestamp]]:

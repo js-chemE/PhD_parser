@@ -107,6 +107,8 @@ Every subpackage follows the same structure:
 
 **One time origin, four operations.** Every class with a `tos_start` (`LVData`, `IRData`, `MSData`) exposes `with_tos_start` / `set_tos_start` / `del_tos_start` / `move_tos_start_by(delta)`, with identical semantics and docstrings. `move_tos_start_by` is defined as `with_tos_start(tos_start + delta)`, so a *later* origin means *smaller* `tos` values. `RamanData` has `tos` but no origin; `XRDData` stores absolute timestamps as a coordinate instead.
 
+**Time comes from the instrument, not from the filename.** OMNIC's `... at 0,90 Hours.spa` names are rounded to 0.01 h (36 s) and restart at zero for every new series, so a filename-derived `tos` silently stacks two measurements on top of each other. Both `.spa` readers take the per-scan acquisition timestamp recorded inside the file (`omnic.read_spa_datetime`); filenames are a last-resort fallback that warns. The same rule applies to any parser: prefer a recorded absolute time over anything reconstructed from a name or an index.
+
 **Instrument exports drift over time.** The same setup gains or renames a column between runs (e.g. LabView b67 box 5 gained `F1 CO PV` in 2026-07). A parser must read old *and* new files, and a directory may hold both: concatenate on the union of the columns and leave NaN where a file did not record a channel. An unrecognised column is skipped with a warning naming it — never a hard failure, and never silently carried through as un-parsed strings.
 
 ### Spectral axis conventions

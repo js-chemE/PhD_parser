@@ -184,11 +184,33 @@ def test_merge_conversion_can_be_refused(first, second):
         first.to_absorbance().merge(second.to_absorbance(), convert_to_single_beam=False)
 
 
-def test_merge_conversion_needs_a_background_on_each_segment(first, second):
-    absorbance_without_background = first.to_absorbance().del_background()
+def test_merge_without_backgrounds_merges_as_recorded(caplog):
+    # OMNIC-style export: finished absorbance, no background stored anywhere.
+    # There is nothing to rebase with, so the scans are merged exactly as they are.
+    left = make_ir(3, "2024-05-01 10:00:00", level=1.0, background_level=1.0).del_background()
+    right = make_ir(2, "2024-05-01 10:02:00", level=2.0, background_level=1.0).del_background()
+    left = IRData(ds=left.ds.assign_attrs(data_type="absorbance"))
+    right = IRData(ds=right.ds.assign_attrs(data_type="absorbance"))
 
-    with pytest.raises(ValueError, match="needs its own background"):
-        absorbance_without_background.merge(second.to_absorbance())
+    with caplog.at_level("WARNING"):
+        merged = left.merge(right)
+
+    assert merged.data_type == "absorbance"
+    assert merged.shape[0] == 5
+    np.testing.assert_allclose(merged.values[:3], left.values)
+    np.testing.assert_allclose(merged.values[3:], right.values)
+    assert "cannot be put on a common basis" in caplog.text
+    assert json.loads(merged.ds.attrs["merge_log"])[-1]["rebasing"] == "none"
+
+
+def test_merge_with_only_one_background_merges_as_recorded(first, second):
+    left = first.to_absorbance().del_background()
+
+    merged = left.merge(second.to_absorbance())
+
+    assert merged.data_type == "absorbance"
+    assert json.loads(merged.ds.attrs["merge_log"])[-1]["rebasing"] == "none"
+    np.testing.assert_allclose(merged.values[:5], left.values)
 
 
 def test_merge_conversion_is_recorded_in_the_log(first, second):

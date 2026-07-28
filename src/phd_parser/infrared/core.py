@@ -745,8 +745,9 @@ class IRData(BaseModel):
         Returns
         -------
         xr.DataArray
-            DataArray with dims ``('scan',)`` or ``('scan', 'wavenumber')``
-            depending on the number of target wavenumbers.
+            Scalar target in, 1-D out: dims ``('scan',)`` with the selected
+            wavenumber kept as a scalar coordinate.  A sequence of targets
+            gives dims ``('scan', 'wavenumber')``.
 
         Raises
         ------
@@ -757,6 +758,7 @@ class IRData(BaseModel):
         if self.ndim == 1:
             raise ValueError("get_evolution requires 2-D data")
 
+        scalar_input = np.ndim(wavenumber_per_cm) == 0
         targets_si = np.atleast_1d(np.asarray(wavenumber_per_cm, dtype=float)) * 100.0
 
         if tolerance_per_cm is not None:
@@ -774,6 +776,11 @@ class IRData(BaseModel):
 
         if rolling_window is not None:
             result = result.rolling(scan=rolling_window, center=True, min_periods=1).mean()
+
+        if scalar_input:
+            # Scalar in, scalar out: drop the length-1 wavenumber dim, keeping
+            # the selected wavenumber as a scalar coordinate.
+            result = result.isel(wavenumber=0)
 
         return result
 
@@ -1504,9 +1511,26 @@ class IRData(BaseModel):
         seg_a = self._merge_segment(ds_a)
         seg_b = self._merge_segment(ds_b)
 
+        rebasing = "not_applicable"
         if self.data_type != "single_beam":
             bg_a, bg_b = seg_a["background"], seg_b["background"]
-            if bg_a is not None and bg_b is not None and np.allclose(bg_a, bg_b):
+            if bg_a is None or bg_b is None:
+                # Nothing to rebase with: OMNIC-style exports often carry only the
+                # finished absorbance. Merging as recorded is the only option.
+                rebasing = "none"
+                missing = (
+                    "neither segment carries" if bg_a is None and bg_b is None
+                    else "one of the segments does not carry"
+                )
+                logger.warning(
+                    f"Merging '{self.data_type}' data but {missing} a background, so the two "
+                    "segments cannot be put on a common basis: they are merged exactly as "
+                    "recorded, and the second segment stays referenced to whatever background it "
+                    "was measured against. Assign the backgrounds with .with_background() on each "
+                    "segment before merging to have them rebased properly."
+                )
+            elif np.allclose(bg_a, bg_b):
+                rebasing = "shared_background"
                 logger.info(
                     f"Merging '{self.data_type}' data as-is: both segments share the same background."
                 )
@@ -1523,9 +1547,9 @@ class IRData(BaseModel):
             else:
                 raise ValueError(
                     f"Merging is defined on 'single_beam' data, got '{self.data_type}', and the two "
-                    "segments do not share a background. Drop convert_to_single_beam=False to let "
-                    "merge rebase them through single beam automatically, or do it by hand with "
-                    ".to_single_beam() on both."
+                    "segments were recorded against different backgrounds. Drop "
+                    "convert_to_single_beam=False to let merge rebase them through single beam "
+                    "automatically, or do it by hand with .to_single_beam() on both."
                 )
 
         # Put both segments on one time axis, then decide which one came first.
@@ -1583,6 +1607,24 @@ class IRData(BaseModel):
             else:
                 logger.warning(f"{message}. Pass on_overlap='trim' to drop the duplicated scans.")
 
+        # Report where the two segments actually meet, so the join can be checked
+        # against what happened in the lab rather than taken on trust.
+        gap_seconds: Optional[float] = None
+        if has_tos:
+            gap_seconds = float(tos_second.min()) - float(tos_first.max())
+            if first["tos_start"] is not None:
+                end_of_first = first["tos_start"] + pd.Timedelta(seconds=float(tos_first.max()))
+                start_of_second = first["tos_start"] + pd.Timedelta(seconds=float(tos_second.min()))
+                logger.info(
+                    f"Joining segments: first ends {end_of_first}, second starts {start_of_second} "
+                    f"(gap {gap_seconds:.1f}s)."
+                )
+            else:
+                logger.info(
+                    f"Joining segments: first ends at tos={float(tos_first.max()):.1f}s, second "
+                    f"starts at tos={float(tos_second.min()):.1f}s (gap {gap_seconds:.1f}s)."
+                )
+
         values = np.vstack([values_first, values_second])
         tos = np.concatenate([tos_first, tos_second]) if has_tos else None
 
@@ -1620,6 +1662,8 @@ class IRData(BaseModel):
                 "wavenumber": wavenumber,
                 "sorted": bool(sort and has_tos),
                 "n_scans_trimmed": n_trimmed,
+                "gap_seconds": gap_seconds,
+                "rebasing": rebasing,
             }]
         )
 
@@ -3581,6 +3625,7 @@ class IRData(BaseModel):
 
         return restored._note_in_merge_log(
             converted_via_single_beam=True,
+            rebasing="converted",
             data_type=restored.data_type,
         )
 
