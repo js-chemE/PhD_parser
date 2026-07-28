@@ -1382,6 +1382,7 @@ class IRData(BaseModel):
         tos_offset_seconds: Optional[float] = None,
         on_overlap: Literal["warn", "raise", "ignore", "trim"] = "warn",
         wavenumber: Literal["strict", "interp"] = "strict",
+        convert_to_single_beam: bool = True,
     ) -> "IRData":
         """Combine two measurements into one along the scan axis.
 
@@ -1392,13 +1393,21 @@ class IRData(BaseModel):
         axis is untouched.
 
         Because a spectrum is only physically comparable across a restart in
-        raw detector units, both operands must be ``single_beam`` (convert with
-        :meth:`to_single_beam` first).  The one exception is when both segments
-        already share an identical background, in which case any
-        background-derived ``data_type`` is merged as-is.
+        raw detector units, the merge itself happens on ``single_beam`` data.
+        Anything else is handled for you: both segments are converted with
+        :meth:`to_single_beam`, merged, and converted back to the original
+        ``data_type`` against the one surviving background — which is exactly
+        the physically correct thing, since it re-references the second segment
+        to the background that survived.  Two segments that already share an
+        identical background skip the round trip and are merged as-is.
 
         Decisions this method makes
         ---------------------------
+        data_type
+            Preserved.  Non-single-beam data is rebased through single beam
+            (see above), so the second segment's values change: they are
+            recomputed against the surviving background.  Converting through
+            single beam drops any stored baseline, with a warning.
         order
             Segments are ordered chronologically (``order='auto'``), i.e. by
             the absolute time of their first scan, *not* by ``tos`` alone —
@@ -1458,11 +1467,17 @@ class IRData(BaseModel):
             ``'strict'`` (default) requires identical wavenumber axes.
             ``'interp'`` interpolates the second segment onto the first
             segment's grid, restricted to the range covered by both.
+        convert_to_single_beam : bool, optional
+            Rebase non-single-beam segments through single beam automatically
+            (default is ``True``).  Set to ``False`` to raise instead and keep
+            the conversion in your own hands.  Ignored when both segments
+            already share an identical background.
 
         Returns
         -------
         IRData
-            New 2-D instance holding the scans of both measurements.
+            New 2-D instance holding the scans of both measurements, in the
+            same ``data_type`` as the operands.
 
         Raises
         ------
@@ -1470,10 +1485,12 @@ class IRData(BaseModel):
             If ``other`` is not an ``IRData``.
         ValueError
             If the two ``data_type`` values differ; if the data are not
-            ``single_beam`` and the two backgrounds are not identical; if the
-            wavenumber axes are incompatible; if only one segment carries a
-            ``tos_start`` and no ``tos_offset_seconds`` is given; or if
-            ``on_overlap='raise'`` and the segments overlap in time.
+            ``single_beam``, do not share a background, and either
+            ``convert_to_single_beam=False`` or a segment has no background of
+            its own to convert with; if the wavenumber axes are incompatible;
+            if only one segment carries a ``tos_start`` and no
+            ``tos_offset_seconds`` is given; or if ``on_overlap='raise'`` and
+            the segments overlap in time.
         """
         if not isinstance(other, IRData):
             raise TypeError(f"'other' must be an IRData, got {type(other)}")
@@ -1489,16 +1506,27 @@ class IRData(BaseModel):
 
         if self.data_type != "single_beam":
             bg_a, bg_b = seg_a["background"], seg_b["background"]
-            if bg_a is None or bg_b is None or not np.allclose(bg_a, bg_b):
-                raise ValueError(
-                    f"Merging is only defined for 'single_beam' data, got '{self.data_type}'. "
-                    "Two segments recorded against different backgrounds cannot be combined in a "
-                    "background-dependent unit: run .to_single_beam() on both, merge, then apply "
-                    "one common background with .with_background()."
+            if bg_a is not None and bg_b is not None and np.allclose(bg_a, bg_b):
+                logger.info(
+                    f"Merging '{self.data_type}' data as-is: both segments share the same background."
                 )
-            logger.info(
-                f"Merging '{self.data_type}' data: allowed because both segments share the same background."
-            )
+            elif convert_to_single_beam:
+                return self._merge_via_single_beam(
+                    other,
+                    keep_background=keep_background,
+                    order=order,
+                    sort=sort,
+                    tos_offset_seconds=tos_offset_seconds,
+                    on_overlap=on_overlap,
+                    wavenumber=wavenumber,
+                )
+            else:
+                raise ValueError(
+                    f"Merging is defined on 'single_beam' data, got '{self.data_type}', and the two "
+                    "segments do not share a background. Drop convert_to_single_beam=False to let "
+                    "merge rebase them through single beam automatically, or do it by hand with "
+                    ".to_single_beam() on both."
+                )
 
         # Put both segments on one time axis, then decide which one came first.
         has_tos = seg_a["tos"] is not None and seg_b["tos"] is not None
@@ -3521,6 +3549,65 @@ class IRData(BaseModel):
 
         results = np.vstack([_fetch_one(t) for t in targets])
         return results[0] if scalar_input else results
+
+    def _merge_via_single_beam(self, other: "IRData", **merge_kwargs: Any) -> "IRData":
+        """Merge two background-dependent segments by rebasing them through single beam."""
+        source_data_type = self.data_type
+        logger.info(
+            f"Merging '{source_data_type}' data recorded against different backgrounds: converting "
+            "both segments to single_beam, merging, then converting back against the surviving "
+            "background."
+        )
+
+        try:
+            left, right = self.to_single_beam(), other.to_single_beam()
+        except ValueError as exc:
+            raise ValueError(
+                f"Cannot merge '{source_data_type}' data recorded against different backgrounds: "
+                f"{exc} Each segment needs its own background so it can be put back into raw "
+                "detector units before merging."
+            ) from exc
+
+        merged = left.merge(right, **merge_kwargs)
+
+        if not merged.has_background:
+            logger.warning(
+                f"The merged data has no background (keep_background='none'), so it stays "
+                f"single_beam instead of returning to '{source_data_type}'."
+            )
+            restored = merged
+        else:
+            restored = merged._to_data_type(source_data_type)
+
+        return restored._note_in_merge_log(
+            converted_via_single_beam=True,
+            data_type=restored.data_type,
+        )
+
+    def _to_data_type(self, data_type: IRDataType) -> "IRData":
+        """Convert to a data_type named at runtime (dispatch over the public to_* methods)."""
+        converters = {
+            "single_beam": IRData.to_single_beam,
+            "transmittance": IRData.to_transmittance,
+            "reflectance": IRData.to_reflectance,
+            "absorbance": IRData.to_absorbance,
+            "log_1_r": IRData.to_log_1_r,
+            "kubelka_munk": IRData.to_kubelka_munk,
+        }
+        if data_type not in converters:
+            raise ValueError(f"Unknown data_type '{data_type}'; expected one of {list(converters)}")
+        return converters[data_type](self)
+
+    def _note_in_merge_log(self, **fields: Any) -> "IRData":
+        """Add fields to the most recent merge_log entry."""
+        raw = self.ds.attrs.get("merge_log")
+        if not raw:
+            return self
+        log = json.loads(raw)
+        log[-1].update(fields)
+        ds = self.ds.copy()
+        ds.attrs = {**self.ds.attrs, "merge_log": json.dumps(log)}
+        return IRData(ds=ds)
 
     def _align_wavenumber_for_merge(
         self, other: "IRData", mode: Literal["strict", "interp"]

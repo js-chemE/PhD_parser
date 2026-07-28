@@ -160,17 +160,71 @@ def test_merge_rejects_different_data_types(first, second):
         first.merge(second.to_absorbance())
 
 
-def test_merge_rejects_absorbance_with_different_backgrounds(first, second):
+def test_merge_absorbance_rebases_through_single_beam(first, second):
+    # Each segment was recorded against its own background (1.0 and 2.0).
+    merged = first.to_absorbance().merge(second.to_absorbance())
+
+    assert merged.data_type == "absorbance"
+    assert merged.shape == (9, WAVENUMBER_PER_CM.size)
+    # Identical to merging the raw single-beam data and converting afterwards:
+    # the second segment is re-referenced to the surviving background.
+    expected = first.merge(second).to_absorbance()
+    np.testing.assert_allclose(merged.values, expected.values)
+    np.testing.assert_allclose(merged.background, 1.0)
+
+
+def test_merge_absorbance_round_trips_back_to_single_beam(first, second):
+    merged = first.to_absorbance().merge(second.to_absorbance())
+
+    np.testing.assert_allclose(merged.to_single_beam().values, first.merge(second).values)
+
+
+def test_merge_conversion_can_be_refused(first, second):
     with pytest.raises(ValueError, match="single_beam"):
-        first.to_absorbance().merge(second.to_absorbance())
+        first.to_absorbance().merge(second.to_absorbance(), convert_to_single_beam=False)
+
+
+def test_merge_conversion_needs_a_background_on_each_segment(first, second):
+    absorbance_without_background = first.to_absorbance().del_background()
+
+    with pytest.raises(ValueError, match="needs its own background"):
+        absorbance_without_background.merge(second.to_absorbance())
+
+
+def test_merge_conversion_is_recorded_in_the_log(first, second):
+    merged = first.to_absorbance().merge(second.to_absorbance())
+    log = json.loads(merged.ds.attrs["merge_log"])
+
+    assert log[-1]["converted_via_single_beam"] is True
+    assert log[-1]["data_type"] == "absorbance"
+
+
+def test_merge_without_a_kept_background_stays_single_beam(first, second):
+    merged = first.to_absorbance().merge(second.to_absorbance(), keep_background="none")
+
+    assert merged.data_type == "single_beam"
+    assert not merged.has_background
+
+
+def test_merge_other_data_types_are_rebased_too(first, second):
+    merged = first.to_transmittance().merge(second.to_transmittance())
+
+    assert merged.data_type == "transmittance"
+    np.testing.assert_allclose(merged.values, first.merge(second).to_transmittance().values)
 
 
 def test_merge_allows_absorbance_with_identical_backgrounds(first, second):
     second_same_background = second.set_background(np.full(WAVENUMBER_PER_CM.size, 1.0))
-    merged = first.to_absorbance().merge(second_same_background.to_absorbance())
+    left = first.to_absorbance()
+    right = second_same_background.to_absorbance()
+    merged = left.merge(right)
 
     assert merged.data_type == "absorbance"
     assert merged.shape == (9, WAVENUMBER_PER_CM.size)
+    # Shared background -> merged as-is, no conversion round trip.
+    np.testing.assert_allclose(merged.values[:5], left.values)
+    np.testing.assert_allclose(merged.values[5:], right.values)
+    assert "converted_via_single_beam" not in json.loads(merged.ds.attrs["merge_log"])[-1]
 
 
 def test_merge_rejects_different_wavenumber_axes_by_default(first):

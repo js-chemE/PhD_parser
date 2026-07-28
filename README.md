@@ -377,19 +377,20 @@ Nomenclature used throughout the repo: **merge** joins along the scan/time axis,
 - `merge(other, ...)` — combine two measurements into one
 - `IRData.merge_all(items, ...)` — fold `merge` over any number of measurements
 
-Merging is only defined on `single_beam` data: two segments recorded against *different* backgrounds are not comparable in any background-derived unit, so anything else raises — unless both segments happen to carry an identical background, which is allowed. Run `to_single_beam()` on both first, merge, then apply one common background.
+The merge itself happens on `single_beam` data, because that is the only representation in which two segments recorded against *different* backgrounds are comparable. You don't have to do that conversion yourself: absorbance (or transmittance, log(1/R), …) segments are converted with `to_single_beam()`, merged, and converted back against the one surviving background — which is exactly right, since it re-references the second segment to the background that survived. Two segments that already share an identical background skip the round trip entirely.
 
 The decisions `merge` makes for you:
 
 | | |
 |---|---|
+| **data_type** | Preserved. Non-single-beam data is rebased through single beam, so the second segment's *values* change: they are recomputed against the surviving background. The round trip drops any stored baseline, with a warning. Pass `convert_to_single_beam=False` to raise instead and handle it yourself. |
 | **order** | Segments are ordered by the *absolute* time of their first scan, not by `tos` — two files each starting at `tos=0` are only comparable through their `tos_start`. The earlier one is the *first* segment. |
 | **`tos` / `tos_start`** | The merged data keeps the first segment's `tos_start` and leaves its `tos` untouched; the later segment's `tos` is shifted by the difference between the two `tos_start` values, so `timestamps` stays continuous across the join. |
 | **background** | Exactly one survives — by default the first segment's, i.e. the one recorded *before* the experiment, not the mid-experiment one. |
 | **baseline** | Kept only if *both* segments carry one, otherwise dropped with a warning. |
 | **scan ids** | Renumbered `0 … n-1`; a JSON record of the operation is appended to `ds.attrs["merge_log"]`. |
 
-Overrides: `keep_background` (`"first"` / `"last"` / `"none"`, or an explicit array / 1-D `IRData`), `order` (`"auto"` / `"given"`), `sort` (sort merged scans by `tos`; independent of `order`), `tos_offset_seconds` (relate two time axes explicitly — the way to merge segments with no absolute timestamps), `on_overlap` (`"warn"` / `"raise"` / `"ignore"` / `"trim"` the duplicated scans of the second segment), and `wavenumber` (`"strict"` requires identical axes, `"interp"` interpolates the second segment onto the first's grid restricted to the common range).
+Overrides: `keep_background` (`"first"` / `"last"` / `"none"`, or an explicit array / 1-D `IRData`), `order` (`"auto"` / `"given"`), `sort` (sort merged scans by `tos`; independent of `order`), `tos_offset_seconds` (relate two time axes explicitly — the way to merge segments with no absolute timestamps), `on_overlap` (`"warn"` / `"raise"` / `"ignore"` / `"trim"` the duplicated scans of the second segment), `wavenumber` (`"strict"` requires identical axes, `"interp"` interpolates the second segment onto the first's grid restricted to the common range), and `convert_to_single_beam` (`False` refuses the automatic rebasing).
 
 1-D operands are promoted to a single scan, so two single spectra merge into a 2-D instance and a spectrum can be merged into a series.
 
@@ -408,10 +409,9 @@ part_2 = (
 )
 
 # One continuous run on one time origin; bg_file_1 survives, bg_file_2 is dropped.
+# Works whatever the data_type is: absorbance in, absorbance out, with part_2
+# re-referenced to bg_file_1 on the way through.
 ir_raw = part_1.merge(part_2)
-
-# If the files were exported as absorbance, go back to raw units first:
-ir_raw = part_1.to_single_beam().merge(part_2.to_single_beam())
 
 # Any number of files, in any order — the chronology decides:
 ir_raw = IRData.merge_all([part_2, part_1, part_3])
