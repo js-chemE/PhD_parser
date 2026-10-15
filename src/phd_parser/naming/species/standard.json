@@ -1,0 +1,27 @@
+{
+  "name": "phd_standard",
+  "description": "Standard species names of the phd_* packages. Keys are the canonical names used by phd_models (CO2, MeOH, EtOH, ...); every entry lists the other ways setups and software write the same species. The key, the name and the formula count as aliases automatically. Matching ignores case, spaces, hyphens, underscores and dots, and reads subscript digits as digits, so 'ch4', 'CH₄' and 'Methan' all resolve to 'CH4'.",
+  "species": {
+    "H2": {"name": "hydrogen", "formula": "H2", "aliases": ["Wasserstoff", "dihydrogen"]},
+    "CO": {"name": "carbon monoxide", "formula": "CO", "aliases": ["Kohlenmonoxid", "Kohlenstoffmonoxid"]},
+    "CO2": {"name": "carbon dioxide", "formula": "CO2", "aliases": ["Kohlendioxid", "Kohlenstoffdioxid"]},
+    "H2O": {"name": "water", "formula": "H2O", "aliases": ["Wasser", "steam", "water vapour", "water vapor"]},
+    "MeOH": {"name": "methanol", "formula": "CH3OH", "aliases": ["CH4O"]},
+    "CH4": {"name": "methane", "formula": "CH4", "aliases": ["Methan"]},
+    "DME": {"name": "dimethyl ether", "formula": "CH3OCH3", "aliases": ["Dimethylether", "methoxymethane"]},
+    "MF": {"name": "methyl formate", "formula": "HCOOCH3", "aliases": ["Methylformiat", "methyl methanoate", "HCO2CH3"]},
+    "EtOH": {"name": "ethanol", "formula": "C2H5OH", "aliases": ["Ethylalkohol", "ethyl alcohol"]},
+    "PrOH": {"name": "1-propanol", "formula": "C3H7OH", "aliases": ["n-propanol", "propan-1-ol", "n-PrOH", "1-Propanol"]},
+    "iPrOH": {"name": "2-propanol", "formula": "(CH3)2CHOH", "aliases": ["isopropanol", "propan-2-ol", "IPA"]},
+    "BuOH": {"name": "1-butanol", "formula": "C4H9OH", "aliases": ["n-butanol", "butan-1-ol", "n-BuOH"]},
+    "iBuOH": {"name": "isobutanol", "formula": "(CH3)2CHCH2OH", "aliases": ["2-methyl-1-propanol", "2-methylpropan-1-ol", "i-BuOH"]},
+    "C2": {"name": "ethane", "formula": "C2H6", "aliases": ["Ethan"]},
+    "C2=": {"name": "ethylene", "formula": "C2H4", "aliases": ["ethene", "Ethylen", "Ethen"]},
+    "C3": {"name": "propane", "formula": "C3H8", "aliases": ["Propan"]},
+    "C3=": {"name": "propylene", "formula": "C3H6", "aliases": ["propene", "Propylen", "Propen"]},
+    "Ar": {"name": "argon", "formula": "Ar", "aliases": []},
+    "N2": {"name": "nitrogen", "formula": "N2", "aliases": ["Stickstoff", "dinitrogen"]},
+    "He": {"name": "helium", "formula": "He", "aliases": []},
+    "O2": {"name": "oxygen", "formula": "O2", "aliases": ["Sauerstoff", "dioxygen"]}
+  }
+}

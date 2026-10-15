@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from phd_parser.infrared import IRData
+from phd_parser.spectroscopy.infrared import IRData
 from phd_parser.labview import LVData
 from phd_parser.massspec import MSData
 

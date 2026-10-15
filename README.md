@@ -26,9 +26,128 @@ from pathlib import Path
 import pandas as pd
 ```
 
+The core data containers are available straight from the package, so
+`pp.GCData` is the same class as `pp.chromatography.GCData` (likewise
+`IRData`, `LVData`, `MSData`, `PhysisorptionData`, `RamanData`, `SpectroscopyData`,
+`TGAData`, `XRDData`, and `rename_species` / `SpeciesConvention` from `naming`):
+
+```python
+from phd_parser import GCData, LVData, rename_species
+
+gc = GCData.from_ezchrom_rslt(path_rslt)
+```
+
+---
+
+## How the package is structured
+
+The package has one job: get data out of instrument files with as little lost
+as possible, and hand it over in one consistent form. Everything else
+(models, fits, figures) lives in other repos. Four layers do that, and each
+one only talks to the one next to it.
+
+```
+raw files ──► parser module ──► (vendor converter) ──► core data class ──► your analysis
+              "data" + "meta"      common records        GCData, IRData, ...
+              dict, as written      SI units              xarray, immutable
+```
+
+**1. One subpackage per technique.** `spectroscopy` (with `infrared`, `raman`
+and `xps` inside), `massspec`, `labview`, `xrd`, `tga`, `physisorption`,
+`chromatography`. Inside it sits the
+core class in `core.py` and one parser module per instrument or software
+(`omnic.py`, `quadstar.py`, `b67box5.py`). Where a technique has several
+manufacturers, each gets its own subfolder (`chromatography/agilent/`), so a
+second vendor is added next to the first and never inside it.
+
+**2. Parser modules read, they do not interpret.** A parser returns a plain
+dict with a `"data"` and a `"meta"` key, never a data class. It reads
+everything the format offers, including what nobody has asked for yet, and
+keeps it as the instrument wrote it: vendor names, vendor units, raw counts
+next to scaled values. A parser should not fail on a file it can partly read.
+Instrument exports drift over time (a new column, a renamed channel), so an
+unknown entry is skipped with a warning, and old and new files read side by
+side. Time comes from what the instrument recorded, not from a file name.
+
+**3. A vendor converter where several vendors meet.** When different
+manufacturers deliver the same kind of data, each vendor module translates
+its own dict into one common record format (`ezchrom.to_injections()` for
+chromatography). This is the only place where vendor names become generic
+ones, minutes become seconds and counts become detector units. The core class
+knows the common format only, so adding a vendor never touches it.
+
+**4. One core class per technique.** `GCData`, `IRData`, `MSData`, `LVData`,
+... wrap an `xarray` object in a pydantic model, so axes, units and metadata
+travel with the numbers. The rules they share:
+
+- **Built by `from_*` classmethods** (`from_ezchrom_rslt`, `from_omnic_spa`, `from_netcdf`), never by hand.
+- **Immutable.** Every method returns a new object, so the raw object is always still there to compare against.
+- **SI units in storage.** Seconds, m⁻¹, Pa; convenience properties give the usual lab units.
+- **One time origin.** `tos` in seconds plus one `tos_start` (see below), so every instrument shares the same clock.
+- **Same names for the same operation in every class.** `select_tos_range`, `with_tos_start`, `merge`, `to_netcdf`, `rename_species`. Once one class is known, the others read the same way.
+- **Metadata is kept, not trimmed.** What has no typed accessor yet is stored verbatim (JSON-encoded where NetCDF needs it), so it is there when it is needed.
+- **Reachable from the root.** `pp.GCData` is `pp.chromatography.GCData`.
+- **Every step is recorded.** The object carries its own processing history, and it survives saving (see *Processing history and logging*).
+- **One data model where techniques measure the same thing.** IR and Raman are both `SpectroscopyData` on one `wavenumber` axis; `IRData` / `RamanData` only add readers and names.
+
+**Across all of them, two shared helpers.** `naming` maps the spellings of a
+species onto one convention, as an explicit `rename_species()` step and never
+silently on read. And nothing is ever written next to the raw files: processed
+data goes to its own folder (see *Read once, cache as NetCDF*).
+
 ---
 
 ## Core concepts
+
+### Processing history and logging — every object knows how it was made
+
+This is the feature that makes the rest trustworthy. Two records are kept, and
+they answer different questions.
+
+**The processing history: what was done to *this* data.** Every constructor
+and every processing step appends one entry to the object it returns, never to
+its input:
+
+```python
+ir = (
+    pp.IRData.from_omnic_spa(dir_spa, tos_start=tos_start)
+    .select_tos_range(0, 6 * 3600)
+    .correct_baseline(anchor_range_cm=(2600, 2500), control_points_cm=[3450, 2720, 1750])
+)
+print(ir.format_history())
+# 1. 2026-10-15T09:12:03+00:00  from_omnic_spa(filepath='.../spa', ..., tos_start='2025-05-15T10:00:00+02:00', ...)
+# 2. 2026-10-15T09:12:04+00:00  select_tos_range(min_s=0, max_s=21600)
+# 3. 2026-10-15T09:12:04+00:00  correct_baseline(anchor_range_cm=[2600, 2500], control_points_cm=[3450, 2720, 1750], ...)
+
+ir.history[-1]   # {"step": "correct_baseline", "parameters": {...}, "time": "...", "version": "..."}
+```
+
+- One entry per call you made: `correct_baseline` calls `correct_offset` and `correct_pchip` internally, only `correct_baseline` is listed.
+- Every argument is stored, files included, so the first entry says which raw data this came from. Arrays longer than 20 values are summarised (shape, first and last value).
+- `merge` stores the other segment's own history inside its entry, so a merged run still says how each half was made.
+- It lives in `ds.attrs["history"]` and **survives `to_netcdf` / `from_netcdf`**; loading adds a `from_netcdf` entry. A cached file therefore still tells you, months later, which files and which baseline settings produced it.
+- Available on `IRData`, `RamanData`, `GCData`, `MSData` and `LVData` (`.history`, `.format_history()`), and `to_spectrochempy()` copies it into the `NDDataset`'s own history. `XRDData`, `TGAData` and `PhysisorptionData` do not record one yet.
+
+The older, step-specific records stay where they were and survive storing too:
+`merge_log` (IR), the baseline parameters `baseline_anchor_range_cm` /
+`baseline_pchip_*` (used by `reapply_baseline`), `trace_corrections` (MS) and
+the `metadata` of `LVData`.
+
+**The log: what the parser decided on the way.** Interpolated a background,
+dropped a baseline, found two merge segments overlapping, skipped an unknown
+column: these are warnings and info messages on the `phd_parser` logger.
+
+```python
+pp.logging.setup_logger("INFO")                               # writes phd_parser.log in the working directory
+pp.logging.setup_logger("DEBUG", use_console_handler=True)    # also to the console
+pp.logging.disable_logging()
+```
+
+The history is attached to the data and travels with it; the log belongs to a
+session. Read the log when a result looks odd, read the history to know what a
+file is.
+
+---
 
 ### `tos_start` — anchoring time-on-stream to the clock
 
@@ -48,7 +167,7 @@ Because every instrument shares the same `tos_start`, a single `tos` value means
 
 #### Changing the origin afterwards
 
-`LVData`, `IRData` and `MSData` each expose the same four immutable methods, mirroring the `with_` / `set_` / `del_` trio used for backgrounds. The distinction that matters is **what stays fixed**:
+`LVData`, `IRData`, `MSData` and `GCData` each expose the same four immutable methods, mirroring the `with_` / `set_` / `del_` trio used for backgrounds. The distinction that matters is **what stays fixed**:
 
 | Method | What it changes | What stays fixed |
 |---|---|---|
@@ -72,7 +191,23 @@ ir = ir.move_tos_start_by("1h30min")   # or any pandas.Timedelta / string
 
 Mind the sign: moving the origin **later** makes every `tos` value **smaller**. Pass a negative `delta` to move the origin earlier and grow the `tos` values.
 
-`RamanData` carries a `tos` coordinate but no origin, and `XRDData` stores absolute timestamps as a coordinate instead — neither has this family.
+`RamanData` has the same four through `SpectroscopyData`. `XRDData` stores absolute timestamps as a coordinate instead and has no such family.
+
+#### Cutting a window by wall clock
+
+The same four classes let you crop either way: `select_tos_range(min_s, max_s)` in elapsed seconds, or `select_timestamp_range(start, end)` in absolute time. The latter takes a `pandas.Timestamp`, a `datetime`, a `numpy.datetime64` or any string pandas can parse, converts the bounds against `tos_start`, and hands them to `select_tos_range` — so the two always agree. Both bounds are inclusive and either may be `None` for an open end.
+
+```python
+# "From when reaction gas was switched in until I went home" — straight off the log book.
+ir = ir_raw.select_timestamp_range("2026-04-21 15:12:30", "2026-04-21 18:00:00")
+
+# Same window on all three instruments, no seconds arithmetic in sight.
+t0 = pd.Timestamp("2026-04-21 15:12:30", tz="Europe/Amsterdam")
+lv, ms, ir = (d.select_timestamp_range(t0, t0 + pd.Timedelta(hours=3))
+              for d in (lv_raw, ms_raw, ir_raw))
+```
+
+A timezone-naive bound (like the strings above) is read as wall-clock time **in the timezone of `tos_start`**, not as UTC — write the time you read off the log book and it means what you think it means. The method raises if the data carry no `tos_start`, since there is then nothing to resolve absolute times against.
 
 ---
 
@@ -113,7 +248,69 @@ ir_raw.to_netcdf(cache_path)
 ir_raw = pp.infrared.IRData.from_netcdf(cache_path)
 ```
 
-The same pattern applies to `MSData` and `LVData`.
+The same pattern applies to `RamanData`, `MSData`, `LVData` and `GCData`.
+
+#### Where the NetCDF file goes: never next to the raw files
+
+`phd_parser` only reads and writes; where a file belongs is decided by the
+three data stages of the experiments folder (`21_Experiments/`, described in
+its own `README.md` and in the `PhD_execute` README):
+
+| stage | folder | what it is |
+|---|---|---|
+| raw | `01_raw/<rig>/<run folder>/` | what came from the machine. Read-only: nothing is saved here |
+| processed | `02_processed/<project>/<run folder>/<NN_step>/` | anything this package has touched, in numbered steps |
+| plot | `03_plot/<project>/<figure>/` | the data behind one figure |
+
+The NetCDF file of a freshly parsed run is the first processed step:
+`02_processed/<project>/<run folder>/01_loaded/ir.nc` (and `ms.nc`, `lv.nc`),
+with the run folder named as in `01_raw`. `PhD_execute` builds these paths
+(`phd_execute.data.paths`) and runs the steps (`phd_execute.drifts.pipeline`).
+A cache written into the raw `omnic/` folder is a derived file in the wrong
+place.
+
+### Species naming conventions
+
+Every setup writes its species differently: the GC method says `Methanol`, a
+mass-flow controller `CH3OH`, a colleague's spreadsheet `MeOH` or `methanol`.
+`phd_parser.naming` maps all of them onto one canonical name, so data from
+different instruments can be compared, merged and handed to `phd_models`
+without a lookup table in every notebook.
+
+A convention is a human-readable JSON file. The standard one,
+`src/phd_parser/naming/species/standard.json`, uses the species names of
+`phd_models` (`CO2`, `CO`, `H2`, `MeOH`, `H2O`, `CH4`, `DME`, `MF`, `EtOH`,
+`PrOH`, `Ar`, `N2`, `He`, ...) as canonical names:
+
+```json
+"MeOH": {"name": "methanol", "formula": "CH3OH", "aliases": ["CH4O"]}
+```
+
+The key, `name`, `formula` and every alias all resolve to the key. Matching
+ignores case, spaces, hyphens, underscores and dots and reads subscript digits
+as digits, so `ch4`, `CH₄`, `Methane` and `Methan` are all `CH4`. A
+convention in which two species claim the same spelling is refused when it is
+loaded.
+
+```python
+from phd_parser.naming import rename_species, SpeciesConvention
+
+rename_species(["Methanol", "ch4", "CO₂", "1-propanol"])   # ['MeOH', 'CH4', 'CO2', 'PrOH']
+
+# your own convention: a JSON path, an already read dict, or a SpeciesConvention
+rename_species("C1", "path/to/my_convention.json")
+rename_species("C1", {"CH4": ["C1", "methane"]})              # flat form, as in phd_ui
+
+# or the standard plus your setup's own spellings
+box2 = SpeciesConvention.standard().extend({"CH4": ["C1"]})
+```
+
+Names the convention does not know are kept unchanged with a warning
+(`unknown="raise"` or `"none"` to change that). Every data class that carries
+species names has an immutable `rename_species(convention=None)` that returns
+a renamed copy: `GCData` (the species of the peak table and the amounts) and
+`LVData` (each channel's `species` attribute). Without a convention it uses
+the standard one.
 
 ---
 
@@ -138,10 +335,11 @@ The `LVData` class is the core container for LabView process data. It wraps an `
 - Channel: `get_channel` (values array by name), `get_channel_unit`, `filter_by_group` (channel names belonging to a group)
 
 **Processing (all immutable — return a new `LVData`)**
-- Selection: `select_channels`, `select_group`, `select_tos_range`
+- Selection: `select_channels`, `select_group`, `select_tos_range`, `select_timestamp_range`
 - Time origin: `with_tos_start`, `set_tos_start`, `del_tos_start`, `move_tos_start_by` (see [Changing the origin afterwards](#changing-the-origin-afterwards))
 - Resampling: `resample` (bin into fixed-width time steps; `mean`, `median`, `first`, or `last` aggregation)
 - Smoothing: `smooth_moving` (centered moving average)
+- Naming: `rename_species` (renames each channel's `species` attribute, see [Species naming conventions](#species-naming-conventions))
 
 **Export**
 - `to_dataframe` — `tos`-indexed DataFrame, optional timestamp column
@@ -192,9 +390,55 @@ Low-level parser in `phd_parser.labview.b67box5`:
 
 ---
 
+### Spectroscopy: one `SpectroscopyData` for infrared and Raman
+
+An IR band and a Raman band of the same vibration sit at the same wavenumber;
+the techniques differ in selection rules and in how the signal is recorded,
+not in what the axis means (the IR-bands atlas draws both on one axis for the
+same reason). So there is one data model, `SpectroscopyData`
+(`phd_parser.spectroscopy.core`): `ds["data"]` over `wavenumber` in m⁻¹ (for
+Raman, the Raman shift), as `(wavenumber,)`, `(scan, wavenumber)` with `tos`,
+or a map `(y, x, wavenumber)`, with an optional `background` and `baseline`.
+Every processing step lives there:
+
+- Selection: `select_wavenumber_range`, `select_wavenumber_index_range`, `select_by_idx`, `select_by_tos`, `select_tos_range`, `select_timestamp_range`, `select_scan_id_range`, `sort`
+- Time origin: `with_tos_start`, `set_tos_start`, `del_tos_start`, `move_tos_start_by`
+- Background and `data_type` conversions (`to_absorbance`, `to_kubelka_munk`, ...), smoothing, baseline correction, averaging, normalisation, signal to noise, Gram-Schmidt, `merge` / `merge_all`, `+` / `-`
+- `to_netcdf` / `from_netcdf`, `to_spectrochempy` / `from_spectrochempy`
+
+`IRData` and `RamanData` are thin subclasses. They set `ds.attrs["technique"]`
+and the default `data_type` (`single_beam`, `intensity`) and add their file
+readers and the names their community uses (`RamanData.shift`,
+`select_shift_range`, the excitation wavelength). Everything else is
+inherited, so an IR and a Raman spectrum of one sample line up band for band
+and plot on one axis. `as_type` moves data between the classes without
+touching it (`raman.as_type(IRData)`), and `SpectroscopyData.from_netcdf`
+returns the class the file's `technique` names. Merging only rebases data
+that is referenced to a background (absorbance, Kubelka-Munk, ...); counts and
+single beam merge as they are.
+
+**Handing over to other packages.** `to_spectrochempy()` returns a
+SpectroChemPy `NDDataset` (values, wavenumber in cm⁻¹ as `x`, `tos` as `y`
+with the timestamps as labels, attributes in `nd.meta`, history in
+`nd.history`); `from_spectrochempy(nd)` reads one back, also after processing
+there, into the class its `technique` names (`IRData.from_scp` is the strict IR
+form of it). `RamanData.to_ramanspy()` returns a RamanSPy `Spectrum`,
+`SpectralContainer` (a series) or `SpectralImage` (a map), and
+`RamanData.from_ramanspy(container, excitation_wavelength_nm=...)` reads one
+back. Both libraries are optional and imported only when called; neither
+carries the background or the baseline.
+
+**Where the files are.** `phd_parser/spectroscopy/` holds `core.py` and one
+subpackage per technique with its readers: `infrared/`, `raman/` and `xps/`
+(a file reader only). The old paths still work and give the same modules:
+`pp.infrared` is `pp.spectroscopy.infrared`, and `import phd_parser.infrared.omnic`
+still imports.
+
+---
+
 ### Raman
 
-The `RamanData` class is the core container for Raman spectroscopy data. It wraps an `xarray.DataArray` with the Raman shift axis stored in SI units (m⁻¹) internally, using the Stokes convention (positive shift). Three array layouts are supported: `(shift,)` for a single spectrum, `(scan, shift)` for a time series, and `(y, x, shift)` for a spatial map. An optional `tos` coordinate on the `scan` dimension carries elapsed time in seconds. The excitation laser wavelength is stored as a separate `excitation_wavelength_nm` field and used to compute all derived spectral axes as cached properties.
+The `RamanData` class is the Raman face of `SpectroscopyData` (see [Spectroscopy](#spectroscopy-one-spectroscopydata-for-infrared-and-raman)). The Raman shift is the `wavenumber` axis (m⁻¹, Stokes positive), so `ds["data"]` has dims `(wavenumber,)`, `(scan, wavenumber)` with `tos`, or `(y, x, wavenumber)` for a map, exactly like an IR spectrum. The excitation wavelength is `ds.attrs["excitation_wavelength_nm"]`, what the values are (`intensity`, `counts`, ...) is `data_type`, also readable as `values_label`, and the raw metadata of the source file is the separate field `metadata`. `RamanData(da=..., excitation_wavelength_nm=...)` and NetCDF files of the former DataArray-based class (axis `shift`) still load.
 
 **Constructors**
 - `from_arrays` — build from raw numpy arrays (shift in cm⁻¹, values, optional `tos`)
@@ -205,18 +449,20 @@ The `RamanData` class is the core container for Raman spectroscopy data. It wrap
 
 **Accessors**
 - Shift axis: `shift` (m⁻¹), `shift_per_cm` (cm⁻¹)
-- Derived spectral axes (cached): `excitation_wavenumber`, `excitation_wavenumber_per_cm`, `wavenumber`, `wavenumber_per_cm`, `wavelength`, `wavelength_nm`, `frequency`
+- Shift and scattered light: `wavenumber` / `wavenumber_per_cm` are the shift itself; the scattered light is `scattered_wavenumber`, `scattered_wavenumber_per_cm`, `scattered_wavelength_nm`, `scattered_frequency`, from `excitation_wavenumber`, `excitation_wavenumber_per_cm` (before the merge with IR, `wavenumber` meant the scattered light)
 - Data: `values`, `n_spectral`, `ndim`, `shape`, `values_label`
-- Time: `tos`
+- Time: `tos`, `tos_start`, `timestamps`
 - Indexing: `get_scan` (single spectrum by integer scan index), `get_evolution` (intensity vs scan at one or more shifts; nearest or linear interpolation, optional tolerance), `get_map_spectrum` (single spectrum at a spatial position `(x, y)`)
 
 **Processing (all immutable — return a new `RamanData`)**
 - `sort` — sort the shift axis ascending or descending
 - `select_shift_range` — crop to a spectral window (in cm⁻¹)
+- Everything of `SpectroscopyData`: time origin, `select_tos_range`, smoothing, baseline correction, averaging, normalisation, `merge`, signal to noise. On a map the steps that work spectrum by spectrum apply; those that need a scan axis raise
 
 **Export**
 - `to_csv` — shift-indexed CSV (cm⁻¹ or m⁻¹); columns labelled by `tos_Xs` or `scan_N`; map data (3-D) must use NetCDF
-- `to_netcdf` — round-trippable NetCDF preserving all dims, coords, and metadata
+- `to_netcdf` — round-trippable NetCDF preserving all dims, coords, metadata and the history
+- `to_ramanspy` / `from_ramanspy` — RamanSPy `Spectrum` / `SpectralContainer` / `SpectralImage`; `to_spectrochempy` / `from_spectrochempy` — SpectroChemPy `NDDataset`
 
 #### Renishaw (WiRe)
 
@@ -269,7 +515,7 @@ Low-level parser in `phd_parser.xrd.xrd_e1290`:
 
 ### XPS
 
-...
+A file reader only for now, without a core class: `phd_parser.spectroscopy.xps.casaxps.read_export` reads a CasaXPS export into the usual `"data"` + `"meta"` dict.
 
 ---
 
@@ -432,7 +678,7 @@ ir_raw = IRData.merge_all([part_2, part_1, part_3])
 ```
 
 **Processing (all immutable — return a new `IRData`; background and baseline are propagated automatically)**
-- Selection: `sort`, `select_by_idx`, `select_by_tos`, `select_wavenumber_range`, `select_wavenumber_index_range`, `select_tos_range`, `select_scan_id_range`
+- Selection: `sort`, `select_by_idx`, `select_by_tos`, `select_wavenumber_range`, `select_wavenumber_index_range`, `select_tos_range`, `select_timestamp_range`, `select_scan_id_range`
 - Time origin: `with_tos_start`, `set_tos_start`, `del_tos_start`, `move_tos_start_by` (see [Changing the origin afterwards](#changing-the-origin-afterwards))
 - Merging: `merge`, `merge_all` (scan axis; see above)
 - Smoothing: `smooth_savgol`, `smooth_gaussian`, `smooth_moving`
@@ -454,7 +700,8 @@ ir_raw = IRData.merge_all([part_2, part_1, part_3])
 - `get_gram_schmidt_by_tos(reference_tos)` — convenience wrapper using time-on-stream as the reference
 
 **Export**
-- `to_netcdf` — round-trippable NetCDF preserving spectrum, background, coordinates, and all metadata
+- `to_netcdf` — round-trippable NetCDF preserving spectrum, background, coordinates, all metadata and the history
+- `to_spectrochempy` — SpectroChemPy `NDDataset` titled with the OMNIC label of `data_type`; `from_spectrochempy` / `IRData.from_scp` read it back
 
 **Typical workflow**
 
@@ -466,7 +713,7 @@ import phd_parser as pp
 dir_omnic   = Path("path/to/omnic")
 dir_reac    = dir_omnic / "02_Reaction"
 bg_file     = dir_omnic / "Background_2026-04-21.spa"
-cache_path  = dir_omnic / "reaction.nc"
+cache_path  = Path("path/to/02_processed/<project>/<run folder>/01_loaded/ir.nc")   # not inside the raw folder
 
 tos_start = pd.Timestamp("2026-04-21 14:42:00", tz="Europe/Amsterdam")
 
@@ -557,7 +804,7 @@ The `MSData` class is the core container for mass spectrometry data. It wraps an
 - Derived: `tic` (total ion current vs cycle, NaN-safe, cached)
 
 **Processing (all immutable — return a new `MSData`)**
-- Selection: `select_tos_range`
+- Selection: `select_tos_range`, `select_timestamp_range`
 - Time origin: `with_tos_start`, `set_tos_start`, `del_tos_start`, `move_tos_start_by` (see [Changing the origin afterwards](#changing-the-origin-afterwards))
 - Data cleaning: `mask_overloaded` (replace values above a threshold — e.g. detector saturation spikes around 1e38 — with NaN, applied to one block or all)
 - Smoothing: `smooth_trace_rolling` (centered rolling mean along the cycle dimension, configurable window and `min_periods`, applied to one block or all)
@@ -658,6 +905,76 @@ Low-level parser in `phd_parser.physisorption.tristar`:
 - `read_export` — parses a MicroActive "print selected reports to Excel" `.XLS` export, where every selected report is laid out as its own block of columns separated by a literal `"|"` divider column, all sharing the same row grid
 - A generic state machine handles each block's `key: value` metadata rows, free-text notes, and at most one data table (header row + rows until the next blank row) — including the quirk where a sample-name caption row sits directly above the real column header
 - Returns `{"data": {"adsorption": {...}, "desorption": {...}}, "bet": cleaned BET results, "meta": {"header", "summary", "analyses", "sample_log"}}`, where each branch in `"data"` is a `{"relative_pressure", "quantity_adsorbed"}` dict ready to pass into `PhysisorptionData.from_arrays(**branch)`, and `"analyses"` groups each property/analysis (`isotherm`, `bet`, `t_plot`, `bjh_adsorption`, `bjh_desorption`) into its own `{"report", "plots"}` dict
+
+### Chromatography (GC)
+
+The `GCData` class is the vendor-independent container for gas chromatography:
+the chromatograms of a series of injections together with their analysis (the
+integrated peaks and the amounts per species). It wraps an `xarray.Dataset`:
+
+| what | dims | notes |
+|---|---|---|
+| one chromatogram variable per detector (`fid`, `tcd`) | `(injection, retention_time_<detector>)` | detector units (`pA`, `25 µV`), retention time in s |
+| `peak_*` variables (the peak table) | `(peak,)` | injection, detector, species, retention / start / end time in s, height, area in detector units s |
+| `amount`, `area`, `height` | `(injection, species)` | one entry per species and the detector it was quantified on (`CH4` on the FID and on the TCD are two) |
+
+The `injection` dimension is always there, with length 1 for a single
+measurement, and `tos` runs along it. Every detector has its own retention
+time axis, so instruments that sample their detectors differently fit too.
+Injections that differ in run length are padded with `NaN`; injections whose
+sampling interval differs (a method changed mid-sequence) are never resampled:
+`group_injections` splits them and `from_ezchrom_rslt_groups` returns one
+`GCData` per group. The analysis is whatever produced it, named in
+`attrs["analysis_source"]` (the vendor software for parsed data).
+
+**Constructors**
+- `from_ezchrom_rslt` reads one or more Agilent OpenLab EZChrom `.rslt` folders (e.g. the reduction and the reaction sequence) into one series in time order; `from_ezchrom_rslt_groups` never fails on differing axes
+- `from_injections` builds from common injection records, the format every vendor converter produces (`to_injections` gives them back)
+- `from_arrays` builds a single chromatogram, `from_netcdf` reloads a saved file
+
+**Accessors**
+- `detectors`, `n_injections`, `injection`, `sample_names`, `get_unit`, `get_retention_time`
+- Time: `tos`, `tos_start`, `timestamps`
+- `get_chromatogram(detector, injection=None)` returns an `xr.DataArray` that slices like a numpy array (`chromatogram[3, 100:200]`) and keeps `tos` and the retention times as coordinates
+- `get_peaks()` (long table), `get_amounts(detector=None, quantity="amount")` (wide table, injection x species), `get_evolution(species, detector=None)`
+
+**Processing (all immutable, return a new `GCData`)**
+- Selection: `select_by_idx`, `select_tos_range`, `select_timestamp_range` (each keeps the peaks of the injections it keeps), `select_retention_time_range`
+- Time origin: `with_tos_start`, `set_tos_start`, `del_tos_start`, `move_tos_start_by` (see [Changing the origin afterwards](#changing-the-origin-afterwards))
+- Combining: `merge` appends another `GCData` along the injection axis
+- Naming: `rename_species` (see [Species naming conventions](#species-naming-conventions))
+
+**Export**
+- `to_netcdf` stores chromatograms that are still raw counts as int32 counts with their scale factor (lossless, half the size); `to_dataframe(detector)` gives one detector as a retention time x injection table
+
+**Typical workflow**
+
+```python
+from pathlib import Path
+import phd_parser as pp
+
+gc_dir = Path("path/to/2025-05-15_Box2_OP003/GC")
+gc_raw = pp.chromatography.GCData.from_ezchrom_rslt(sorted(gc_dir.glob("0*/*.rslt")))
+gc = gc_raw.rename_species()                     # Methanol -> MeOH, ...
+
+tcd = gc.get_chromatogram("tcd")                 # (injection, retention time)
+co = gc.get_evolution("CO", detector="tcd")      # amount vs injection, with tos
+amounts = gc.get_amounts("tcd")                  # injection x species, with tos
+
+gc_raw.to_netcdf(Path("path/to/02_processed/.../01_loaded/gc.nc"))
+```
+
+#### Agilent OpenLab CDS EZChrom (Box 2, Agilent 7890B)
+
+Low-level reader in `phd_parser.chromatography.agilent.ezchrom` (also importable as
+`phd_parser.chromatography.ezchrom`). It reads the vendor files directly,
+without OpenLab or any Agilent library; none of them is encrypted.
+
+- `.dat`, one per injection, is an OLE2 / Compound File Binary container (`CompoundFile` reads it). `read_dat` returns both detector traces as raw ADC counts, their scale factor (1/7680) and unit, and as metadata the full 7890 instrument method XML, instrument setup text, the SQLite audit trail and OLE summary information
+- `.acaml` / `.acam_` are ACAML 1.5 XML. `read_acaml` returns every peak with all integrator fields, the species amounts, and the calibration curves with their history down to the calibration `.dat` files
+- `.macaml` are the acquisition and data analysis methods as nested name / value / unit sections (`read_method_acaml`); `.rst` and `.cfg` are containers of strings (`read_container_strings`)
+- `read_result_set` reads a whole `.rslt` folder, `to_injections` converts it into the common records of `GCData` (SI units, detector units, detectors named from the method: `Front Signal (FID)` becomes `fid`), and `dump_streams` writes every internal stream to disk
+- Verified against the AIA netCDF export of the same 120 traces (largest relative deviation 5.8e-8, float32 rounding). Sample k sits at t = k * 0.05 s; the last stored sample is an unacquired zero placeholder, which the netCDF export drops. ACAML heights and areas are in counts and counts s, `to_injections` converts them to detector units
 
 ## References
 

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import logging
+from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Literal, Optional, Union, Sequence
@@ -9,9 +11,38 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import xarray as xr
+from phd_parser.history import format_history, get_history, records_step
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 import phd_parser.massspec.quadstar as quadstar
+
+_JSON_PREFIX = "json:"
+_JSON_ARRAY_PREFIX = "json-array:"
+
+
+def _encode_attr(value: Any) -> Any:
+    """Make an attribute NetCDF-storable: dicts and nested lists become a JSON string.
+
+    NetCDF attributes hold only numbers, strings and flat arrays, but the
+    channel tables and the ``trace_corrections`` record are dicts. JSON turns
+    non-string dict keys (m/z values, block ids) into strings.
+    """
+    if isinstance(value, np.ndarray) and value.dtype.kind in "UO":
+        # string arrays (channel labels) are not storable by every NetCDF backend
+        return _JSON_ARRAY_PREFIX + json.dumps(value.tolist(), default=str)
+    nested = isinstance(value, dict) or (
+        isinstance(value, (list, tuple)) and any(isinstance(v, (dict, list, tuple)) for v in value)
+    )
+    return _JSON_PREFIX + json.dumps(value, default=str) if nested else value
+
+
+def _decode_attr(value: Any) -> Any:
+    """Inverse of :func:`_encode_attr`."""
+    if isinstance(value, str) and value.startswith(_JSON_ARRAY_PREFIX):
+        return np.array(json.loads(value[len(_JSON_ARRAY_PREFIX):]))
+    if isinstance(value, str) and value.startswith(_JSON_PREFIX):
+        return json.loads(value[len(_JSON_PREFIX):])
+    return value
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +53,9 @@ BlockUnit = Literal["A", "mbar", "arbitrary"]
 # channel dims.
 PRIMARY_BLOCK_ID = 0
 
+# Anything pandas.Timestamp can parse into an absolute point in time.
+TimestampLike = Union[pd.Timestamp, datetime, np.datetime64, str]
+
 def _channel_dim(block_id: int) -> str:
     """Name of the channel dim for a given block."""
     return "mz" if block_id == PRIMARY_BLOCK_ID else f"ch_{block_id}"
@@ -31,6 +65,26 @@ def _to_timedelta(delta: Union[float, pd.Timedelta, str]) -> pd.Timedelta:
     if isinstance(delta, (int, float, np.integer, np.floating)) and not isinstance(delta, bool):
         return pd.Timedelta(seconds=float(delta))
     return pd.Timedelta(delta)
+
+def _to_timestamp(value: TimestampLike, reference: Optional[pd.Timestamp] = None) -> pd.Timestamp:
+    """Parse a timestamp-like value and align its timezone with *reference*.
+
+    A naive value is read as wall-clock time in the reference's timezone; an
+    aware value handed to a naive reference keeps its wall-clock reading and
+    drops the offset.  Both sides tz-aware (or both naive) is left alone.
+    """
+    ts = pd.Timestamp(value)
+    if reference is None:
+        return ts
+    if ts.tzinfo is None and reference.tzinfo is not None:
+        return ts.tz_localize(reference.tzinfo)
+    if ts.tzinfo is not None and reference.tzinfo is None:
+        logger.warning(
+            f"tos_start {reference} is timezone-naive but {ts} is not; "
+            "comparing wall-clock times and ignoring the offset."
+        )
+        return ts.tz_localize(None)
+    return ts
 
 class MSData(BaseModel):
     """Mass-spectrometry data container backed by an ``xr.Dataset``.
@@ -109,6 +163,21 @@ class MSData(BaseModel):
     # ----------------------------------------------------------------
     # Core properties
     # ----------------------------------------------------------------
+
+    @property
+    def history(self) -> list[dict[str, Any]]:
+        """Every processing step that produced this object, oldest first (see :mod:`phd_parser.history`).
+
+        Returns
+        -------
+        list of dict
+            ``{"step", "parameters", "time", "version"}`` per step; saved by ``to_netcdf``.
+        """
+        return get_history(self.ds.attrs)
+
+    def format_history(self) -> str:
+        """Return :attr:`history` as readable text, one numbered step per line."""
+        return format_history(self.history)
 
     @property
     def block_ids(self) -> list[int]:
@@ -524,6 +593,7 @@ class MSData(BaseModel):
     # Immutable — time origin (tos_start)
     # ----------------------------------------------------------------
 
+    @records_step
     def with_tos_start(self, tos_start: Union[pd.Timestamp, str]) -> "MSData":
         """Re-anchor ``tos`` to a new origin, leaving every absolute timestamp unchanged.
 
@@ -564,6 +634,7 @@ class MSData(BaseModel):
         ds.attrs = {**self.ds.attrs, "tos_start": new_tos_start.isoformat()}
         return MSData(ds=ds)
 
+    @records_step
     def set_tos_start(self, tos_start: Union[pd.Timestamp, str]) -> "MSData":
         """Replace the origin without touching ``tos`` — every absolute timestamp moves.
 
@@ -588,6 +659,7 @@ class MSData(BaseModel):
         ds.attrs = {**self.ds.attrs, "tos_start": pd.Timestamp(tos_start).isoformat()}
         return MSData(ds=ds)
 
+    @records_step
     def del_tos_start(self) -> "MSData":
         """Drop the origin, keeping ``tos`` as a purely relative axis.
 
@@ -603,6 +675,7 @@ class MSData(BaseModel):
         ds.attrs = attrs
         return MSData(ds=ds)
 
+    @records_step
     def move_tos_start_by(self, delta: Union[float, pd.Timedelta, str]) -> "MSData":
         """Move the origin by a relative amount and re-anchor ``tos`` to it.
 
@@ -638,6 +711,7 @@ class MSData(BaseModel):
     # Immutable slicing
     # ----------------------------------------------------------------
 
+    @records_step
     def select_tos_range(
         self,
         tos_start_seconds: Optional[float] = None,
@@ -675,10 +749,56 @@ class MSData(BaseModel):
             mask &= tos <= tos_end_seconds
         return MSData(ds=self.ds.isel(cycle=mask))
 
+    @records_step
+    def select_timestamp_range(
+        self,
+        start: Optional[TimestampLike] = None,
+        end: Optional[TimestampLike] = None,
+    ) -> "MSData":
+        """Return a new ``MSData`` restricted to an absolute time window.
+
+        The wall-clock counterpart of ``select_tos_range``: bounds are given as
+        absolute timestamps instead of elapsed seconds, and are converted against
+        ``tos_start`` before the selection is made.  Naive bounds are read as
+        wall-clock time in the timezone of ``tos_start``.
+
+        Parameters
+        ----------
+        start : pandas.Timestamp, datetime, numpy.datetime64, str or None, optional
+            Lower bound (inclusive).  ``None`` means no lower bound.
+        end : pandas.Timestamp, datetime, numpy.datetime64, str or None, optional
+            Upper bound (inclusive).  ``None`` means no upper bound.
+
+        Returns
+        -------
+        MSData
+            New instance containing only cycles within the specified window.
+
+        Raises
+        ------
+        ValueError
+            If the ``tos`` coordinate or ``tos_start`` is not set, so absolute
+            timestamps cannot be resolved.
+
+        See Also
+        --------
+        select_tos_range : Same selection, bounds given in elapsed seconds.
+        """
+        tos_start = self.tos_start
+        if tos_start is None:
+            raise ValueError(
+                "select_timestamp_range requires a tos_start. "
+                "Anchor the data first with set_tos_start(...)."
+            )
+        min_s = None if start is None else (_to_timestamp(start, tos_start) - tos_start).total_seconds()
+        max_s = None if end is None else (_to_timestamp(end, tos_start) - tos_start).total_seconds()
+        return self.select_tos_range(min_s, max_s)
+
     # ----------------------------------------------------------------
     # Immutable baseline / trace correction
     # ----------------------------------------------------------------
 
+    @records_step
     def correct_traces(
         self,
         mz: Union[None, Literal["all"], float, Sequence[float]] = "all",
@@ -747,6 +867,7 @@ class MSData(BaseModel):
         self._append_correction(new_ds, {"method": "min_shift", "shifts": shifts_log})
         return MSData(ds=new_ds)
 
+    @records_step
     def mask_overloaded(
         self,
         threshold: float = 1e21,
@@ -802,6 +923,7 @@ class MSData(BaseModel):
         )
         return MSData(ds=new_ds)
 
+    @records_step
     def smooth_trace_rolling(
         self,
         window: int,
@@ -869,6 +991,7 @@ class MSData(BaseModel):
         )
         return MSData(ds=new_ds)
 
+    @records_step
     def baseline_subtract(
         self,
         tos_start_seconds: float,
@@ -1004,8 +1127,16 @@ class MSData(BaseModel):
         filepath : str or Path
             Destination file path.
         """
-        self.ds.to_netcdf(filepath)
+        self._with_attrs(_encode_attr).to_netcdf(filepath)
         logger.debug("Saved NetCDF → %s", filepath)
+
+    def _with_attrs(self, convert) -> xr.Dataset:
+        """Copy of the dataset with ``convert`` applied to every attribute value."""
+        ds = self.ds.copy()
+        ds.attrs = {k: convert(v) for k, v in ds.attrs.items()}
+        for name in ds.variables:
+            ds[name].attrs = {k: convert(v) for k, v in ds[name].attrs.items()}
+        return ds
 
     # ----------------------------------------------------------------
     # Private: dataset builder
@@ -1060,6 +1191,7 @@ class MSData(BaseModel):
     # ----------------------------------------------------------------
 
     @classmethod
+    @records_step
     def from_arrays(
         cls,
         cycle: npt.NDArray,
@@ -1136,6 +1268,7 @@ class MSData(BaseModel):
         return cls(ds=ds)
 
     @classmethod
+    @records_step
     def from_quadstar_asc(
         cls,
         filepath: Union[str, Path],
@@ -1284,6 +1417,7 @@ class MSData(BaseModel):
         return cls(ds=ds)
 
     @classmethod
+    @records_step
     def from_netcdf(cls, filepath: Union[str, Path]) -> "MSData":
         """Reload an ``MSData`` previously saved with :meth:`to_netcdf`.
 
@@ -1297,8 +1431,9 @@ class MSData(BaseModel):
         MSData
             Instance reconstructed from the file.
         """
-        ds = xr.open_dataset(filepath)
-        return cls(ds=ds)
+        with xr.open_dataset(filepath) as handle:
+            ds = handle.load()
+        return cls(ds=cls(ds=ds)._with_attrs(_decode_attr))
 
     # ----------------------------------------------------------------
     # Dunder

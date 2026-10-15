@@ -1,0 +1,1129 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ACAML xmlns="urn:schemas-agilent-com:acaml15" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<Checksum Algorithm="MD5">
+		<Value>4mLebkHrU60frY1DOAaMfg==</Value>
+	</Checksum>
+	<Doc ContentVersioned="false">
+		<DocID>dbd5b11f-c299-4ed4-9e30-879435736c6b</DocID>
+		<DocInfo>
+			<Description>Method ACAML</Description>
+			<CreatedByUser>SYSTEM (SYSTEM)</CreatedByUser>
+			<CreatedByApplication>
+				<AgilentApp>
+					<Name>OpenLABICM</Name>
+					<Version>Version A.04.08</Version>
+				</AgilentApp>
+			</CreatedByApplication>
+			<CreationDate>2025-05-15T16:28:09.462+02:00</CreationDate>
+			<ClientName>Elitebook-2</ClientName>
+		</DocInfo>
+		<Content>
+			<MethodConfiguration xsi:type="MethodConfigurationType" id="6dddf62e-a06f-454e-b515-743ba4320944" ver="0">
+				<MethodDescription>
+					<Name>Method Configuration</Name>
+					<ID>Method_Configuration</ID>
+					<Section>
+						<Name>Acquisition Method Parameters</Name>
+						<ID>ID_SECTION_0001</ID>
+						<Section>
+							<Name>Method Information</Name>
+							<ID>ID_SECTION_0002</ID>
+							<Parameter>
+								<Name>Method</Name>
+								<ID>ID_PARAMETER_0001</ID>
+								<Unit />
+								<Value>C:\Enterprise\Projects\7890B\Method\JS_2025-05-12_CH.met</Value>
+							</Parameter>
+							<Parameter>
+								<Name>Last modified</Name>
+								<ID>ID_PARAMETER_0002</ID>
+								<Unit />
+								<Value>12/05/2025 18:00:38 (GMT +02:00)</Value>
+							</Parameter>
+							<Parameter>
+								<Name>Method Description</Name>
+								<ID>ID_PARAMETER_0003</ID>
+								<Unit />
+								<Value>60 m CP-Sil5CB column installed 29-01-2025</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Method Audit Trail</Name>
+							<ID>ID_SECTION_0003</ID>
+							<Parameter>
+								<Name>Audit Trail</Name>
+								<ID>ID_PARAMETER_0004</ID>
+								<Unit />
+								<Value>Disabled</Value>
+							</Parameter>
+							<Table>
+								<Name>Method Audit Trail</Name>
+								<ID>ID_TABLE_0001</ID>
+								<Row>
+									<Parameter>
+										<Name>User</Name>
+										<ID>ID_PARAMETER_0005</ID>
+										<Unit />
+										<Value>SYSTEM (SYSTEM)</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Logged</Name>
+										<ID>ID_PARAMETER_0006</ID>
+										<Unit />
+										<Value>12/05/2025 15:14:23 (GMT +02:00)</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Source</Name>
+										<ID>ID_PARAMETER_0007</ID>
+										<Unit />
+										<Value>Offline: ELITEBOOK-2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Activity</Name>
+										<ID>ID_PARAMETER_0008</ID>
+										<Unit />
+										<Value>Saved from JS_2025-05-01_CH-NoV3.met.</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reason</Name>
+										<ID>ID_PARAMETER_0009</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+								</Row>
+							</Table>
+						</Section>
+						<Section>
+							<Name>Options</Name>
+							<ID>ID_SECTION_0004</ID>
+							<Parameter>
+								<Name>Analyze After Acquisition</Name>
+								<ID>ID_PARAMETER_0010</ID>
+								<Unit />
+								<Value>Yes</Value>
+							</Parameter>
+							<Parameter>
+								<Name>Enable compression for data file</Name>
+								<ID>ID_PARAMETER_0011</ID>
+								<Unit />
+								<Value>No</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Calibration</Name>
+							<ID>ID_SECTION_0005</ID>
+							<Parameter>
+								<Name>Automatically Average Replicates</Name>
+								<ID>ID_PARAMETER_0012</ID>
+								<Unit />
+								<Value>Yes</Value>
+							</Parameter>
+							<Parameter>
+								<Name>Number of replicates in rolling average</Name>
+								<ID>ID_PARAMETER_0013</ID>
+								<Unit />
+								<Value>0</Value>
+							</Parameter>
+							<Parameter>
+								<Name>Response Factor Definition</Name>
+								<ID>ID_PARAMETER_0014</ID>
+								<Unit />
+								<Value>Amount/Area</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>User Programs</Name>
+							<ID>ID_SECTION_0006</ID>
+							<Parameter>
+								<Name>Before Run Program</Name>
+								<ID>ID_PARAMETER_0015</ID>
+								<Unit />
+								<Value>Disabled</Value>
+							</Parameter>
+							<Parameter>
+								<Name>Before Analysis Program</Name>
+								<ID>ID_PARAMETER_0016</ID>
+								<Unit />
+								<Value>Disabled</Value>
+							</Parameter>
+							<Parameter>
+								<Name>After Analysis Program</Name>
+								<ID>ID_PARAMETER_0017</ID>
+								<Unit />
+								<Value>Disabled</Value>
+							</Parameter>
+							<Parameter>
+								<Name>After Export Program</Name>
+								<ID>ID_PARAMETER_0018</ID>
+								<Unit />
+								<Value>Disabled</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Baseline File</Name>
+							<ID>ID_SECTION_0007</ID>
+							<Parameter>
+								<Name>Baseline File</Name>
+								<ID>ID_PARAMETER_0019</ID>
+								<Unit />
+								<Value>Disabled</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Trigger Info</Name>
+							<ID>ID_SECTION_0008</ID>
+							<Parameter>
+								<Name>  Trigger Type:          %s</Name>
+								<ID>ID_PARAMETER_0020</ID>
+								<Unit />
+								<Value>Not Triggered</Value>
+							</Parameter>
+							<Parameter>
+								<Name>  Injection Source:      %s</Name>
+								<ID>ID_PARAMETER_0021</ID>
+								<Unit />
+								<Value>N/A</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Agilent 7890B - GC</Name>
+							<ID>ID_SECTION_0009</ID>
+							<Section>
+								<Name>GC Summary</Name>
+								<ID>ID_SECTION_0010</ID>
+								<Parameter>
+									<Name>Run Time</Name>
+									<ID>ID_PARAMETER_0022</ID>
+									<Unit>min</Unit>
+									<Value>17.2</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Post Run Time</Name>
+									<ID>ID_PARAMETER_0023</ID>
+									<Unit>min</Unit>
+									<Value>0</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Oven</Name>
+								<ID>ID_SECTION_0011</ID>
+								<Section>
+									<Name>Temperature</Name>
+									<ID>ID_SECTION_0012</ID>
+									<Parameter>
+										<Name>Setpoint</Name>
+										<ID>ID_PARAMETER_0024</ID>
+										<Unit />
+										<Value>On</Value>
+									</Parameter>
+									<Parameter>
+										<Name>(Initial)</Name>
+										<ID>ID_PARAMETER_0025</ID>
+										<Unit>°C</Unit>
+										<Value>50</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Hold Time</Name>
+										<ID>ID_PARAMETER_0026</ID>
+										<Unit>min</Unit>
+										<Value>5.5</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Post Run</Name>
+										<ID>ID_PARAMETER_0027</ID>
+										<Unit>°C</Unit>
+										<Value>260</Value>
+									</Parameter>
+									<Table>
+										<Name>Program</Name>
+										<ID>ID_TABLE_0002</ID>
+										<Row>
+											<Parameter>
+												<Name>Rate</Name>
+												<ID>ID_PARAMETER_0028</ID>
+												<Unit>°C/min</Unit>
+												<Value>20</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Value</Name>
+												<ID>ID_PARAMETER_0029</ID>
+												<Unit>°C</Unit>
+												<Value>100</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Hold Time</Name>
+												<ID>ID_PARAMETER_0030</ID>
+												<Unit>min</Unit>
+												<Value>3</Value>
+											</Parameter>
+										</Row>
+										<Row>
+											<Parameter>
+												<Name>Rate</Name>
+												<ID>ID_PARAMETER_0031</ID>
+												<Unit>°C/min</Unit>
+												<Value>50</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Value</Name>
+												<ID>ID_PARAMETER_0032</ID>
+												<Unit>°C</Unit>
+												<Value>160</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Hold Time</Name>
+												<ID>ID_PARAMETER_0033</ID>
+												<Unit>min</Unit>
+												<Value>5</Value>
+											</Parameter>
+										</Row>
+									</Table>
+								</Section>
+								<Parameter>
+									<Name>Equilibration Time</Name>
+									<ID>ID_PARAMETER_0034</ID>
+									<Unit>min</Unit>
+									<Value>0</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Max Temperature</Name>
+									<ID>ID_PARAMETER_0035</ID>
+									<Unit>°C</Unit>
+									<Value>260</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Maximum Temperature Override</Name>
+									<ID>ID_PARAMETER_0036</ID>
+									<Unit />
+									<Value>Enabled</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Slow Fan</Name>
+									<ID>ID_PARAMETER_0037</ID>
+									<Unit />
+									<Value>Disabled</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Front SS Inlet He</Name>
+								<ID>ID_SECTION_0013</ID>
+								<Parameter>
+									<Name>Mode</Name>
+									<ID>ID_PARAMETER_0038</ID>
+									<Unit />
+									<Value>Split</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Heater</Name>
+									<ID>ID_PARAMETER_0039</ID>
+									<Unit>°C</Unit>
+									<Value>On    200</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Pressure</Name>
+									<ID>ID_PARAMETER_0040</ID>
+									<Unit>psi</Unit>
+									<Value>On    20.046</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Total Flow</Name>
+									<ID>ID_PARAMETER_0041</ID>
+									<Unit>mL/min</Unit>
+									<Value>On    27.2</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Septum Purge Flow</Name>
+									<ID>ID_PARAMETER_0042</ID>
+									<Unit>mL/min</Unit>
+									<Value>On    3</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Gas Saver</Name>
+									<ID>ID_PARAMETER_0043</ID>
+									<Unit />
+									<Value>Off</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Split Ratio</Name>
+									<ID>ID_PARAMETER_0044</ID>
+									<Unit>:1</Unit>
+									<Value>10</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Split Flow</Name>
+									<ID>ID_PARAMETER_0045</ID>
+									<Unit>mL/min</Unit>
+									<Value>22</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Column</Name>
+								<ID>ID_SECTION_0014</ID>
+								<Section>
+									<Name>Column #1</Name>
+									<ID>ID_SECTION_0015</ID>
+									<Section>
+										<Name>Flow</Name>
+										<ID>ID_SECTION_0016</ID>
+										<Parameter>
+											<Name>Setpoint</Name>
+											<ID>ID_PARAMETER_0046</ID>
+											<Unit />
+											<Value>On</Value>
+										</Parameter>
+										<Parameter>
+											<Name>(Initial)</Name>
+											<ID>ID_PARAMETER_0047</ID>
+											<Unit>mL/min</Unit>
+											<Value>2.2</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Post Run</Name>
+											<ID>ID_PARAMETER_0048</ID>
+											<Unit>mL/min</Unit>
+											<Value>5</Value>
+										</Parameter>
+									</Section>
+									<Parameter>
+										<Name>Column Information</Name>
+										<ID>ID_PARAMETER_0049</ID>
+										<Unit />
+										<Value>CP-Sil 5CB</Value>
+									</Parameter>
+									<Parameter>
+										<Name>DaVinci Lab Solutions</Name>
+										<ID>ID_PARAMETER_0050</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Temperature Range</Name>
+										<ID>ID_PARAMETER_0051</ID>
+										<Unit />
+										<Value>-60 °C—300 °C (325 °C)</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Dimensions</Name>
+										<ID>ID_PARAMETER_0052</ID>
+										<Unit />
+										<Value>60 m x 320 μm x 7.77 μm</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Column lock</Name>
+										<ID>ID_PARAMETER_0053</ID>
+										<Unit />
+										<Value>Unlocked</Value>
+									</Parameter>
+									<Parameter>
+										<Name>In</Name>
+										<ID>ID_PARAMETER_0054</ID>
+										<Unit />
+										<Value>Front SS Inlet He</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Out</Name>
+										<ID>ID_PARAMETER_0055</ID>
+										<Unit />
+										<Value>Front Detector FID</Value>
+									</Parameter>
+									<Parameter>
+										<Name>(Initial)</Name>
+										<ID>ID_PARAMETER_0056</ID>
+										<Unit>°C</Unit>
+										<Value>50</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Pressure</Name>
+										<ID>ID_PARAMETER_0057</ID>
+										<Unit>psi</Unit>
+										<Value>20.046</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Flow</Name>
+										<ID>ID_PARAMETER_0058</ID>
+										<Unit>mL/min</Unit>
+										<Value>2.2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Average Velocity</Name>
+										<ID>ID_PARAMETER_0059</ID>
+										<Unit>cm/sec</Unit>
+										<Value>30.767</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Holdup Time</Name>
+										<ID>ID_PARAMETER_0060</ID>
+										<Unit>min</Unit>
+										<Value>3.2503</Value>
+									</Parameter>
+								</Section>
+								<Section>
+									<Name>Column #2</Name>
+									<ID>ID_SECTION_0017</ID>
+									<Section>
+										<Name>Pressure</Name>
+										<ID>ID_SECTION_0018</ID>
+										<Parameter>
+											<Name>Setpoint</Name>
+											<ID>ID_PARAMETER_0061</ID>
+											<Unit />
+											<Value>On</Value>
+										</Parameter>
+										<Parameter>
+											<Name>(Initial)</Name>
+											<ID>ID_PARAMETER_0062</ID>
+											<Unit>psi</Unit>
+											<Value>25</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Post Run</Name>
+											<ID>ID_PARAMETER_0063</ID>
+											<Unit>psi</Unit>
+											<Value>25</Value>
+										</Parameter>
+									</Section>
+									<Parameter>
+										<Name>Column Information</Name>
+										<ID>ID_PARAMETER_0064</ID>
+										<Unit />
+										<Value>Agilent G3591-80004: 2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>HayeSep Q</Name>
+										<ID>ID_PARAMETER_0065</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Temperature Range</Name>
+										<ID>ID_PARAMETER_0066</ID>
+										<Unit />
+										<Value>-59 °C—449 °C (449 °C)</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Packed</Name>
+										<ID>ID_PARAMETER_0067</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Column lock</Name>
+										<ID>ID_PARAMETER_0068</ID>
+										<Unit />
+										<Value>Unlocked</Value>
+									</Parameter>
+									<Parameter>
+										<Name>In</Name>
+										<ID>ID_PARAMETER_0069</ID>
+										<Unit />
+										<Value>Aux PCM C He</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Out</Name>
+										<ID>ID_PARAMETER_0070</ID>
+										<Unit />
+										<Value>Back Detector TCD</Value>
+									</Parameter>
+								</Section>
+								<Parameter>
+									<Name>Column Outlet Pressure</Name>
+									<ID>ID_PARAMETER_0071</ID>
+									<Unit>psi</Unit>
+									<Value>0</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Front Detector FID</Name>
+								<ID>ID_SECTION_0019</ID>
+								<Parameter>
+									<Name>Makeup</Name>
+									<ID>ID_PARAMETER_0072</ID>
+									<Unit />
+									<Value>He</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Heater</Name>
+									<ID>ID_PARAMETER_0073</ID>
+									<Unit>°C</Unit>
+									<Value>On    300</Value>
+								</Parameter>
+								<Parameter>
+									<Name>H2 Flow</Name>
+									<ID>ID_PARAMETER_0074</ID>
+									<Unit>mL/min</Unit>
+									<Value>On    35</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Air Flow</Name>
+									<ID>ID_PARAMETER_0075</ID>
+									<Unit>mL/min</Unit>
+									<Value>On    350</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Makeup Flow</Name>
+									<ID>ID_PARAMETER_0076</ID>
+									<Unit>mL/min</Unit>
+									<Value>On    25</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Carrier Gas Flow Correction</Name>
+									<ID>ID_PARAMETER_0077</ID>
+									<Unit />
+									<Value>Does not affect Makeup or Fuel Flow</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Flame</Name>
+									<ID>ID_PARAMETER_0078</ID>
+									<Unit />
+									<Value>On</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Back Detector TCD</Name>
+								<ID>ID_SECTION_0020</ID>
+								<Parameter>
+									<Name>Makeup</Name>
+									<ID>ID_PARAMETER_0079</ID>
+									<Unit />
+									<Value>He</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Heater</Name>
+									<ID>ID_PARAMETER_0080</ID>
+									<Unit>°C</Unit>
+									<Value>On    200</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Reference Flow</Name>
+									<ID>ID_PARAMETER_0081</ID>
+									<Unit>mL/min</Unit>
+									<Value>On    40</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Makeup Flow</Name>
+									<ID>ID_PARAMETER_0082</ID>
+									<Unit>mL/min</Unit>
+									<Value>On    3</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Filament</Name>
+									<ID>ID_PARAMETER_0083</ID>
+									<Unit />
+									<Value>On</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Negative Polarity</Name>
+									<ID>ID_PARAMETER_0084</ID>
+									<Unit />
+									<Value>Off</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Valve 1</Name>
+								<ID>ID_SECTION_0021</ID>
+								<Parameter>
+									<Name>Switching Valve</Name>
+									<ID>ID_PARAMETER_0085</ID>
+									<Unit />
+									<Value>Off</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Valve 2</Name>
+								<ID>ID_SECTION_0022</ID>
+								<Parameter>
+									<Name>Switching Valve</Name>
+									<ID>ID_PARAMETER_0086</ID>
+									<Unit />
+									<Value>Off</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Valve 3</Name>
+								<ID>ID_SECTION_0023</ID>
+								<Parameter>
+									<Name>Type</Name>
+									<ID>ID_PARAMETER_0087</ID>
+									<Unit />
+									<Value>Gas Sampling Valve</Value>
+								</Parameter>
+								<Parameter>
+									<Name>GSV Loop Volume</Name>
+									<ID>ID_PARAMETER_0088</ID>
+									<Unit>mL</Unit>
+									<Value>1</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Load Time</Name>
+									<ID>ID_PARAMETER_0089</ID>
+									<Unit>min</Unit>
+									<Value>0.1</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Inject Time</Name>
+									<ID>ID_PARAMETER_0090</ID>
+									<Unit>min</Unit>
+									<Value>1</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Valve 4</Name>
+								<ID>ID_SECTION_0024</ID>
+								<Parameter>
+									<Name>Switching Valve</Name>
+									<ID>ID_PARAMETER_0091</ID>
+									<Unit />
+									<Value>Off</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>PCM C</Name>
+								<ID>ID_SECTION_0025</ID>
+								<Section>
+									<Name>PCM C He</Name>
+									<ID>ID_SECTION_0026</ID>
+									<Section>
+										<Name>Flow</Name>
+										<ID>ID_SECTION_0027</ID>
+										<Parameter>
+											<Name>Setpoint</Name>
+											<ID>ID_PARAMETER_0092</ID>
+											<Unit />
+											<Value>On</Value>
+										</Parameter>
+										<Parameter>
+											<Name>(Initial)</Name>
+											<ID>ID_PARAMETER_0093</ID>
+											<Unit>mL/min</Unit>
+											<Value>20</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Post Run</Name>
+											<ID>ID_PARAMETER_0094</ID>
+											<Unit>mL/min</Unit>
+											<Value>0</Value>
+										</Parameter>
+									</Section>
+								</Section>
+								<Section>
+									<Name>Aux PCM C He</Name>
+									<ID>ID_SECTION_0028</ID>
+									<Parameter>
+										<Name>Aux PCM C He</Name>
+										<ID>ID_PARAMETER_0095</ID>
+										<Unit />
+										<Value>Supplies Column 2</Value>
+									</Parameter>
+								</Section>
+							</Section>
+							<Section>
+								<Name>Valve Box</Name>
+								<ID>ID_SECTION_0029</ID>
+								<Parameter>
+									<Name />
+									<ID>ID_PARAMETER_0096</ID>
+									<Unit />
+									<Value>***Excluded from Affecting GC's Readiness State***</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Heater</Name>
+									<ID>ID_PARAMETER_0097</ID>
+									<Unit>°C</Unit>
+									<Value>On    160</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Signals</Name>
+								<ID>ID_SECTION_0030</ID>
+								<Section>
+									<Name>Signal #1:  Front Signal</Name>
+									<ID>ID_SECTION_0031</ID>
+									<Parameter>
+										<Name>Description</Name>
+										<ID>ID_PARAMETER_0098</ID>
+										<Unit />
+										<Value>Front Signal</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Details</Name>
+										<ID>ID_PARAMETER_0099</ID>
+										<Unit />
+										<Value>Front Signal (FID)</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Save</Name>
+										<ID>ID_PARAMETER_0100</ID>
+										<Unit />
+										<Value>On</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Data Rate</Name>
+										<ID>ID_PARAMETER_0101</ID>
+										<Unit>Hz</Unit>
+										<Value>20</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Zero Signal</Name>
+										<ID>ID_PARAMETER_0102</ID>
+										<Unit>min</Unit>
+										<Value>Zero @ 0</Value>
+									</Parameter>
+								</Section>
+								<Section>
+									<Name>Signal #2:  Back Signal</Name>
+									<ID>ID_SECTION_0032</ID>
+									<Parameter>
+										<Name>Description</Name>
+										<ID>ID_PARAMETER_0103</ID>
+										<Unit />
+										<Value>Back Signal</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Details</Name>
+										<ID>ID_PARAMETER_0104</ID>
+										<Unit />
+										<Value>Back Signal (TCD)</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Save</Name>
+										<ID>ID_PARAMETER_0105</ID>
+										<Unit />
+										<Value>On</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Data Rate</Name>
+										<ID>ID_PARAMETER_0106</ID>
+										<Unit>Hz</Unit>
+										<Value>20</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Zero Signal</Name>
+										<ID>ID_PARAMETER_0107</ID>
+										<Unit>min</Unit>
+										<Value>Zero @ 0</Value>
+									</Parameter>
+								</Section>
+								<Section>
+									<Name>Signal #3:</Name>
+									<ID>ID_SECTION_0033</ID>
+									<Parameter>
+										<Name>Description</Name>
+										<ID>ID_PARAMETER_0108</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+								</Section>
+								<Section>
+									<Name>Signal #4:</Name>
+									<ID>ID_SECTION_0034</ID>
+									<Parameter>
+										<Name>Description</Name>
+										<ID>ID_PARAMETER_0109</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+								</Section>
+							</Section>
+							<Section>
+								<Name>Run Time Events</Name>
+								<ID>ID_SECTION_0035</ID>
+								<Table>
+									<Name>Run Time Events</Name>
+									<ID>ID_TABLE_0003</ID>
+									<Row>
+										<Parameter>
+											<Name>Time</Name>
+											<ID>ID_PARAMETER_0110</ID>
+											<Unit>min</Unit>
+											<Value>0.06</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event</Name>
+											<ID>ID_PARAMETER_0111</ID>
+											<Unit />
+											<Value>Valve</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Position</Name>
+											<ID>ID_PARAMETER_0112</ID>
+											<Unit />
+											<Value>Valve 1</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Setpoint</Name>
+											<ID>ID_PARAMETER_0113</ID>
+											<Unit />
+											<Value>On</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Time</Name>
+											<ID>ID_PARAMETER_0114</ID>
+											<Unit>min</Unit>
+											<Value>0.06</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event</Name>
+											<ID>ID_PARAMETER_0115</ID>
+											<Unit />
+											<Value>Valve</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Position</Name>
+											<ID>ID_PARAMETER_0116</ID>
+											<Unit />
+											<Value>Valve 4</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Setpoint</Name>
+											<ID>ID_PARAMETER_0117</ID>
+											<Unit />
+											<Value>On</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Time</Name>
+											<ID>ID_PARAMETER_0118</ID>
+											<Unit>min</Unit>
+											<Value>0.06</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event</Name>
+											<ID>ID_PARAMETER_0119</ID>
+											<Unit />
+											<Value>Valve</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Position</Name>
+											<ID>ID_PARAMETER_0120</ID>
+											<Unit />
+											<Value>Valve 2</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Setpoint</Name>
+											<ID>ID_PARAMETER_0121</ID>
+											<Unit />
+											<Value>On</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Time</Name>
+											<ID>ID_PARAMETER_0122</ID>
+											<Unit>min</Unit>
+											<Value>0.39</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event</Name>
+											<ID>ID_PARAMETER_0123</ID>
+											<Unit />
+											<Value>Valve</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Position</Name>
+											<ID>ID_PARAMETER_0124</ID>
+											<Unit />
+											<Value>Valve 4</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Setpoint</Name>
+											<ID>ID_PARAMETER_0125</ID>
+											<Unit />
+											<Value>Off</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Time</Name>
+											<ID>ID_PARAMETER_0126</ID>
+											<Unit>min</Unit>
+											<Value>0.6</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event</Name>
+											<ID>ID_PARAMETER_0127</ID>
+											<Unit />
+											<Value>Valve</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Position</Name>
+											<ID>ID_PARAMETER_0128</ID>
+											<Unit />
+											<Value>Valve 2</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Setpoint</Name>
+											<ID>ID_PARAMETER_0129</ID>
+											<Unit />
+											<Value>Off</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Time</Name>
+											<ID>ID_PARAMETER_0130</ID>
+											<Unit>min</Unit>
+											<Value>3</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event</Name>
+											<ID>ID_PARAMETER_0131</ID>
+											<Unit />
+											<Value>Valve</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Position</Name>
+											<ID>ID_PARAMETER_0132</ID>
+											<Unit />
+											<Value>Valve 2</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Setpoint</Name>
+											<ID>ID_PARAMETER_0133</ID>
+											<Unit />
+											<Value>On</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Time</Name>
+											<ID>ID_PARAMETER_0134</ID>
+											<Unit>min</Unit>
+											<Value>5.5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event</Name>
+											<ID>ID_PARAMETER_0135</ID>
+											<Unit />
+											<Value>Valve</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Position</Name>
+											<ID>ID_PARAMETER_0136</ID>
+											<Unit />
+											<Value>Valve 1</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Setpoint</Name>
+											<ID>ID_PARAMETER_0137</ID>
+											<Unit />
+											<Value>Off</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Time</Name>
+											<ID>ID_PARAMETER_0138</ID>
+											<Unit>min</Unit>
+											<Value>5.5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event</Name>
+											<ID>ID_PARAMETER_0139</ID>
+											<Unit />
+											<Value>Valve</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Position</Name>
+											<ID>ID_PARAMETER_0140</ID>
+											<Unit />
+											<Value>Valve 2</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Setpoint</Name>
+											<ID>ID_PARAMETER_0141</ID>
+											<Unit />
+											<Value>Off</Value>
+										</Parameter>
+									</Row>
+								</Table>
+							</Section>
+						</Section>
+						<Section>
+							<Name>Front Signal</Name>
+							<ID>ID_SECTION_0036</ID>
+							<Parameter>
+								<Name>Items selected for this section</Name>
+								<ID>ID_PARAMETER_0142</ID>
+								<Unit />
+								<Value>None</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Front Signal</Name>
+							<ID>ID_SECTION_0037</ID>
+							<Parameter>
+								<Name>Items selected for this section</Name>
+								<ID>ID_PARAMETER_0143</ID>
+								<Unit />
+								<Value>None</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Back Signal</Name>
+							<ID>ID_SECTION_0038</ID>
+							<Parameter>
+								<Name>Items selected for this section</Name>
+								<ID>ID_PARAMETER_0144</ID>
+								<Unit />
+								<Value>None</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Back Signal</Name>
+							<ID>ID_SECTION_0039</ID>
+							<Parameter>
+								<Name>Items selected for this section</Name>
+								<ID>ID_PARAMETER_0145</ID>
+								<Unit />
+								<Value>None</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name />
+							<ID>ID_SECTION_0040</ID>
+							<Parameter>
+								<Name>Items selected for this section</Name>
+								<ID>ID_PARAMETER_0146</ID>
+								<Unit />
+								<Value>None</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name />
+							<ID>ID_SECTION_0041</ID>
+							<Parameter>
+								<Name>Items selected for this section</Name>
+								<ID>ID_PARAMETER_0147</ID>
+								<Unit />
+								<Value>None</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name />
+							<ID>ID_SECTION_0042</ID>
+							<Parameter>
+								<Name>Items selected for this section</Name>
+								<ID>ID_PARAMETER_0148</ID>
+								<Unit />
+								<Value>None</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name />
+							<ID>ID_SECTION_0043</ID>
+							<Parameter>
+								<Name>Items selected for this section</Name>
+								<ID>ID_PARAMETER_0149</ID>
+								<Unit />
+								<Value>None</Value>
+							</Parameter>
+						</Section>
+					</Section>
+				</MethodDescription>
+			</MethodConfiguration>
+		</Content>
+	</Doc>
+</ACAML>

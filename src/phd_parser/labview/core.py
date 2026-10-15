@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional, Union, List
@@ -9,9 +10,14 @@ import pandas as pd
 import xarray as xr
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from phd_parser.history import HISTORY_KEY, decode_attrs, encode_attrs, format_history, get_history, records_step
 from phd_parser.labview.b67box5 import read as read_b67box5
+from phd_parser.naming.species.convention import ConventionLike, Unknown, get_convention
 
 logger = logging.getLogger(__name__)
+
+# Anything pandas.Timestamp can parse into an absolute point in time.
+TimestampLike = Union[pd.Timestamp, datetime, np.datetime64, str]
 
 
 def _to_timedelta(delta: Union[float, pd.Timedelta, str]) -> pd.Timedelta:
@@ -19,6 +25,27 @@ def _to_timedelta(delta: Union[float, pd.Timedelta, str]) -> pd.Timedelta:
     if isinstance(delta, (int, float, np.integer, np.floating)) and not isinstance(delta, bool):
         return pd.Timedelta(seconds=float(delta))
     return pd.Timedelta(delta)
+
+
+def _to_timestamp(value: TimestampLike, reference: Optional[pd.Timestamp] = None) -> pd.Timestamp:
+    """Parse a timestamp-like value and align its timezone with *reference*.
+
+    A naive value is read as wall-clock time in the reference's timezone; an
+    aware value handed to a naive reference keeps its wall-clock reading and
+    drops the offset.  Both sides tz-aware (or both naive) is left alone.
+    """
+    ts = pd.Timestamp(value)
+    if reference is None:
+        return ts
+    if ts.tzinfo is None and reference.tzinfo is not None:
+        return ts.tz_localize(reference.tzinfo)
+    if ts.tzinfo is not None and reference.tzinfo is None:
+        logger.warning(
+            f"tos_start {reference} is timezone-naive but {ts} is not; "
+            "comparing wall-clock times and ignoring the offset."
+        )
+        return ts.tz_localize(None)
+    return ts
 
 
 class LVData(BaseModel):
@@ -76,6 +103,29 @@ class LVData(BaseModel):
     # ----------------------------------------------------------------
     # Core properties
     # ----------------------------------------------------------------
+
+    @property
+    def history(self) -> list[dict[str, Any]]:
+        """Every processing step that produced this object, oldest first (see :mod:`phd_parser.history`).
+
+        Kept in ``metadata["history"]`` (mirrored into ``ds.attrs``) and saved by ``to_netcdf``.
+
+        Returns
+        -------
+        list of dict
+            ``{"step", "parameters", "time", "version"}`` per step.
+        """
+        return get_history(self.metadata)
+
+    def format_history(self) -> str:
+        """Return :attr:`history` as readable text, one numbered step per line."""
+        return format_history(self.history)
+
+    def _with_history(self, history: list[dict[str, Any]]) -> "LVData":
+        """Copy carrying ``history`` in both ``metadata`` and ``ds.attrs`` (used by phd_parser.history)."""
+        ds = self.ds.copy()
+        ds.attrs = {**ds.attrs, HISTORY_KEY: history}
+        return LVData(ds=ds, metadata={**self.metadata, HISTORY_KEY: history})
 
     @property
     def channels(self) -> list[str]:
@@ -229,6 +279,7 @@ class LVData(BaseModel):
     # Immutable — time origin (tos_start)
     # ----------------------------------------------------------------
 
+    @records_step
     def with_tos_start(self, tos_start: Union[pd.Timestamp, str]) -> "LVData":
         """Re-anchor ``tos`` to a new origin, leaving every absolute timestamp unchanged.
 
@@ -268,6 +319,7 @@ class LVData(BaseModel):
             ds = ds.assign_coords(tos=ds.coords["tos"] - shift_seconds)
         return self._with_tos_start_metadata(ds, new_tos_start)
 
+    @records_step
     def set_tos_start(self, tos_start: Union[pd.Timestamp, str]) -> "LVData":
         """Replace the origin without touching ``tos`` — every absolute timestamp moves.
 
@@ -290,6 +342,7 @@ class LVData(BaseModel):
         """
         return self._with_tos_start_metadata(self.ds.copy(), pd.Timestamp(tos_start))
 
+    @records_step
     def del_tos_start(self) -> "LVData":
         """Drop the origin, keeping ``tos`` as a purely relative axis.
 
@@ -305,6 +358,7 @@ class LVData(BaseModel):
         ds.attrs = dict(metadata)
         return LVData(ds=ds, metadata=metadata)
 
+    @records_step
     def move_tos_start_by(self, delta: Union[float, pd.Timedelta, str]) -> "LVData":
         """Move the origin by a relative amount and re-anchor ``tos`` to it.
 
@@ -346,6 +400,7 @@ class LVData(BaseModel):
     # Immutable — selection
     # ----------------------------------------------------------------
 
+    @records_step
     def select_channels(self, channels: List[str]) -> "LVData":
         """Return a new ``LVData`` containing only the specified channels.
 
@@ -369,6 +424,7 @@ class LVData(BaseModel):
             raise KeyError(f"Channel(s) not found: {missing}. Available: {self.channels}")
         return LVData(ds=self.ds[channels], metadata=self.metadata)
 
+    @records_step
     def select_group(self, group: str) -> "LVData":
         """Return a new ``LVData`` containing only channels belonging to *group*.
 
@@ -392,6 +448,7 @@ class LVData(BaseModel):
             raise ValueError(f"No channels in group {group!r}")
         return self.select_channels(names)
 
+    @records_step
     def select_tos_range(
         self,
         min_s: Optional[float] = None,
@@ -430,10 +487,56 @@ class LVData(BaseModel):
             ds = ds.isel(tos=tos <= max_s)
         return LVData(ds=ds, metadata=self.metadata)
 
+    @records_step
+    def select_timestamp_range(
+        self,
+        start: Optional[TimestampLike] = None,
+        end: Optional[TimestampLike] = None,
+    ) -> "LVData":
+        """Return a new ``LVData`` sliced to an absolute time window.
+
+        The wall-clock counterpart of ``select_tos_range``: bounds are given as
+        absolute timestamps instead of elapsed seconds, and are converted against
+        ``tos_start`` before the selection is made.  Naive bounds are read as
+        wall-clock time in the timezone of ``tos_start``.
+
+        Parameters
+        ----------
+        start : pandas.Timestamp, datetime, numpy.datetime64, str or None, optional
+            Lower bound (inclusive).  ``None`` means no lower bound.
+        end : pandas.Timestamp, datetime, numpy.datetime64, str or None, optional
+            Upper bound (inclusive).  ``None`` means no upper bound.
+
+        Returns
+        -------
+        LVData
+            New instance containing only samples within ``[start, end]``.
+
+        Raises
+        ------
+        ValueError
+            If no ``tos_start`` is set, so absolute timestamps cannot be
+            resolved.
+
+        See Also
+        --------
+        select_tos_range : Same selection, bounds given in elapsed seconds.
+        """
+        tos_start = self.tos_start
+        if tos_start is None:
+            raise ValueError(
+                "select_timestamp_range requires a tos_start. "
+                "Anchor the data first with set_tos_start(...)."
+            )
+        min_s = None if start is None else (_to_timestamp(start, tos_start) - tos_start).total_seconds()
+        max_s = None if end is None else (_to_timestamp(end, tos_start) - tos_start).total_seconds()
+        return self.select_tos_range(min_s, max_s)
+
     # ----------------------------------------------------------------
     # Immutable — resampling / averaging
     # ----------------------------------------------------------------
 
+    @records_step
     def resample(
         self,
         step_s: float,
@@ -484,6 +587,7 @@ class LVData(BaseModel):
             extra_metadata={"resample_step_s": step_s, "resample_method": method},
         )
 
+    @records_step
     def smooth_moving(self, window_size: int = 5) -> "LVData":
         """Apply a uniform moving-average filter to every channel.
 
@@ -509,6 +613,40 @@ class LVData(BaseModel):
             lambda v: np.convolve(v, kernel, mode="same"),
             extra_metadata={"smooth_moving_window": window_size},
         )
+
+    # ----------------------------------------------------------------
+    # Immutable — naming
+    # ----------------------------------------------------------------
+
+    @records_step
+    def rename_species(self, convention: ConventionLike = None, unknown: Unknown = "keep") -> "LVData":
+        """Return a new ``LVData`` with each channel's ``species`` attribute renamed to a naming convention.
+
+        Channel names and values are untouched; only the ``species`` entry of
+        the per-channel metadata changes.
+
+        Parameters
+        ----------
+        convention : None, str, Path, dict or SpeciesConvention, optional
+            ``None`` (default) for the standard convention of
+            :mod:`phd_parser.naming.species`, a JSON file, an already read
+            JSON object, or a convention.
+        unknown : {"keep", "raise", "none"}, optional
+            What to do with species the convention does not know (default:
+            keep the name and warn).
+
+        Returns
+        -------
+        LVData
+            New instance; ``metadata["species_convention"]`` names the convention.
+        """
+        resolved = get_convention(convention)
+        ds = self.ds.copy()
+        for name in ds.data_vars:
+            species = ds[name].attrs.get("species")
+            if species:
+                ds[name].attrs = {**ds[name].attrs, "species": resolved.get_canonical(str(species), unknown)}
+        return LVData(ds=ds, metadata={**self.metadata, "species_convention": resolved.name})
 
     # ----------------------------------------------------------------
     # Export
@@ -559,8 +697,18 @@ class LVData(BaseModel):
         filepath : str or pathlib.Path
             Destination file path.
         """
-        # tos_start in ds.attrs (via metadata) round-trips automatically
-        self.ds.to_netcdf(filepath)
+        # tos_start in ds.attrs (via metadata) round-trips automatically.
+        # NetCDF cannot store None: an attribute that is None is left out,
+        # which reads back as absent (e.g. `filename_timestamp` when the
+        # export was read from a folder rather than a single file).
+        # The same holds for per-channel attributes (a channel without a unit).
+        # metadata is written too: some keys (species_convention, ...) live only there.
+        # Nested values (the history, lists of text) are JSON-encoded, see phd_parser.history.
+        ds = self.ds.copy()
+        ds.attrs = encode_attrs({k: v for k, v in {**ds.attrs, **self.metadata}.items() if v is not None})
+        for name in ds.variables:
+            ds[name].attrs = encode_attrs({k: v for k, v in ds[name].attrs.items() if v is not None})
+        ds.to_netcdf(filepath)
         logger.debug("Saved NetCDF → %s", filepath)
 
     # ----------------------------------------------------------------
@@ -568,6 +716,7 @@ class LVData(BaseModel):
     # ----------------------------------------------------------------
 
     @classmethod
+    @records_step
     def from_dataframe(
         cls,
         df: pd.DataFrame,
@@ -664,6 +813,7 @@ class LVData(BaseModel):
         return cls(ds=ds, metadata=meta)
 
     @classmethod
+    @records_step
     def from_netcdf(cls, filepath: Union[str, Path]) -> "LVData":
         """Load an ``LVData`` from a NetCDF file previously saved with ``to_netcdf``.
 
@@ -677,10 +827,16 @@ class LVData(BaseModel):
         LVData
             Reconstructed instance.
         """
-        ds = xr.open_dataset(filepath)
+        # read into memory and close, so the file is not held open (Windows locks it)
+        with xr.open_dataset(filepath) as handle:
+            ds = handle.load()
+        ds.attrs = decode_attrs(dict(ds.attrs))
+        for name in ds.variables:
+            ds[name].attrs = decode_attrs(dict(ds[name].attrs))
         return cls(ds=ds, metadata=dict(ds.attrs))
 
     @classmethod
+    @records_step
     def from_b67_box5_txt(
         cls,
         filepath: Union[str, Path],

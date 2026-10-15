@@ -1,0 +1,5827 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ACAML xmlns="urn:schemas-agilent-com:acaml15" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+	<Checksum Algorithm="MD5">
+		<Value>fLc4YW3+B5bs68m49nGUOw==</Value>
+	</Checksum>
+	<Doc ContentVersioned="false">
+		<DocID>e25d48cd-c997-44c7-a387-99fe951e80ee</DocID>
+		<DocInfo>
+			<Description>Method ACAML</Description>
+			<CreatedByUser>SYSTEM (SYSTEM)</CreatedByUser>
+			<CreatedByApplication>
+				<AgilentApp>
+					<Name>OpenLABICM</Name>
+					<Version>Version A.04.08</Version>
+				</AgilentApp>
+			</CreatedByApplication>
+			<CreationDate>2025-05-15T16:28:08.642+02:00</CreationDate>
+			<ClientName>Elitebook-2</ClientName>
+		</DocInfo>
+		<Content>
+			<MethodConfiguration xsi:type="MethodConfigurationType" id="182856cd-625b-4ff3-9498-a625899a9da2" ver="0">
+				<MethodDescription>
+					<Name>Method Configuration</Name>
+					<ID>Method_Configuration</ID>
+					<Section>
+						<Name>Data Analysis Method Parameters</Name>
+						<ID>ID_SECTION_0001</ID>
+						<Section>
+							<Name>Method Information</Name>
+							<ID>ID_SECTION_0002</ID>
+							<Parameter>
+								<Name>Method</Name>
+								<ID>ID_PARAMETER_0001</ID>
+								<Unit />
+								<Value>C:\Enterprise\Projects\7890B\Method\JS_2025-05-12_CH.met</Value>
+							</Parameter>
+							<Parameter>
+								<Name>Last modified</Name>
+								<ID>ID_PARAMETER_0002</ID>
+								<Unit />
+								<Value>12/05/2025 18:00:38 (GMT +02:00)</Value>
+							</Parameter>
+							<Parameter>
+								<Name>Method Description</Name>
+								<ID>ID_PARAMETER_0003</ID>
+								<Unit />
+								<Value>60 m CP-Sil5CB column installed 29-01-2025</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Method Audit Trail</Name>
+							<ID>ID_SECTION_0003</ID>
+							<Parameter>
+								<Name>Audit Trail</Name>
+								<ID>ID_PARAMETER_0004</ID>
+								<Unit />
+								<Value>Disabled</Value>
+							</Parameter>
+							<Table>
+								<Name>Method Audit Trail</Name>
+								<ID>ID_TABLE_0001</ID>
+								<Row>
+									<Parameter>
+										<Name>User</Name>
+										<ID>ID_PARAMETER_0005</ID>
+										<Unit />
+										<Value>SYSTEM (SYSTEM)</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Logged</Name>
+										<ID>ID_PARAMETER_0006</ID>
+										<Unit />
+										<Value>12/05/2025 15:14:23 (GMT +02:00)</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Source</Name>
+										<ID>ID_PARAMETER_0007</ID>
+										<Unit />
+										<Value>Offline: ELITEBOOK-2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Activity</Name>
+										<ID>ID_PARAMETER_0008</ID>
+										<Unit />
+										<Value>Saved from JS_2025-05-01_CH-NoV3.met.</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reason</Name>
+										<ID>ID_PARAMETER_0009</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+								</Row>
+							</Table>
+						</Section>
+						<Section>
+							<Name>Options</Name>
+							<ID>ID_SECTION_0004</ID>
+							<Parameter>
+								<Name>Analyze After Acquisition</Name>
+								<ID>ID_PARAMETER_0010</ID>
+								<Unit />
+								<Value>Yes</Value>
+							</Parameter>
+							<Parameter>
+								<Name>Enable compression for data file</Name>
+								<ID>ID_PARAMETER_0011</ID>
+								<Unit />
+								<Value>No</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Calibration</Name>
+							<ID>ID_SECTION_0005</ID>
+							<Parameter>
+								<Name>Automatically Average Replicates</Name>
+								<ID>ID_PARAMETER_0012</ID>
+								<Unit />
+								<Value>Yes</Value>
+							</Parameter>
+							<Parameter>
+								<Name>Number of replicates in rolling average</Name>
+								<ID>ID_PARAMETER_0013</ID>
+								<Unit />
+								<Value>0</Value>
+							</Parameter>
+							<Parameter>
+								<Name>Response Factor Definition</Name>
+								<ID>ID_PARAMETER_0014</ID>
+								<Unit />
+								<Value>Amount/Area</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Custom Parameters</Name>
+							<ID>ID_SECTION_0006</ID>
+							<Parameter>
+								<Name>Items selected for this section</Name>
+								<ID>ID_PARAMETER_0015</ID>
+								<Unit />
+								<Value>None</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>User Programs</Name>
+							<ID>ID_SECTION_0007</ID>
+							<Parameter>
+								<Name>Before Run Program</Name>
+								<ID>ID_PARAMETER_0016</ID>
+								<Unit />
+								<Value>Disabled</Value>
+							</Parameter>
+							<Parameter>
+								<Name>Before Analysis Program</Name>
+								<ID>ID_PARAMETER_0017</ID>
+								<Unit />
+								<Value>Disabled</Value>
+							</Parameter>
+							<Parameter>
+								<Name>After Analysis Program</Name>
+								<ID>ID_PARAMETER_0018</ID>
+								<Unit />
+								<Value>Disabled</Value>
+							</Parameter>
+							<Parameter>
+								<Name>After Export Program</Name>
+								<ID>ID_PARAMETER_0019</ID>
+								<Unit />
+								<Value>Disabled</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Baseline File</Name>
+							<ID>ID_SECTION_0008</ID>
+							<Parameter>
+								<Name>Baseline File</Name>
+								<ID>ID_PARAMETER_0020</ID>
+								<Unit />
+								<Value>Disabled</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Graph Export</Name>
+							<ID>ID_SECTION_0009</ID>
+							<Parameter>
+								<Name>Items selected for this section</Name>
+								<ID>ID_PARAMETER_0021</ID>
+								<Unit />
+								<Value>None</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Trigger Info</Name>
+							<ID>ID_SECTION_0010</ID>
+							<Parameter>
+								<Name>  Trigger Type:          %s</Name>
+								<ID>ID_PARAMETER_0022</ID>
+								<Unit />
+								<Value>Not Triggered</Value>
+							</Parameter>
+							<Parameter>
+								<Name>  Injection Source:      %s</Name>
+								<ID>ID_PARAMETER_0023</ID>
+								<Unit />
+								<Value>N/A</Value>
+							</Parameter>
+						</Section>
+						<Section>
+							<Name>Baseline Channel Parameters</Name>
+							<ID>ID_SECTION_0011</ID>
+							<Parameter>
+								<Name>Minimum Stable Baseline Time</Name>
+								<ID>ID_PARAMETER_0024</ID>
+								<Unit>Minutes</Unit>
+								<Value>15,0</Value>
+							</Parameter>
+							<Parameter>
+								<Name>Maximum Test Time</Name>
+								<ID>ID_PARAMETER_0025</ID>
+								<Unit>Minutes</Unit>
+								<Value>15,0</Value>
+							</Parameter>
+							<Parameter>
+								<Name>Noise Test Method</Name>
+								<ID>ID_PARAMETER_0026</ID>
+								<Unit />
+								<Value>rms</Value>
+							</Parameter>
+							<Table>
+								<Name>Baseline Noise Test Parameters</Name>
+								<ID>ID_TABLE_0003</ID>
+								<Row>
+									<Parameter>
+										<Name>Channel</Name>
+										<ID>ID_PARAMETER_0027</ID>
+										<Unit />
+										<Value>Front Signal</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Noise Threshold</Name>
+										<ID>ID_PARAMETER_0028</ID>
+										<Unit />
+										<Value>Disabled</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Drift Threshold</Name>
+										<ID>ID_PARAMETER_0029</ID>
+										<Unit />
+										<Value>Disabled</Value>
+									</Parameter>
+								</Row>
+								<Row>
+									<Parameter>
+										<Name>Channel</Name>
+										<ID>ID_PARAMETER_0030</ID>
+										<Unit />
+										<Value>Back Signal</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Noise Threshold</Name>
+										<ID>ID_PARAMETER_0031</ID>
+										<Unit />
+										<Value>Disabled</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Drift Threshold</Name>
+										<ID>ID_PARAMETER_0032</ID>
+										<Unit />
+										<Value>Disabled</Value>
+									</Parameter>
+								</Row>
+								<Row>
+									<Parameter>
+										<Name>Channel</Name>
+										<ID>ID_PARAMETER_0033</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Noise Threshold</Name>
+										<ID>ID_PARAMETER_0034</ID>
+										<Unit />
+										<Value>Disabled</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Drift Threshold</Name>
+										<ID>ID_PARAMETER_0035</ID>
+										<Unit />
+										<Value>Disabled</Value>
+									</Parameter>
+								</Row>
+								<Row>
+									<Parameter>
+										<Name>Channel</Name>
+										<ID>ID_PARAMETER_0036</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Noise Threshold</Name>
+										<ID>ID_PARAMETER_0037</ID>
+										<Unit />
+										<Value>Disabled</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Drift Threshold</Name>
+										<ID>ID_PARAMETER_0038</ID>
+										<Unit />
+										<Value>Disabled</Value>
+									</Parameter>
+								</Row>
+							</Table>
+						</Section>
+						<Section>
+							<Name>Front Signal</Name>
+							<ID>ID_SECTION_0012</ID>
+							<Section>
+								<Name>Peak Table</Name>
+								<ID>ID_SECTION_0013</ID>
+								<Section>
+									<Name>CH4</Name>
+									<ID>ID_SECTION_0014</ID>
+									<Parameter>
+										<Name>Name</Name>
+										<ID>ID_PARAMETER_0039</ID>
+										<Unit />
+										<Value>CH4</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Enabled</Name>
+										<ID>ID_PARAMETER_0040</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ID Number</Name>
+										<ID>ID_PARAMETER_0041</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Ref Peak</Name>
+										<ID>ID_PARAMETER_0042</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reso Peak</Name>
+										<ID>ID_PARAMETER_0043</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ISTD Peak</Name>
+										<ID>ID_PARAMETER_0044</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak ID #</Name>
+										<ID>ID_PARAMETER_0045</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak Multiplier</Name>
+										<ID>ID_PARAMETER_0046</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Manual RF Used</Name>
+										<ID>ID_PARAMETER_0047</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Quantitation</Name>
+										<ID>ID_PARAMETER_0048</ID>
+										<Unit />
+										<Value>Area</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Flag</Name>
+										<ID>ID_PARAMETER_0049</ID>
+										<Unit />
+										<Value>Replace</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Weight</Name>
+										<ID>ID_PARAMETER_0050</ID>
+										<Unit />
+										<Value>100</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Unit</Name>
+										<ID>ID_PARAMETER_0051</ID>
+										<Unit />
+										<Value>%</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Fit Type</Name>
+										<ID>ID_PARAMETER_0055</ID>
+										<Unit />
+										<Value>Linear</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Force Zero</Name>
+										<ID>ID_PARAMETER_0056</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Weight Method</Name>
+										<ID>ID_PARAMETER_0057</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>% Calibration Margin</Name>
+										<ID>ID_PARAMETER_0058</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Scale</Name>
+										<ID>ID_PARAMETER_0059</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Conc</Name>
+										<ID>ID_PARAMETER_0060</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Conc</Name>
+										<ID>ID_PARAMETER_0061</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 1 Amount</Name>
+										<ID>ID_PARAMETER_0062</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 2 Amount</Name>
+										<ID>ID_PARAMETER_0063</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Spike Limit</Name>
+										<ID>ID_PARAMETER_0064</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Spike Limit</Name>
+										<ID>ID_PARAMETER_0065</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Duplicate %RD Limit</Name>
+										<ID>ID_PARAMETER_0066</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>RF %RSD Limit</Name>
+										<ID>ID_PARAMETER_0067</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 Conc</Name>
+										<ID>ID_PARAMETER_0068</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 %RD</Name>
+										<ID>ID_PARAMETER_0069</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 Conc</Name>
+										<ID>ID_PARAMETER_0070</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 %RD</Name>
+										<ID>ID_PARAMETER_0071</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 Conc</Name>
+										<ID>ID_PARAMETER_0072</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 %RD</Name>
+										<ID>ID_PARAMETER_0073</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 Conc</Name>
+										<ID>ID_PARAMETER_0074</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 %RD</Name>
+										<ID>ID_PARAMETER_0075</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 Conc</Name>
+										<ID>ID_PARAMETER_0076</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 %RD</Name>
+										<ID>ID_PARAMETER_0077</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Time</Name>
+										<ID>ID_PARAMETER_0078</ID>
+										<Unit>Minutes</Unit>
+										<Value>3,6</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Window</Name>
+										<ID>ID_PARAMETER_0079</ID>
+										<Unit>Minutes</Unit>
+										<Value>0,2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Retention Time Update</Name>
+										<ID>ID_PARAMETER_0080</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Detection</Name>
+										<ID>ID_PARAMETER_0081</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Quantitation</Name>
+										<ID>ID_PARAMETER_0082</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Table>
+										<Name>Calibration Table</Name>
+										<ID>ID_TABLE_0004</ID>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0052</ID>
+												<Unit />
+												<Value>3</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0053</ID>
+												<Unit />
+												<Value>2,99</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0054</ID>
+												<Unit />
+												<Value>4,10572e+007</Value>
+											</Parameter>
+										</Row>
+									</Table>
+								</Section>
+								<Section>
+									<Name>DME</Name>
+									<ID>ID_SECTION_0015</ID>
+									<Parameter>
+										<Name>Name</Name>
+										<ID>ID_PARAMETER_0083</ID>
+										<Unit />
+										<Value>DME</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Enabled</Name>
+										<ID>ID_PARAMETER_0084</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ID Number</Name>
+										<ID>ID_PARAMETER_0085</ID>
+										<Unit />
+										<Value>9</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Ref Peak</Name>
+										<ID>ID_PARAMETER_0086</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reso Peak</Name>
+										<ID>ID_PARAMETER_0087</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ISTD Peak</Name>
+										<ID>ID_PARAMETER_0088</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak ID #</Name>
+										<ID>ID_PARAMETER_0089</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak Multiplier</Name>
+										<ID>ID_PARAMETER_0090</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Manual RF Used</Name>
+										<ID>ID_PARAMETER_0091</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Quantitation</Name>
+										<ID>ID_PARAMETER_0092</ID>
+										<Unit />
+										<Value>Area</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Flag</Name>
+										<ID>ID_PARAMETER_0093</ID>
+										<Unit />
+										<Value>Replace</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Weight</Name>
+										<ID>ID_PARAMETER_0094</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Unit</Name>
+										<ID>ID_PARAMETER_0095</ID>
+										<Unit />
+										<Value>%</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Fit Type</Name>
+										<ID>ID_PARAMETER_0099</ID>
+										<Unit />
+										<Value>Linear</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Force Zero</Name>
+										<ID>ID_PARAMETER_0100</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Weight Method</Name>
+										<ID>ID_PARAMETER_0101</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>% Calibration Margin</Name>
+										<ID>ID_PARAMETER_0102</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Scale</Name>
+										<ID>ID_PARAMETER_0103</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Conc</Name>
+										<ID>ID_PARAMETER_0104</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Conc</Name>
+										<ID>ID_PARAMETER_0105</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 1 Amount</Name>
+										<ID>ID_PARAMETER_0106</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 2 Amount</Name>
+										<ID>ID_PARAMETER_0107</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Spike Limit</Name>
+										<ID>ID_PARAMETER_0108</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Spike Limit</Name>
+										<ID>ID_PARAMETER_0109</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Duplicate %RD Limit</Name>
+										<ID>ID_PARAMETER_0110</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>RF %RSD Limit</Name>
+										<ID>ID_PARAMETER_0111</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 Conc</Name>
+										<ID>ID_PARAMETER_0112</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 %RD</Name>
+										<ID>ID_PARAMETER_0113</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 Conc</Name>
+										<ID>ID_PARAMETER_0114</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 %RD</Name>
+										<ID>ID_PARAMETER_0115</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 Conc</Name>
+										<ID>ID_PARAMETER_0116</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 %RD</Name>
+										<ID>ID_PARAMETER_0117</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 Conc</Name>
+										<ID>ID_PARAMETER_0118</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 %RD</Name>
+										<ID>ID_PARAMETER_0119</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 Conc</Name>
+										<ID>ID_PARAMETER_0120</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 %RD</Name>
+										<ID>ID_PARAMETER_0121</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Time</Name>
+										<ID>ID_PARAMETER_0122</ID>
+										<Unit>Minutes</Unit>
+										<Value>5,9</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Window</Name>
+										<ID>ID_PARAMETER_0123</ID>
+										<Unit>Minutes</Unit>
+										<Value>0,2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Retention Time Update</Name>
+										<ID>ID_PARAMETER_0124</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Detection</Name>
+										<ID>ID_PARAMETER_0125</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Quantitation</Name>
+										<ID>ID_PARAMETER_0126</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Table>
+										<Name>Calibration Table</Name>
+										<ID>ID_TABLE_0005</ID>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0096</ID>
+												<Unit />
+												<Value>5</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0097</ID>
+												<Unit />
+												<Value>5,71</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0098</ID>
+												<Unit />
+												<Value>9,57746e+007</Value>
+											</Parameter>
+										</Row>
+									</Table>
+								</Section>
+								<Section>
+									<Name>Methanol</Name>
+									<ID>ID_SECTION_0016</ID>
+									<Parameter>
+										<Name>Name</Name>
+										<ID>ID_PARAMETER_0127</ID>
+										<Unit />
+										<Value>Methanol</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Enabled</Name>
+										<ID>ID_PARAMETER_0128</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ID Number</Name>
+										<ID>ID_PARAMETER_0129</ID>
+										<Unit />
+										<Value>3</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Ref Peak</Name>
+										<ID>ID_PARAMETER_0130</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reso Peak</Name>
+										<ID>ID_PARAMETER_0131</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ISTD Peak</Name>
+										<ID>ID_PARAMETER_0132</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak ID #</Name>
+										<ID>ID_PARAMETER_0133</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak Multiplier</Name>
+										<ID>ID_PARAMETER_0134</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Manual RF Used</Name>
+										<ID>ID_PARAMETER_0135</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Quantitation</Name>
+										<ID>ID_PARAMETER_0136</ID>
+										<Unit />
+										<Value>Area</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Flag</Name>
+										<ID>ID_PARAMETER_0137</ID>
+										<Unit />
+										<Value>Replace</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Weight</Name>
+										<ID>ID_PARAMETER_0138</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Unit</Name>
+										<ID>ID_PARAMETER_0139</ID>
+										<Unit />
+										<Value>%</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Fit Type</Name>
+										<ID>ID_PARAMETER_0146</ID>
+										<Unit />
+										<Value>Linear</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Force Zero</Name>
+										<ID>ID_PARAMETER_0147</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Weight Method</Name>
+										<ID>ID_PARAMETER_0148</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>% Calibration Margin</Name>
+										<ID>ID_PARAMETER_0149</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Scale</Name>
+										<ID>ID_PARAMETER_0150</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Conc</Name>
+										<ID>ID_PARAMETER_0151</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Conc</Name>
+										<ID>ID_PARAMETER_0152</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 1 Amount</Name>
+										<ID>ID_PARAMETER_0153</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 2 Amount</Name>
+										<ID>ID_PARAMETER_0154</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Spike Limit</Name>
+										<ID>ID_PARAMETER_0155</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Spike Limit</Name>
+										<ID>ID_PARAMETER_0156</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Duplicate %RD Limit</Name>
+										<ID>ID_PARAMETER_0157</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>RF %RSD Limit</Name>
+										<ID>ID_PARAMETER_0158</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 Conc</Name>
+										<ID>ID_PARAMETER_0159</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 %RD</Name>
+										<ID>ID_PARAMETER_0160</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 Conc</Name>
+										<ID>ID_PARAMETER_0161</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 %RD</Name>
+										<ID>ID_PARAMETER_0162</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 Conc</Name>
+										<ID>ID_PARAMETER_0163</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 %RD</Name>
+										<ID>ID_PARAMETER_0164</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 Conc</Name>
+										<ID>ID_PARAMETER_0165</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 %RD</Name>
+										<ID>ID_PARAMETER_0166</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 Conc</Name>
+										<ID>ID_PARAMETER_0167</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 %RD</Name>
+										<ID>ID_PARAMETER_0168</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Time</Name>
+										<ID>ID_PARAMETER_0169</ID>
+										<Unit>Minutes</Unit>
+										<Value>6,4</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Window</Name>
+										<ID>ID_PARAMETER_0170</ID>
+										<Unit>Minutes</Unit>
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Retention Time Update</Name>
+										<ID>ID_PARAMETER_0171</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Detection</Name>
+										<ID>ID_PARAMETER_0172</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Quantitation</Name>
+										<ID>ID_PARAMETER_0173</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Table>
+										<Name>Calibration Table</Name>
+										<ID>ID_TABLE_0006</ID>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0140</ID>
+												<Unit />
+												<Value>4</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0141</ID>
+												<Unit />
+												<Value>0,217</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0142</ID>
+												<Unit />
+												<Value>3,21326e+006</Value>
+											</Parameter>
+										</Row>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0143</ID>
+												<Unit />
+												<Value>10</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0144</ID>
+												<Unit />
+												<Value>0,111</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0145</ID>
+												<Unit />
+												<Value>2,12044e+006</Value>
+											</Parameter>
+										</Row>
+									</Table>
+								</Section>
+								<Section>
+									<Name>MF</Name>
+									<ID>ID_SECTION_0017</ID>
+									<Parameter>
+										<Name>Name</Name>
+										<ID>ID_PARAMETER_0174</ID>
+										<Unit />
+										<Value>MF</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Enabled</Name>
+										<ID>ID_PARAMETER_0175</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ID Number</Name>
+										<ID>ID_PARAMETER_0176</ID>
+										<Unit />
+										<Value>7</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Ref Peak</Name>
+										<ID>ID_PARAMETER_0177</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reso Peak</Name>
+										<ID>ID_PARAMETER_0178</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ISTD Peak</Name>
+										<ID>ID_PARAMETER_0179</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak ID #</Name>
+										<ID>ID_PARAMETER_0180</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak Multiplier</Name>
+										<ID>ID_PARAMETER_0181</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Manual RF Used</Name>
+										<ID>ID_PARAMETER_0182</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Quantitation</Name>
+										<ID>ID_PARAMETER_0183</ID>
+										<Unit />
+										<Value>Area</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Flag</Name>
+										<ID>ID_PARAMETER_0184</ID>
+										<Unit />
+										<Value>Replace</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Weight</Name>
+										<ID>ID_PARAMETER_0185</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Unit</Name>
+										<ID>ID_PARAMETER_0186</ID>
+										<Unit />
+										<Value>%</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Fit Type</Name>
+										<ID>ID_PARAMETER_0190</ID>
+										<Unit />
+										<Value>Linear</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Force Zero</Name>
+										<ID>ID_PARAMETER_0191</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Weight Method</Name>
+										<ID>ID_PARAMETER_0192</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>% Calibration Margin</Name>
+										<ID>ID_PARAMETER_0193</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Scale</Name>
+										<ID>ID_PARAMETER_0194</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Conc</Name>
+										<ID>ID_PARAMETER_0195</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Conc</Name>
+										<ID>ID_PARAMETER_0196</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 1 Amount</Name>
+										<ID>ID_PARAMETER_0197</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 2 Amount</Name>
+										<ID>ID_PARAMETER_0198</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Spike Limit</Name>
+										<ID>ID_PARAMETER_0199</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Spike Limit</Name>
+										<ID>ID_PARAMETER_0200</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Duplicate %RD Limit</Name>
+										<ID>ID_PARAMETER_0201</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>RF %RSD Limit</Name>
+										<ID>ID_PARAMETER_0202</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 Conc</Name>
+										<ID>ID_PARAMETER_0203</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 %RD</Name>
+										<ID>ID_PARAMETER_0204</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 Conc</Name>
+										<ID>ID_PARAMETER_0205</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 %RD</Name>
+										<ID>ID_PARAMETER_0206</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 Conc</Name>
+										<ID>ID_PARAMETER_0207</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 %RD</Name>
+										<ID>ID_PARAMETER_0208</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 Conc</Name>
+										<ID>ID_PARAMETER_0209</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 %RD</Name>
+										<ID>ID_PARAMETER_0210</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 Conc</Name>
+										<ID>ID_PARAMETER_0211</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 %RD</Name>
+										<ID>ID_PARAMETER_0212</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Time</Name>
+										<ID>ID_PARAMETER_0213</ID>
+										<Unit>Minutes</Unit>
+										<Value>8,05</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Window</Name>
+										<ID>ID_PARAMETER_0214</ID>
+										<Unit>Minutes</Unit>
+										<Value>0,2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Retention Time Update</Name>
+										<ID>ID_PARAMETER_0215</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Detection</Name>
+										<ID>ID_PARAMETER_0216</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Quantitation</Name>
+										<ID>ID_PARAMETER_0217</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Table>
+										<Name>Calibration Table</Name>
+										<ID>ID_TABLE_0007</ID>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0187</ID>
+												<Unit />
+												<Value>10</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0188</ID>
+												<Unit />
+												<Value>0,08</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0189</ID>
+												<Unit />
+												<Value>734189</Value>
+											</Parameter>
+										</Row>
+									</Table>
+								</Section>
+								<Section>
+									<Name>Ethanol</Name>
+									<ID>ID_SECTION_0018</ID>
+									<Parameter>
+										<Name>Name</Name>
+										<ID>ID_PARAMETER_0218</ID>
+										<Unit />
+										<Value>Ethanol</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Enabled</Name>
+										<ID>ID_PARAMETER_0219</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ID Number</Name>
+										<ID>ID_PARAMETER_0220</ID>
+										<Unit />
+										<Value>2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Ref Peak</Name>
+										<ID>ID_PARAMETER_0221</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reso Peak</Name>
+										<ID>ID_PARAMETER_0222</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ISTD Peak</Name>
+										<ID>ID_PARAMETER_0223</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak ID #</Name>
+										<ID>ID_PARAMETER_0224</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak Multiplier</Name>
+										<ID>ID_PARAMETER_0225</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Manual RF Used</Name>
+										<ID>ID_PARAMETER_0226</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Quantitation</Name>
+										<ID>ID_PARAMETER_0227</ID>
+										<Unit />
+										<Value>Area</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Flag</Name>
+										<ID>ID_PARAMETER_0228</ID>
+										<Unit />
+										<Value>Replace</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Weight</Name>
+										<ID>ID_PARAMETER_0229</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Unit</Name>
+										<ID>ID_PARAMETER_0230</ID>
+										<Unit />
+										<Value>%</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Fit Type</Name>
+										<ID>ID_PARAMETER_0237</ID>
+										<Unit />
+										<Value>Linear</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Force Zero</Name>
+										<ID>ID_PARAMETER_0238</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Weight Method</Name>
+										<ID>ID_PARAMETER_0239</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>% Calibration Margin</Name>
+										<ID>ID_PARAMETER_0240</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Scale</Name>
+										<ID>ID_PARAMETER_0241</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Conc</Name>
+										<ID>ID_PARAMETER_0242</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Conc</Name>
+										<ID>ID_PARAMETER_0243</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 1 Amount</Name>
+										<ID>ID_PARAMETER_0244</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 2 Amount</Name>
+										<ID>ID_PARAMETER_0245</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Spike Limit</Name>
+										<ID>ID_PARAMETER_0246</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Spike Limit</Name>
+										<ID>ID_PARAMETER_0247</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Duplicate %RD Limit</Name>
+										<ID>ID_PARAMETER_0248</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>RF %RSD Limit</Name>
+										<ID>ID_PARAMETER_0249</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 Conc</Name>
+										<ID>ID_PARAMETER_0250</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 %RD</Name>
+										<ID>ID_PARAMETER_0251</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 Conc</Name>
+										<ID>ID_PARAMETER_0252</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 %RD</Name>
+										<ID>ID_PARAMETER_0253</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 Conc</Name>
+										<ID>ID_PARAMETER_0254</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 %RD</Name>
+										<ID>ID_PARAMETER_0255</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 Conc</Name>
+										<ID>ID_PARAMETER_0256</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 %RD</Name>
+										<ID>ID_PARAMETER_0257</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 Conc</Name>
+										<ID>ID_PARAMETER_0258</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 %RD</Name>
+										<ID>ID_PARAMETER_0259</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Time</Name>
+										<ID>ID_PARAMETER_0260</ID>
+										<Unit>Minutes</Unit>
+										<Value>8,3</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Window</Name>
+										<ID>ID_PARAMETER_0261</ID>
+										<Unit>Minutes</Unit>
+										<Value>0,2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Retention Time Update</Name>
+										<ID>ID_PARAMETER_0262</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Detection</Name>
+										<ID>ID_PARAMETER_0263</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Quantitation</Name>
+										<ID>ID_PARAMETER_0264</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Table>
+										<Name>Calibration Table</Name>
+										<ID>ID_TABLE_0008</ID>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0231</ID>
+												<Unit />
+												<Value>7</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0232</ID>
+												<Unit />
+												<Value>0,101</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0233</ID>
+												<Unit />
+												<Value>2,80892e+006</Value>
+											</Parameter>
+										</Row>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0234</ID>
+												<Unit />
+												<Value>10</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0235</ID>
+												<Unit />
+												<Value>0,073</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0236</ID>
+												<Unit />
+												<Value>1,96127e+006</Value>
+											</Parameter>
+										</Row>
+									</Table>
+								</Section>
+								<Section>
+									<Name>1-propanol</Name>
+									<ID>ID_SECTION_0019</ID>
+									<Parameter>
+										<Name>Name</Name>
+										<ID>ID_PARAMETER_0265</ID>
+										<Unit />
+										<Value>1-propanol</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Enabled</Name>
+										<ID>ID_PARAMETER_0266</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ID Number</Name>
+										<ID>ID_PARAMETER_0267</ID>
+										<Unit />
+										<Value>4</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Ref Peak</Name>
+										<ID>ID_PARAMETER_0268</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reso Peak</Name>
+										<ID>ID_PARAMETER_0269</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ISTD Peak</Name>
+										<ID>ID_PARAMETER_0270</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak ID #</Name>
+										<ID>ID_PARAMETER_0271</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak Multiplier</Name>
+										<ID>ID_PARAMETER_0272</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Manual RF Used</Name>
+										<ID>ID_PARAMETER_0273</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Quantitation</Name>
+										<ID>ID_PARAMETER_0274</ID>
+										<Unit />
+										<Value>Area</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Flag</Name>
+										<ID>ID_PARAMETER_0275</ID>
+										<Unit />
+										<Value>Replace</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Weight</Name>
+										<ID>ID_PARAMETER_0276</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Unit</Name>
+										<ID>ID_PARAMETER_0277</ID>
+										<Unit />
+										<Value>%</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Fit Type</Name>
+										<ID>ID_PARAMETER_0278</ID>
+										<Unit />
+										<Value>Linear</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Force Zero</Name>
+										<ID>ID_PARAMETER_0279</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Weight Method</Name>
+										<ID>ID_PARAMETER_0280</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>% Calibration Margin</Name>
+										<ID>ID_PARAMETER_0281</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Scale</Name>
+										<ID>ID_PARAMETER_0282</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Conc</Name>
+										<ID>ID_PARAMETER_0283</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Conc</Name>
+										<ID>ID_PARAMETER_0284</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 1 Amount</Name>
+										<ID>ID_PARAMETER_0285</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 2 Amount</Name>
+										<ID>ID_PARAMETER_0286</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Spike Limit</Name>
+										<ID>ID_PARAMETER_0287</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Spike Limit</Name>
+										<ID>ID_PARAMETER_0288</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Duplicate %RD Limit</Name>
+										<ID>ID_PARAMETER_0289</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>RF %RSD Limit</Name>
+										<ID>ID_PARAMETER_0290</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 Conc</Name>
+										<ID>ID_PARAMETER_0291</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 %RD</Name>
+										<ID>ID_PARAMETER_0292</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 Conc</Name>
+										<ID>ID_PARAMETER_0293</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 %RD</Name>
+										<ID>ID_PARAMETER_0294</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 Conc</Name>
+										<ID>ID_PARAMETER_0295</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 %RD</Name>
+										<ID>ID_PARAMETER_0296</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 Conc</Name>
+										<ID>ID_PARAMETER_0297</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 %RD</Name>
+										<ID>ID_PARAMETER_0298</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 Conc</Name>
+										<ID>ID_PARAMETER_0299</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 %RD</Name>
+										<ID>ID_PARAMETER_0300</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Time</Name>
+										<ID>ID_PARAMETER_0301</ID>
+										<Unit>Minutes</Unit>
+										<Value>14</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Window</Name>
+										<ID>ID_PARAMETER_0302</ID>
+										<Unit>Minutes</Unit>
+										<Value>0,1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Retention Time Update</Name>
+										<ID>ID_PARAMETER_0303</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Detection</Name>
+										<ID>ID_PARAMETER_0304</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Quantitation</Name>
+										<ID>ID_PARAMETER_0305</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+								</Section>
+								<Section>
+									<Name>isobutanol</Name>
+									<ID>ID_SECTION_0020</ID>
+									<Parameter>
+										<Name>Name</Name>
+										<ID>ID_PARAMETER_0306</ID>
+										<Unit />
+										<Value>isobutanol</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Enabled</Name>
+										<ID>ID_PARAMETER_0307</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ID Number</Name>
+										<ID>ID_PARAMETER_0308</ID>
+										<Unit />
+										<Value>5</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Ref Peak</Name>
+										<ID>ID_PARAMETER_0309</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reso Peak</Name>
+										<ID>ID_PARAMETER_0310</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ISTD Peak</Name>
+										<ID>ID_PARAMETER_0311</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak ID #</Name>
+										<ID>ID_PARAMETER_0312</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak Multiplier</Name>
+										<ID>ID_PARAMETER_0313</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Manual RF Used</Name>
+										<ID>ID_PARAMETER_0314</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Quantitation</Name>
+										<ID>ID_PARAMETER_0315</ID>
+										<Unit />
+										<Value>Area</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Flag</Name>
+										<ID>ID_PARAMETER_0316</ID>
+										<Unit />
+										<Value>Replace</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Weight</Name>
+										<ID>ID_PARAMETER_0317</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Unit</Name>
+										<ID>ID_PARAMETER_0318</ID>
+										<Unit />
+										<Value>%</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Fit Type</Name>
+										<ID>ID_PARAMETER_0319</ID>
+										<Unit />
+										<Value>Linear</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Force Zero</Name>
+										<ID>ID_PARAMETER_0320</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Weight Method</Name>
+										<ID>ID_PARAMETER_0321</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>% Calibration Margin</Name>
+										<ID>ID_PARAMETER_0322</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Scale</Name>
+										<ID>ID_PARAMETER_0323</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Conc</Name>
+										<ID>ID_PARAMETER_0324</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Conc</Name>
+										<ID>ID_PARAMETER_0325</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 1 Amount</Name>
+										<ID>ID_PARAMETER_0326</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 2 Amount</Name>
+										<ID>ID_PARAMETER_0327</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Spike Limit</Name>
+										<ID>ID_PARAMETER_0328</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Spike Limit</Name>
+										<ID>ID_PARAMETER_0329</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Duplicate %RD Limit</Name>
+										<ID>ID_PARAMETER_0330</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>RF %RSD Limit</Name>
+										<ID>ID_PARAMETER_0331</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 Conc</Name>
+										<ID>ID_PARAMETER_0332</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 %RD</Name>
+										<ID>ID_PARAMETER_0333</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 Conc</Name>
+										<ID>ID_PARAMETER_0334</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 %RD</Name>
+										<ID>ID_PARAMETER_0335</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 Conc</Name>
+										<ID>ID_PARAMETER_0336</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 %RD</Name>
+										<ID>ID_PARAMETER_0337</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 Conc</Name>
+										<ID>ID_PARAMETER_0338</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 %RD</Name>
+										<ID>ID_PARAMETER_0339</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 Conc</Name>
+										<ID>ID_PARAMETER_0340</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 %RD</Name>
+										<ID>ID_PARAMETER_0341</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Time</Name>
+										<ID>ID_PARAMETER_0342</ID>
+										<Unit>Minutes</Unit>
+										<Value>15</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Window</Name>
+										<ID>ID_PARAMETER_0343</ID>
+										<Unit>Minutes</Unit>
+										<Value>0,2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Retention Time Update</Name>
+										<ID>ID_PARAMETER_0344</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Detection</Name>
+										<ID>ID_PARAMETER_0345</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Quantitation</Name>
+										<ID>ID_PARAMETER_0346</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+								</Section>
+								<Section>
+									<Name>1-butanol</Name>
+									<ID>ID_SECTION_0021</ID>
+									<Parameter>
+										<Name>Name</Name>
+										<ID>ID_PARAMETER_0347</ID>
+										<Unit />
+										<Value>1-butanol</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Enabled</Name>
+										<ID>ID_PARAMETER_0348</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ID Number</Name>
+										<ID>ID_PARAMETER_0349</ID>
+										<Unit />
+										<Value>6</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Ref Peak</Name>
+										<ID>ID_PARAMETER_0350</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reso Peak</Name>
+										<ID>ID_PARAMETER_0351</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ISTD Peak</Name>
+										<ID>ID_PARAMETER_0352</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak ID #</Name>
+										<ID>ID_PARAMETER_0353</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak Multiplier</Name>
+										<ID>ID_PARAMETER_0354</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Manual RF Used</Name>
+										<ID>ID_PARAMETER_0355</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Quantitation</Name>
+										<ID>ID_PARAMETER_0356</ID>
+										<Unit />
+										<Value>Area</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Flag</Name>
+										<ID>ID_PARAMETER_0357</ID>
+										<Unit />
+										<Value>Replace</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Weight</Name>
+										<ID>ID_PARAMETER_0358</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Unit</Name>
+										<ID>ID_PARAMETER_0359</ID>
+										<Unit />
+										<Value>%</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Fit Type</Name>
+										<ID>ID_PARAMETER_0360</ID>
+										<Unit />
+										<Value>Linear</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Force Zero</Name>
+										<ID>ID_PARAMETER_0361</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Weight Method</Name>
+										<ID>ID_PARAMETER_0362</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>% Calibration Margin</Name>
+										<ID>ID_PARAMETER_0363</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Scale</Name>
+										<ID>ID_PARAMETER_0364</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Conc</Name>
+										<ID>ID_PARAMETER_0365</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Conc</Name>
+										<ID>ID_PARAMETER_0366</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 1 Amount</Name>
+										<ID>ID_PARAMETER_0367</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 2 Amount</Name>
+										<ID>ID_PARAMETER_0368</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Spike Limit</Name>
+										<ID>ID_PARAMETER_0369</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Spike Limit</Name>
+										<ID>ID_PARAMETER_0370</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Duplicate %RD Limit</Name>
+										<ID>ID_PARAMETER_0371</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>RF %RSD Limit</Name>
+										<ID>ID_PARAMETER_0372</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 Conc</Name>
+										<ID>ID_PARAMETER_0373</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 %RD</Name>
+										<ID>ID_PARAMETER_0374</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 Conc</Name>
+										<ID>ID_PARAMETER_0375</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 %RD</Name>
+										<ID>ID_PARAMETER_0376</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 Conc</Name>
+										<ID>ID_PARAMETER_0377</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 %RD</Name>
+										<ID>ID_PARAMETER_0378</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 Conc</Name>
+										<ID>ID_PARAMETER_0379</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 %RD</Name>
+										<ID>ID_PARAMETER_0380</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 Conc</Name>
+										<ID>ID_PARAMETER_0381</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 %RD</Name>
+										<ID>ID_PARAMETER_0382</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Time</Name>
+										<ID>ID_PARAMETER_0383</ID>
+										<Unit>Minutes</Unit>
+										<Value>16</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Window</Name>
+										<ID>ID_PARAMETER_0384</ID>
+										<Unit>Minutes</Unit>
+										<Value>0,2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Retention Time Update</Name>
+										<ID>ID_PARAMETER_0385</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Detection</Name>
+										<ID>ID_PARAMETER_0386</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Quantitation</Name>
+										<ID>ID_PARAMETER_0387</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+								</Section>
+							</Section>
+							<Section>
+								<Name>Group Table</Name>
+								<ID>ID_SECTION_0022</ID>
+								<Parameter>
+									<Name>Items selected for this section</Name>
+									<ID>ID_PARAMETER_0388</ID>
+									<Unit />
+									<Value>None</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>System Suitability</Name>
+								<ID>ID_SECTION_0023</ID>
+								<Parameter>
+									<Name>Items selected for this section</Name>
+									<ID>ID_PARAMETER_0389</ID>
+									<Unit />
+									<Value>None</Value>
+								</Parameter>
+							</Section>
+						</Section>
+						<Section>
+							<Name>Front Signal</Name>
+							<ID>ID_SECTION_0024</ID>
+							<Section>
+								<Name>Performance Parameters</Name>
+								<ID>ID_SECTION_0025</ID>
+								<Parameter>
+									<Name>Calculate Performance Parameters</Name>
+									<ID>ID_PARAMETER_0390</ID>
+									<Unit>No</Unit>
+									<Value />
+								</Parameter>
+								<Parameter>
+									<Name>USP Calculation Method</Name>
+									<ID>ID_PARAMETER_0391</ID>
+									<Unit>Enabled</Unit>
+									<Value />
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Export Options</Name>
+								<ID>ID_SECTION_0026</ID>
+								<Parameter>
+									<Name>Export Options</Name>
+									<ID>ID_PARAMETER_0392</ID>
+									<Unit />
+									<Value>Enabled</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Field Separator</Name>
+									<ID>ID_PARAMETER_0397</ID>
+									<Unit />
+									<Value>&lt;Tab&gt;</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Path for Export Files</Name>
+									<ID>ID_PARAMETER_0398</ID>
+									<Unit />
+									<Value>C:\HP_Reactor_Data\COLLECTION_GC-DATA\GC-FID-FRONT</Value>
+								</Parameter>
+								<Parameter>
+									<Name>ODBC Export</Name>
+									<ID>ID_PARAMETER_0399</ID>
+									<Unit />
+									<Value>Disabled</Value>
+								</Parameter>
+								<Table>
+									<Name>Peaks</Name>
+									<ID>ID_TABLE_0013</ID>
+									<Row>
+										<Parameter>
+											<Name>Exported Parameter</Name>
+											<ID>ID_PARAMETER_0393</ID>
+											<Unit />
+											<Value>ESTD concentration</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Num Decimals</Name>
+											<ID>ID_PARAMETER_0394</ID>
+											<Unit />
+											<Value>4</Value>
+										</Parameter>
+									</Row>
+								</Table>
+								<Table>
+									<Name>Chromatogram</Name>
+									<ID>ID_TABLE_0016</ID>
+									<Row>
+										<Parameter>
+											<Name>Exported Parameter</Name>
+											<ID>ID_PARAMETER_0395</ID>
+											<Unit />
+											<Value>AIA (*.CDF)</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Num Decimals</Name>
+											<ID>ID_PARAMETER_0396</ID>
+											<Unit />
+											<Value>0</Value>
+										</Parameter>
+									</Row>
+								</Table>
+							</Section>
+							<Section>
+								<Name>Integration Events</Name>
+								<ID>ID_SECTION_0027</ID>
+								<Table>
+									<Name>Integration Events</Name>
+									<ID>ID_TABLE_0017</ID>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0400</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0401</ID>
+											<Unit />
+											<Value>Integration Off</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0402</ID>
+											<Unit />
+											<Value>         0</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0403</ID>
+											<Unit />
+											<Value>      3,05</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0404</ID>
+											<Unit />
+											<Value>       0</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0405</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0406</ID>
+											<Unit />
+											<Value>Shoulder Sensitivity</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0407</ID>
+											<Unit />
+											<Value>      3,05</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0408</ID>
+											<Unit />
+											<Value>       4,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0409</ID>
+											<Unit />
+											<Value>    1000</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0410</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0411</ID>
+											<Unit />
+											<Value>Horizontal Baseline</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0412</ID>
+											<Unit />
+											<Value>      3,05</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0413</ID>
+											<Unit />
+											<Value>       4,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0414</ID>
+											<Unit />
+											<Value>       0</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0415</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0416</ID>
+											<Unit />
+											<Value>Width</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0417</ID>
+											<Unit />
+											<Value>      3,05</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0418</ID>
+											<Unit />
+											<Value>       4,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0419</ID>
+											<Unit />
+											<Value>    0,26</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0420</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0421</ID>
+											<Unit />
+											<Value>Threshold</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0422</ID>
+											<Unit />
+											<Value>      3,05</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0423</ID>
+											<Unit />
+											<Value>       4,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0424</ID>
+											<Unit />
+											<Value>    3000</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0425</ID>
+											<Unit />
+											<Value>No</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0426</ID>
+											<Unit />
+											<Value>Width</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0427</ID>
+											<Unit />
+											<Value>       3,7</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0428</ID>
+											<Unit />
+											<Value>       4,2</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0429</ID>
+											<Unit />
+											<Value>    2,13</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0430</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0431</ID>
+											<Unit />
+											<Value>Integration Off</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0432</ID>
+											<Unit />
+											<Value>         4</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0433</ID>
+											<Unit />
+											<Value>       5,6</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0434</ID>
+											<Unit />
+											<Value>       0</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0435</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0436</ID>
+											<Unit />
+											<Value>Horizontal Baseline</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0437</ID>
+											<Unit />
+											<Value>       5,6</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0438</ID>
+											<Unit />
+											<Value>       7,2</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0439</ID>
+											<Unit />
+											<Value>       0</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0440</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0441</ID>
+											<Unit />
+											<Value>Width</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0442</ID>
+											<Unit />
+											<Value>       5,6</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0443</ID>
+											<Unit />
+											<Value>       7,2</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0444</ID>
+											<Unit />
+											<Value>     0,2</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0445</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0446</ID>
+											<Unit />
+											<Value>Threshold</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0447</ID>
+											<Unit />
+											<Value>       5,6</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0448</ID>
+											<Unit />
+											<Value>       7,2</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0449</ID>
+											<Unit />
+											<Value>    1000</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0450</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0451</ID>
+											<Unit />
+											<Value>Shoulder Sensitivity</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0452</ID>
+											<Unit />
+											<Value>       6,1</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0453</ID>
+											<Unit />
+											<Value>       7,2</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0454</ID>
+											<Unit />
+											<Value>   10000</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0455</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0456</ID>
+											<Unit />
+											<Value>Threshold</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0457</ID>
+											<Unit />
+											<Value>       7,2</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0458</ID>
+											<Unit />
+											<Value>        12</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0459</ID>
+											<Unit />
+											<Value>   10000</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0460</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0461</ID>
+											<Unit />
+											<Value>Width</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0462</ID>
+											<Unit />
+											<Value>       7,2</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0463</ID>
+											<Unit />
+											<Value>        12</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0464</ID>
+											<Unit />
+											<Value>     0,2</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0465</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0466</ID>
+											<Unit />
+											<Value>Integration Off</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0467</ID>
+											<Unit />
+											<Value>        12</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0468</ID>
+											<Unit />
+											<Value>        20</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0469</ID>
+											<Unit />
+											<Value>       0</Value>
+										</Parameter>
+									</Row>
+								</Table>
+							</Section>
+						</Section>
+						<Section>
+							<Name>Back Signal</Name>
+							<ID>ID_SECTION_0028</ID>
+							<Section>
+								<Name>Peak Table</Name>
+								<ID>ID_SECTION_0029</ID>
+								<Section>
+									<Name>CO2</Name>
+									<ID>ID_SECTION_0030</ID>
+									<Parameter>
+										<Name>Name</Name>
+										<ID>ID_PARAMETER_0470</ID>
+										<Unit />
+										<Value>CO2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Enabled</Name>
+										<ID>ID_PARAMETER_0471</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ID Number</Name>
+										<ID>ID_PARAMETER_0472</ID>
+										<Unit />
+										<Value>2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Ref Peak</Name>
+										<ID>ID_PARAMETER_0473</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reso Peak</Name>
+										<ID>ID_PARAMETER_0474</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ISTD Peak</Name>
+										<ID>ID_PARAMETER_0475</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak ID #</Name>
+										<ID>ID_PARAMETER_0476</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak Multiplier</Name>
+										<ID>ID_PARAMETER_0477</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Manual RF Used</Name>
+										<ID>ID_PARAMETER_0478</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Quantitation</Name>
+										<ID>ID_PARAMETER_0479</ID>
+										<Unit />
+										<Value>Area</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Flag</Name>
+										<ID>ID_PARAMETER_0480</ID>
+										<Unit />
+										<Value>Replace</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Weight</Name>
+										<ID>ID_PARAMETER_0481</ID>
+										<Unit />
+										<Value>100</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Unit</Name>
+										<ID>ID_PARAMETER_0482</ID>
+										<Unit />
+										<Value>%</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Fit Type</Name>
+										<ID>ID_PARAMETER_0492</ID>
+										<Unit />
+										<Value>Linear</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Force Zero</Name>
+										<ID>ID_PARAMETER_0493</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Weight Method</Name>
+										<ID>ID_PARAMETER_0494</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>% Calibration Margin</Name>
+										<ID>ID_PARAMETER_0495</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Scale</Name>
+										<ID>ID_PARAMETER_0496</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Conc</Name>
+										<ID>ID_PARAMETER_0497</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Conc</Name>
+										<ID>ID_PARAMETER_0498</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 1 Amount</Name>
+										<ID>ID_PARAMETER_0499</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 2 Amount</Name>
+										<ID>ID_PARAMETER_0500</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Spike Limit</Name>
+										<ID>ID_PARAMETER_0501</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Spike Limit</Name>
+										<ID>ID_PARAMETER_0502</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Duplicate %RD Limit</Name>
+										<ID>ID_PARAMETER_0503</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>RF %RSD Limit</Name>
+										<ID>ID_PARAMETER_0504</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 Conc</Name>
+										<ID>ID_PARAMETER_0505</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 %RD</Name>
+										<ID>ID_PARAMETER_0506</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 Conc</Name>
+										<ID>ID_PARAMETER_0507</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 %RD</Name>
+										<ID>ID_PARAMETER_0508</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 Conc</Name>
+										<ID>ID_PARAMETER_0509</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 %RD</Name>
+										<ID>ID_PARAMETER_0510</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 Conc</Name>
+										<ID>ID_PARAMETER_0511</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 %RD</Name>
+										<ID>ID_PARAMETER_0512</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 Conc</Name>
+										<ID>ID_PARAMETER_0513</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 %RD</Name>
+										<ID>ID_PARAMETER_0514</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Time</Name>
+										<ID>ID_PARAMETER_0515</ID>
+										<Unit>Minutes</Unit>
+										<Value>4,82</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Window</Name>
+										<ID>ID_PARAMETER_0516</ID>
+										<Unit>Minutes</Unit>
+										<Value>3</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Retention Time Update</Name>
+										<ID>ID_PARAMETER_0517</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Detection</Name>
+										<ID>ID_PARAMETER_0518</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Quantitation</Name>
+										<ID>ID_PARAMETER_0519</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Table>
+										<Name>Calibration Table</Name>
+										<ID>ID_TABLE_0018</ID>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0483</ID>
+												<Unit />
+												<Value>1</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0484</ID>
+												<Unit />
+												<Value>50,38</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0485</ID>
+												<Unit />
+												<Value>2,5006e+008</Value>
+											</Parameter>
+										</Row>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0486</ID>
+												<Unit />
+												<Value>2</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0487</ID>
+												<Unit />
+												<Value>4,948</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0488</ID>
+												<Unit />
+												<Value>2,47718e+007</Value>
+											</Parameter>
+										</Row>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0489</ID>
+												<Unit />
+												<Value>3</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0490</ID>
+												<Unit />
+												<Value>26,92</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0491</ID>
+												<Unit />
+												<Value>1,4041e+008</Value>
+											</Parameter>
+										</Row>
+									</Table>
+								</Section>
+								<Section>
+									<Name>H2</Name>
+									<ID>ID_SECTION_0031</ID>
+									<Parameter>
+										<Name>Name</Name>
+										<ID>ID_PARAMETER_0520</ID>
+										<Unit />
+										<Value>H2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Enabled</Name>
+										<ID>ID_PARAMETER_0521</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ID Number</Name>
+										<ID>ID_PARAMETER_0522</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Ref Peak</Name>
+										<ID>ID_PARAMETER_0523</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reso Peak</Name>
+										<ID>ID_PARAMETER_0524</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ISTD Peak</Name>
+										<ID>ID_PARAMETER_0525</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak ID #</Name>
+										<ID>ID_PARAMETER_0526</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak Multiplier</Name>
+										<ID>ID_PARAMETER_0527</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Manual RF Used</Name>
+										<ID>ID_PARAMETER_0528</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Quantitation</Name>
+										<ID>ID_PARAMETER_0529</ID>
+										<Unit />
+										<Value>Area</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Flag</Name>
+										<ID>ID_PARAMETER_0530</ID>
+										<Unit />
+										<Value>Replace</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Weight</Name>
+										<ID>ID_PARAMETER_0531</ID>
+										<Unit />
+										<Value>100</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Unit</Name>
+										<ID>ID_PARAMETER_0532</ID>
+										<Unit />
+										<Value>%</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Fit Type</Name>
+										<ID>ID_PARAMETER_0542</ID>
+										<Unit />
+										<Value>Linear</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Force Zero</Name>
+										<ID>ID_PARAMETER_0543</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Weight Method</Name>
+										<ID>ID_PARAMETER_0544</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>% Calibration Margin</Name>
+										<ID>ID_PARAMETER_0545</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Scale</Name>
+										<ID>ID_PARAMETER_0546</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Conc</Name>
+										<ID>ID_PARAMETER_0547</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Conc</Name>
+										<ID>ID_PARAMETER_0548</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 1 Amount</Name>
+										<ID>ID_PARAMETER_0549</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 2 Amount</Name>
+										<ID>ID_PARAMETER_0550</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Spike Limit</Name>
+										<ID>ID_PARAMETER_0551</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Spike Limit</Name>
+										<ID>ID_PARAMETER_0552</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Duplicate %RD Limit</Name>
+										<ID>ID_PARAMETER_0553</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>RF %RSD Limit</Name>
+										<ID>ID_PARAMETER_0554</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 Conc</Name>
+										<ID>ID_PARAMETER_0555</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 %RD</Name>
+										<ID>ID_PARAMETER_0556</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 Conc</Name>
+										<ID>ID_PARAMETER_0557</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 %RD</Name>
+										<ID>ID_PARAMETER_0558</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 Conc</Name>
+										<ID>ID_PARAMETER_0559</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 %RD</Name>
+										<ID>ID_PARAMETER_0560</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 Conc</Name>
+										<ID>ID_PARAMETER_0561</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 %RD</Name>
+										<ID>ID_PARAMETER_0562</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 Conc</Name>
+										<ID>ID_PARAMETER_0563</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 %RD</Name>
+										<ID>ID_PARAMETER_0564</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Time</Name>
+										<ID>ID_PARAMETER_0565</ID>
+										<Unit>Minutes</Unit>
+										<Value>6,43</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Window</Name>
+										<ID>ID_PARAMETER_0566</ID>
+										<Unit>Minutes</Unit>
+										<Value>3</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Retention Time Update</Name>
+										<ID>ID_PARAMETER_0567</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Detection</Name>
+										<ID>ID_PARAMETER_0568</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Quantitation</Name>
+										<ID>ID_PARAMETER_0569</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Table>
+										<Name>Calibration Table</Name>
+										<ID>ID_TABLE_0019</ID>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0533</ID>
+												<Unit />
+												<Value>1</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0534</ID>
+												<Unit />
+												<Value>49,62</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0535</ID>
+												<Unit />
+												<Value>8,69439e+006</Value>
+											</Parameter>
+										</Row>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0536</ID>
+												<Unit />
+												<Value>3</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0537</ID>
+												<Unit />
+												<Value>29,92</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0538</ID>
+												<Unit />
+												<Value>4,96546e+006</Value>
+											</Parameter>
+										</Row>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0539</ID>
+												<Unit />
+												<Value>6</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0540</ID>
+												<Unit />
+												<Value>90</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0541</ID>
+												<Unit />
+												<Value>1,61252e+007</Value>
+											</Parameter>
+										</Row>
+									</Table>
+								</Section>
+								<Section>
+									<Name>Ar</Name>
+									<ID>ID_SECTION_0032</ID>
+									<Parameter>
+										<Name>Name</Name>
+										<ID>ID_PARAMETER_0570</ID>
+										<Unit />
+										<Value>Ar</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Enabled</Name>
+										<ID>ID_PARAMETER_0571</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ID Number</Name>
+										<ID>ID_PARAMETER_0572</ID>
+										<Unit />
+										<Value>3</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Ref Peak</Name>
+										<ID>ID_PARAMETER_0573</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reso Peak</Name>
+										<ID>ID_PARAMETER_0574</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ISTD Peak</Name>
+										<ID>ID_PARAMETER_0575</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak ID #</Name>
+										<ID>ID_PARAMETER_0576</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak Multiplier</Name>
+										<ID>ID_PARAMETER_0577</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Manual RF Used</Name>
+										<ID>ID_PARAMETER_0578</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Quantitation</Name>
+										<ID>ID_PARAMETER_0579</ID>
+										<Unit />
+										<Value>Area</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Flag</Name>
+										<ID>ID_PARAMETER_0580</ID>
+										<Unit />
+										<Value>Replace</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Weight</Name>
+										<ID>ID_PARAMETER_0581</ID>
+										<Unit />
+										<Value>100</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Unit</Name>
+										<ID>ID_PARAMETER_0582</ID>
+										<Unit />
+										<Value>%</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Fit Type</Name>
+										<ID>ID_PARAMETER_0595</ID>
+										<Unit />
+										<Value>Linear</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Force Zero</Name>
+										<ID>ID_PARAMETER_0596</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Weight Method</Name>
+										<ID>ID_PARAMETER_0597</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>% Calibration Margin</Name>
+										<ID>ID_PARAMETER_0598</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Scale</Name>
+										<ID>ID_PARAMETER_0599</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Conc</Name>
+										<ID>ID_PARAMETER_0600</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Conc</Name>
+										<ID>ID_PARAMETER_0601</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 1 Amount</Name>
+										<ID>ID_PARAMETER_0602</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 2 Amount</Name>
+										<ID>ID_PARAMETER_0603</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Spike Limit</Name>
+										<ID>ID_PARAMETER_0604</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Spike Limit</Name>
+										<ID>ID_PARAMETER_0605</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Duplicate %RD Limit</Name>
+										<ID>ID_PARAMETER_0606</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>RF %RSD Limit</Name>
+										<ID>ID_PARAMETER_0607</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 Conc</Name>
+										<ID>ID_PARAMETER_0608</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 %RD</Name>
+										<ID>ID_PARAMETER_0609</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 Conc</Name>
+										<ID>ID_PARAMETER_0610</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 %RD</Name>
+										<ID>ID_PARAMETER_0611</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 Conc</Name>
+										<ID>ID_PARAMETER_0612</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 %RD</Name>
+										<ID>ID_PARAMETER_0613</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 Conc</Name>
+										<ID>ID_PARAMETER_0614</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 %RD</Name>
+										<ID>ID_PARAMETER_0615</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 Conc</Name>
+										<ID>ID_PARAMETER_0616</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 %RD</Name>
+										<ID>ID_PARAMETER_0617</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Time</Name>
+										<ID>ID_PARAMETER_0618</ID>
+										<Unit>Minutes</Unit>
+										<Value>8,338</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Window</Name>
+										<ID>ID_PARAMETER_0619</ID>
+										<Unit>Minutes</Unit>
+										<Value>2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Retention Time Update</Name>
+										<ID>ID_PARAMETER_0620</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Detection</Name>
+										<ID>ID_PARAMETER_0621</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Quantitation</Name>
+										<ID>ID_PARAMETER_0622</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Table>
+										<Name>Calibration Table</Name>
+										<ID>ID_TABLE_0020</ID>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0583</ID>
+												<Unit />
+												<Value>2</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0584</ID>
+												<Unit />
+												<Value>95,002</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0585</ID>
+												<Unit />
+												<Value>4,42853e+008</Value>
+											</Parameter>
+										</Row>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0586</ID>
+												<Unit />
+												<Value>5</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0587</ID>
+												<Unit />
+												<Value>94,29</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0588</ID>
+												<Unit />
+												<Value>4,40373e+008</Value>
+											</Parameter>
+										</Row>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0589</ID>
+												<Unit />
+												<Value>6</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0590</ID>
+												<Unit />
+												<Value>10</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0591</ID>
+												<Unit />
+												<Value>4,62532e+007</Value>
+											</Parameter>
+										</Row>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0592</ID>
+												<Unit />
+												<Value>10</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0593</ID>
+												<Unit />
+												<Value>99,736</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0594</ID>
+												<Unit />
+												<Value>4,59224e+008</Value>
+											</Parameter>
+										</Row>
+									</Table>
+								</Section>
+								<Section>
+									<Name>N2</Name>
+									<ID>ID_SECTION_0033</ID>
+									<Parameter>
+										<Name>Name</Name>
+										<ID>ID_PARAMETER_0623</ID>
+										<Unit />
+										<Value>N2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Enabled</Name>
+										<ID>ID_PARAMETER_0624</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ID Number</Name>
+										<ID>ID_PARAMETER_0625</ID>
+										<Unit />
+										<Value>5</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Ref Peak</Name>
+										<ID>ID_PARAMETER_0626</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reso Peak</Name>
+										<ID>ID_PARAMETER_0627</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ISTD Peak</Name>
+										<ID>ID_PARAMETER_0628</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak ID #</Name>
+										<ID>ID_PARAMETER_0629</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak Multiplier</Name>
+										<ID>ID_PARAMETER_0630</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Manual RF Used</Name>
+										<ID>ID_PARAMETER_0631</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Quantitation</Name>
+										<ID>ID_PARAMETER_0632</ID>
+										<Unit />
+										<Value>Area</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Flag</Name>
+										<ID>ID_PARAMETER_0633</ID>
+										<Unit />
+										<Value>Replace</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Weight</Name>
+										<ID>ID_PARAMETER_0634</ID>
+										<Unit />
+										<Value>100</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Unit</Name>
+										<ID>ID_PARAMETER_0635</ID>
+										<Unit />
+										<Value>%</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Fit Type</Name>
+										<ID>ID_PARAMETER_0645</ID>
+										<Unit />
+										<Value>Linear</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Force Zero</Name>
+										<ID>ID_PARAMETER_0646</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Weight Method</Name>
+										<ID>ID_PARAMETER_0647</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>% Calibration Margin</Name>
+										<ID>ID_PARAMETER_0648</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Scale</Name>
+										<ID>ID_PARAMETER_0649</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Conc</Name>
+										<ID>ID_PARAMETER_0650</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Conc</Name>
+										<ID>ID_PARAMETER_0651</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 1 Amount</Name>
+										<ID>ID_PARAMETER_0652</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 2 Amount</Name>
+										<ID>ID_PARAMETER_0653</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Spike Limit</Name>
+										<ID>ID_PARAMETER_0654</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Spike Limit</Name>
+										<ID>ID_PARAMETER_0655</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Duplicate %RD Limit</Name>
+										<ID>ID_PARAMETER_0656</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>RF %RSD Limit</Name>
+										<ID>ID_PARAMETER_0657</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 Conc</Name>
+										<ID>ID_PARAMETER_0658</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 %RD</Name>
+										<ID>ID_PARAMETER_0659</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 Conc</Name>
+										<ID>ID_PARAMETER_0660</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 %RD</Name>
+										<ID>ID_PARAMETER_0661</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 Conc</Name>
+										<ID>ID_PARAMETER_0662</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 %RD</Name>
+										<ID>ID_PARAMETER_0663</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 Conc</Name>
+										<ID>ID_PARAMETER_0664</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 %RD</Name>
+										<ID>ID_PARAMETER_0665</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 Conc</Name>
+										<ID>ID_PARAMETER_0666</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 %RD</Name>
+										<ID>ID_PARAMETER_0667</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Time</Name>
+										<ID>ID_PARAMETER_0668</ID>
+										<Unit>Minutes</Unit>
+										<Value>11,05</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Window</Name>
+										<ID>ID_PARAMETER_0669</ID>
+										<Unit>Minutes</Unit>
+										<Value>2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Retention Time Update</Name>
+										<ID>ID_PARAMETER_0670</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Detection</Name>
+										<ID>ID_PARAMETER_0671</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Quantitation</Name>
+										<ID>ID_PARAMETER_0672</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Table>
+										<Name>Calibration Table</Name>
+										<ID>ID_TABLE_0021</ID>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0636</ID>
+												<Unit />
+												<Value>3</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0637</ID>
+												<Unit />
+												<Value>25,09</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0638</ID>
+												<Unit />
+												<Value>1,13577e+008</Value>
+											</Parameter>
+										</Row>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0639</ID>
+												<Unit />
+												<Value>4</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0640</ID>
+												<Unit />
+												<Value>99,783</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0641</ID>
+												<Unit />
+												<Value>4,28816e+008</Value>
+											</Parameter>
+										</Row>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0642</ID>
+												<Unit />
+												<Value>7</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0643</ID>
+												<Unit />
+												<Value>99,899</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0644</ID>
+												<Unit />
+												<Value>4,23319e+008</Value>
+											</Parameter>
+										</Row>
+									</Table>
+								</Section>
+								<Section>
+									<Name>CH4</Name>
+									<ID>ID_SECTION_0034</ID>
+									<Parameter>
+										<Name>Name</Name>
+										<ID>ID_PARAMETER_0673</ID>
+										<Unit />
+										<Value>CH4</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Enabled</Name>
+										<ID>ID_PARAMETER_0674</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ID Number</Name>
+										<ID>ID_PARAMETER_0675</ID>
+										<Unit />
+										<Value>6</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Ref Peak</Name>
+										<ID>ID_PARAMETER_0676</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reso Peak</Name>
+										<ID>ID_PARAMETER_0677</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ISTD Peak</Name>
+										<ID>ID_PARAMETER_0678</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak ID #</Name>
+										<ID>ID_PARAMETER_0679</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak Multiplier</Name>
+										<ID>ID_PARAMETER_0680</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Manual RF Used</Name>
+										<ID>ID_PARAMETER_0681</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Quantitation</Name>
+										<ID>ID_PARAMETER_0682</ID>
+										<Unit />
+										<Value>Area</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Flag</Name>
+										<ID>ID_PARAMETER_0683</ID>
+										<Unit />
+										<Value>Replace</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Weight</Name>
+										<ID>ID_PARAMETER_0684</ID>
+										<Unit />
+										<Value>100</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Unit</Name>
+										<ID>ID_PARAMETER_0685</ID>
+										<Unit />
+										<Value>%</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Fit Type</Name>
+										<ID>ID_PARAMETER_0689</ID>
+										<Unit />
+										<Value>Linear</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Force Zero</Name>
+										<ID>ID_PARAMETER_0690</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Weight Method</Name>
+										<ID>ID_PARAMETER_0691</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>% Calibration Margin</Name>
+										<ID>ID_PARAMETER_0692</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Scale</Name>
+										<ID>ID_PARAMETER_0693</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Conc</Name>
+										<ID>ID_PARAMETER_0694</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Conc</Name>
+										<ID>ID_PARAMETER_0695</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 1 Amount</Name>
+										<ID>ID_PARAMETER_0696</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 2 Amount</Name>
+										<ID>ID_PARAMETER_0697</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Spike Limit</Name>
+										<ID>ID_PARAMETER_0698</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Spike Limit</Name>
+										<ID>ID_PARAMETER_0699</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Duplicate %RD Limit</Name>
+										<ID>ID_PARAMETER_0700</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>RF %RSD Limit</Name>
+										<ID>ID_PARAMETER_0701</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 Conc</Name>
+										<ID>ID_PARAMETER_0702</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 %RD</Name>
+										<ID>ID_PARAMETER_0703</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 Conc</Name>
+										<ID>ID_PARAMETER_0704</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 %RD</Name>
+										<ID>ID_PARAMETER_0705</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 Conc</Name>
+										<ID>ID_PARAMETER_0706</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 %RD</Name>
+										<ID>ID_PARAMETER_0707</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 Conc</Name>
+										<ID>ID_PARAMETER_0708</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 %RD</Name>
+										<ID>ID_PARAMETER_0709</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 Conc</Name>
+										<ID>ID_PARAMETER_0710</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 %RD</Name>
+										<ID>ID_PARAMETER_0711</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Time</Name>
+										<ID>ID_PARAMETER_0712</ID>
+										<Unit>Minutes</Unit>
+										<Value>13,6</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Window</Name>
+										<ID>ID_PARAMETER_0713</ID>
+										<Unit>Minutes</Unit>
+										<Value>2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Retention Time Update</Name>
+										<ID>ID_PARAMETER_0714</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Detection</Name>
+										<ID>ID_PARAMETER_0715</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Quantitation</Name>
+										<ID>ID_PARAMETER_0716</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Table>
+										<Name>Calibration Table</Name>
+										<ID>ID_TABLE_0022</ID>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0686</ID>
+												<Unit />
+												<Value>3</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0687</ID>
+												<Unit />
+												<Value>2,99</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0688</ID>
+												<Unit />
+												<Value>9,2795e+006</Value>
+											</Parameter>
+										</Row>
+									</Table>
+								</Section>
+								<Section>
+									<Name>CO</Name>
+									<ID>ID_SECTION_0035</ID>
+									<Parameter>
+										<Name>Name</Name>
+										<ID>ID_PARAMETER_0717</ID>
+										<Unit />
+										<Value>CO</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Enabled</Name>
+										<ID>ID_PARAMETER_0718</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ID Number</Name>
+										<ID>ID_PARAMETER_0719</ID>
+										<Unit />
+										<Value>7</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Ref Peak</Name>
+										<ID>ID_PARAMETER_0720</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Reso Peak</Name>
+										<ID>ID_PARAMETER_0721</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>ISTD Peak</Name>
+										<ID>ID_PARAMETER_0722</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak ID #</Name>
+										<ID>ID_PARAMETER_0723</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Std Peak Multiplier</Name>
+										<ID>ID_PARAMETER_0724</ID>
+										<Unit />
+										<Value>1</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Manual RF Used</Name>
+										<ID>ID_PARAMETER_0725</ID>
+										<Unit />
+										<Value>No</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Quantitation</Name>
+										<ID>ID_PARAMETER_0726</ID>
+										<Unit />
+										<Value>Area</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Flag</Name>
+										<ID>ID_PARAMETER_0727</ID>
+										<Unit />
+										<Value>Replace</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Weight</Name>
+										<ID>ID_PARAMETER_0728</ID>
+										<Unit />
+										<Value>100</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Calibration Unit</Name>
+										<ID>ID_PARAMETER_0729</ID>
+										<Unit />
+										<Value>%</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Fit Type</Name>
+										<ID>ID_PARAMETER_0736</ID>
+										<Unit />
+										<Value>Linear</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Force Zero</Name>
+										<ID>ID_PARAMETER_0737</ID>
+										<Unit />
+										<Value>Yes</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Weight Method</Name>
+										<ID>ID_PARAMETER_0738</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>% Calibration Margin</Name>
+										<ID>ID_PARAMETER_0739</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Scale</Name>
+										<ID>ID_PARAMETER_0740</ID>
+										<Unit />
+										<Value>None</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Conc</Name>
+										<ID>ID_PARAMETER_0741</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Conc</Name>
+										<ID>ID_PARAMETER_0742</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 1 Amount</Name>
+										<ID>ID_PARAMETER_0743</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Spike 2 Amount</Name>
+										<ID>ID_PARAMETER_0744</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Low Spike Limit</Name>
+										<ID>ID_PARAMETER_0745</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>High Spike Limit</Name>
+										<ID>ID_PARAMETER_0746</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Duplicate %RD Limit</Name>
+										<ID>ID_PARAMETER_0747</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>RF %RSD Limit</Name>
+										<ID>ID_PARAMETER_0748</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 Conc</Name>
+										<ID>ID_PARAMETER_0749</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 1 %RD</Name>
+										<ID>ID_PARAMETER_0750</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 Conc</Name>
+										<ID>ID_PARAMETER_0751</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 2 %RD</Name>
+										<ID>ID_PARAMETER_0752</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 Conc</Name>
+										<ID>ID_PARAMETER_0753</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 3 %RD</Name>
+										<ID>ID_PARAMETER_0754</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 Conc</Name>
+										<ID>ID_PARAMETER_0755</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 4 %RD</Name>
+										<ID>ID_PARAMETER_0756</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 Conc</Name>
+										<ID>ID_PARAMETER_0757</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Check Std 5 %RD</Name>
+										<ID>ID_PARAMETER_0758</ID>
+										<Unit />
+										<Value>0</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Time</Name>
+										<ID>ID_PARAMETER_0759</ID>
+										<Unit>Minutes</Unit>
+										<Value>14,8</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Expected Retention Window</Name>
+										<ID>ID_PARAMETER_0760</ID>
+										<Unit>Minutes</Unit>
+										<Value>2</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Retention Time Update</Name>
+										<ID>ID_PARAMETER_0761</ID>
+										<Unit />
+										<Value />
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Detection</Name>
+										<ID>ID_PARAMETER_0762</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Parameter>
+										<Name>Limit of Quantitation</Name>
+										<ID>ID_PARAMETER_0763</ID>
+										<Unit />
+										<Value>0,000000</Value>
+									</Parameter>
+									<Table>
+										<Name>Calibration Table</Name>
+										<ID>ID_TABLE_0023</ID>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0730</ID>
+												<Unit />
+												<Value>2</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0731</ID>
+												<Unit />
+												<Value>0,05</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0732</ID>
+												<Unit />
+												<Value>126776</Value>
+											</Parameter>
+										</Row>
+										<Row>
+											<Parameter>
+												<Name>Level</Name>
+												<ID>ID_PARAMETER_0733</ID>
+												<Unit />
+												<Value>3</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Amount</Name>
+												<ID>ID_PARAMETER_0734</ID>
+												<Unit />
+												<Value>15,08</Value>
+											</Parameter>
+											<Parameter>
+												<Name>Response</Name>
+												<ID>ID_PARAMETER_0735</ID>
+												<Unit />
+												<Value>5,95744e+007</Value>
+											</Parameter>
+										</Row>
+									</Table>
+								</Section>
+							</Section>
+							<Section>
+								<Name>Group Table</Name>
+								<ID>ID_SECTION_0036</ID>
+								<Parameter>
+									<Name>Items selected for this section</Name>
+									<ID>ID_PARAMETER_0764</ID>
+									<Unit />
+									<Value>None</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>System Suitability</Name>
+								<ID>ID_SECTION_0037</ID>
+								<Parameter>
+									<Name>Items selected for this section</Name>
+									<ID>ID_PARAMETER_0765</ID>
+									<Unit />
+									<Value>None</Value>
+								</Parameter>
+							</Section>
+						</Section>
+						<Section>
+							<Name>Back Signal</Name>
+							<ID>ID_SECTION_0038</ID>
+							<Section>
+								<Name>Performance Parameters</Name>
+								<ID>ID_SECTION_0039</ID>
+								<Parameter>
+									<Name>Calculate Performance Parameters</Name>
+									<ID>ID_PARAMETER_0766</ID>
+									<Unit>No</Unit>
+									<Value />
+								</Parameter>
+								<Parameter>
+									<Name>USP Calculation Method</Name>
+									<ID>ID_PARAMETER_0767</ID>
+									<Unit>Enabled</Unit>
+									<Value />
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Export Options</Name>
+								<ID>ID_SECTION_0040</ID>
+								<Parameter>
+									<Name>Export Options</Name>
+									<ID>ID_PARAMETER_0768</ID>
+									<Unit />
+									<Value>Enabled</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Field Separator</Name>
+									<ID>ID_PARAMETER_0773</ID>
+									<Unit />
+									<Value>&lt;Tab&gt;</Value>
+								</Parameter>
+								<Parameter>
+									<Name>Path for Export Files</Name>
+									<ID>ID_PARAMETER_0774</ID>
+									<Unit />
+									<Value>C:\HP_Reactor_Data\COLLECTION_GC-DATA\GC-TCD-BACK</Value>
+								</Parameter>
+								<Parameter>
+									<Name>ODBC Export</Name>
+									<ID>ID_PARAMETER_0775</ID>
+									<Unit />
+									<Value>Disabled</Value>
+								</Parameter>
+								<Table>
+									<Name>Peaks</Name>
+									<ID>ID_TABLE_0025</ID>
+									<Row>
+										<Parameter>
+											<Name>Exported Parameter</Name>
+											<ID>ID_PARAMETER_0769</ID>
+											<Unit />
+											<Value>ESTD concentration</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Num Decimals</Name>
+											<ID>ID_PARAMETER_0770</ID>
+											<Unit />
+											<Value>4</Value>
+										</Parameter>
+									</Row>
+								</Table>
+								<Table>
+									<Name>Chromatogram</Name>
+									<ID>ID_TABLE_0028</ID>
+									<Row>
+										<Parameter>
+											<Name>Exported Parameter</Name>
+											<ID>ID_PARAMETER_0771</ID>
+											<Unit />
+											<Value>AIA (*.CDF)</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Num Decimals</Name>
+											<ID>ID_PARAMETER_0772</ID>
+											<Unit />
+											<Value>0</Value>
+										</Parameter>
+									</Row>
+								</Table>
+							</Section>
+							<Section>
+								<Name>Integration Events</Name>
+								<ID>ID_SECTION_0041</ID>
+								<Table>
+									<Name>Integration Events</Name>
+									<ID>ID_TABLE_0029</ID>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0776</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0777</ID>
+											<Unit />
+											<Value>Integration Off</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0778</ID>
+											<Unit />
+											<Value>         0</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0779</ID>
+											<Unit />
+											<Value>       3,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0780</ID>
+											<Unit />
+											<Value>       0</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0781</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0782</ID>
+											<Unit />
+											<Value>Horizontal Baseline</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0783</ID>
+											<Unit />
+											<Value>       3,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0784</ID>
+											<Unit />
+											<Value>       5,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0785</ID>
+											<Unit />
+											<Value>       0</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0786</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0787</ID>
+											<Unit />
+											<Value>Width</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0788</ID>
+											<Unit />
+											<Value>       3,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0789</ID>
+											<Unit />
+											<Value>       5,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0790</ID>
+											<Unit />
+											<Value>     0,2</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0791</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0792</ID>
+											<Unit />
+											<Value>Threshold</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0793</ID>
+											<Unit />
+											<Value>       3,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0794</ID>
+											<Unit />
+											<Value>       5,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0795</ID>
+											<Unit />
+											<Value>    3000</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0796</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0797</ID>
+											<Unit />
+											<Value>Integration Off</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0798</ID>
+											<Unit />
+											<Value>       5,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0799</ID>
+											<Unit />
+											<Value>       5,7</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0800</ID>
+											<Unit />
+											<Value>       0</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0801</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0802</ID>
+											<Unit />
+											<Value>Negative Peak</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0803</ID>
+											<Unit />
+											<Value>       5,7</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0804</ID>
+											<Unit />
+											<Value>       7,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0805</ID>
+											<Unit />
+											<Value>       0</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0806</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0807</ID>
+											<Unit />
+											<Value>Threshold</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0808</ID>
+											<Unit />
+											<Value>       5,7</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0809</ID>
+											<Unit />
+											<Value>       7,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0810</ID>
+											<Unit />
+											<Value>    3000</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0811</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0812</ID>
+											<Unit />
+											<Value>Width</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0813</ID>
+											<Unit />
+											<Value>       5,7</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0814</ID>
+											<Unit />
+											<Value>       7,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0815</ID>
+											<Unit />
+											<Value>     0,2</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0816</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0817</ID>
+											<Unit />
+											<Value>Horizontal Baseline</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0818</ID>
+											<Unit />
+											<Value>       7,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0819</ID>
+											<Unit />
+											<Value>      10,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0820</ID>
+											<Unit />
+											<Value>     0,2</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0821</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0822</ID>
+											<Unit />
+											<Value>Width</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0823</ID>
+											<Unit />
+											<Value>       7,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0824</ID>
+											<Unit />
+											<Value>      10,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0825</ID>
+											<Unit />
+											<Value>     0,2</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0826</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0827</ID>
+											<Unit />
+											<Value>Threshold</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0828</ID>
+											<Unit />
+											<Value>       7,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0829</ID>
+											<Unit />
+											<Value>      10,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0830</ID>
+											<Unit />
+											<Value>    3000</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0831</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0832</ID>
+											<Unit />
+											<Value>Horizontal Baseline</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0833</ID>
+											<Unit />
+											<Value>      10,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0834</ID>
+											<Unit />
+											<Value>      12,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0835</ID>
+											<Unit />
+											<Value>     0,2</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0836</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0837</ID>
+											<Unit />
+											<Value>Width</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0838</ID>
+											<Unit />
+											<Value>      10,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0839</ID>
+											<Unit />
+											<Value>      12,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0840</ID>
+											<Unit />
+											<Value>       1</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0841</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0842</ID>
+											<Unit />
+											<Value>Threshold</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0843</ID>
+											<Unit />
+											<Value>      10,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0844</ID>
+											<Unit />
+											<Value>      12,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0845</ID>
+											<Unit />
+											<Value>    6000</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0846</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0847</ID>
+											<Unit />
+											<Value>Horizontal Baseline</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0848</ID>
+											<Unit />
+											<Value>      12,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0849</ID>
+											<Unit />
+											<Value>        20</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0850</ID>
+											<Unit />
+											<Value>     0,2</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0851</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0852</ID>
+											<Unit />
+											<Value>Width</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0853</ID>
+											<Unit />
+											<Value>      12,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0854</ID>
+											<Unit />
+											<Value>        20</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0855</ID>
+											<Unit />
+											<Value>     0,2</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0856</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0857</ID>
+											<Unit />
+											<Value>Threshold</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0858</ID>
+											<Unit />
+											<Value>      12,5</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0859</ID>
+											<Unit />
+											<Value>        20</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0860</ID>
+											<Unit />
+											<Value>    3000</Value>
+										</Parameter>
+									</Row>
+								</Table>
+							</Section>
+						</Section>
+						<Section>
+							<Name />
+							<ID>ID_SECTION_0042</ID>
+							<Section>
+								<Name>Peak Table</Name>
+								<ID>ID_SECTION_0043</ID>
+								<Parameter>
+									<Name>Items selected for this section</Name>
+									<ID>ID_PARAMETER_0861</ID>
+									<Unit />
+									<Value>None</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Group Table</Name>
+								<ID>ID_SECTION_0044</ID>
+								<Parameter>
+									<Name>Items selected for this section</Name>
+									<ID>ID_PARAMETER_0862</ID>
+									<Unit />
+									<Value>None</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>System Suitability</Name>
+								<ID>ID_SECTION_0045</ID>
+								<Parameter>
+									<Name>Items selected for this section</Name>
+									<ID>ID_PARAMETER_0863</ID>
+									<Unit />
+									<Value>None</Value>
+								</Parameter>
+							</Section>
+						</Section>
+						<Section>
+							<Name />
+							<ID>ID_SECTION_0046</ID>
+							<Section>
+								<Name>Performance Parameters</Name>
+								<ID>ID_SECTION_0047</ID>
+								<Parameter>
+									<Name>Calculate Performance Parameters</Name>
+									<ID>ID_PARAMETER_0864</ID>
+									<Unit>No</Unit>
+									<Value />
+								</Parameter>
+								<Parameter>
+									<Name>USP Calculation Method</Name>
+									<ID>ID_PARAMETER_0865</ID>
+									<Unit>Enabled</Unit>
+									<Value />
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Export Options</Name>
+								<ID>ID_SECTION_0048</ID>
+								<Parameter>
+									<Name>Export Options</Name>
+									<ID>ID_PARAMETER_0866</ID>
+									<Unit />
+									<Value>Enabled</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Integration Events</Name>
+								<ID>ID_SECTION_0049</ID>
+								<Table>
+									<Name>Integration Events</Name>
+									<ID>ID_TABLE_0031</ID>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0867</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0868</ID>
+											<Unit />
+											<Value>Width</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0869</ID>
+											<Unit />
+											<Value>         0</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0870</ID>
+											<Unit />
+											<Value>         0</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0871</ID>
+											<Unit />
+											<Value>     0,2</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0872</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0873</ID>
+											<Unit />
+											<Value>Threshold</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0874</ID>
+											<Unit />
+											<Value>         0</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0875</ID>
+											<Unit />
+											<Value>         0</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0876</ID>
+											<Unit />
+											<Value>      50</Value>
+										</Parameter>
+									</Row>
+								</Table>
+							</Section>
+						</Section>
+						<Section>
+							<Name />
+							<ID>ID_SECTION_0050</ID>
+							<Section>
+								<Name>Peak Table</Name>
+								<ID>ID_SECTION_0051</ID>
+								<Parameter>
+									<Name>Items selected for this section</Name>
+									<ID>ID_PARAMETER_0877</ID>
+									<Unit />
+									<Value>None</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Group Table</Name>
+								<ID>ID_SECTION_0052</ID>
+								<Parameter>
+									<Name>Items selected for this section</Name>
+									<ID>ID_PARAMETER_0878</ID>
+									<Unit />
+									<Value>None</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>System Suitability</Name>
+								<ID>ID_SECTION_0053</ID>
+								<Parameter>
+									<Name>Items selected for this section</Name>
+									<ID>ID_PARAMETER_0879</ID>
+									<Unit />
+									<Value>None</Value>
+								</Parameter>
+							</Section>
+						</Section>
+						<Section>
+							<Name />
+							<ID>ID_SECTION_0054</ID>
+							<Section>
+								<Name>Performance Parameters</Name>
+								<ID>ID_SECTION_0055</ID>
+								<Parameter>
+									<Name>Calculate Performance Parameters</Name>
+									<ID>ID_PARAMETER_0880</ID>
+									<Unit>No</Unit>
+									<Value />
+								</Parameter>
+								<Parameter>
+									<Name>USP Calculation Method</Name>
+									<ID>ID_PARAMETER_0881</ID>
+									<Unit>Enabled</Unit>
+									<Value />
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Export Options</Name>
+								<ID>ID_SECTION_0056</ID>
+								<Parameter>
+									<Name>Export Options</Name>
+									<ID>ID_PARAMETER_0882</ID>
+									<Unit />
+									<Value>Enabled</Value>
+								</Parameter>
+							</Section>
+							<Section>
+								<Name>Integration Events</Name>
+								<ID>ID_SECTION_0057</ID>
+								<Table>
+									<Name>Integration Events</Name>
+									<ID>ID_TABLE_0033</ID>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0883</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0884</ID>
+											<Unit />
+											<Value>Width</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0885</ID>
+											<Unit />
+											<Value>         0</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0886</ID>
+											<Unit />
+											<Value>         0</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0887</ID>
+											<Unit />
+											<Value>     0,2</Value>
+										</Parameter>
+									</Row>
+									<Row>
+										<Parameter>
+											<Name>Enabled</Name>
+											<ID>ID_PARAMETER_0888</ID>
+											<Unit />
+											<Value>Yes</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Event Type</Name>
+											<ID>ID_PARAMETER_0889</ID>
+											<Unit />
+											<Value>Threshold</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Start (Minutes)</Name>
+											<ID>ID_PARAMETER_0890</ID>
+											<Unit />
+											<Value>         0</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Stop (Minutes)</Name>
+											<ID>ID_PARAMETER_0891</ID>
+											<Unit />
+											<Value>         0</Value>
+										</Parameter>
+										<Parameter>
+											<Name>Value</Name>
+											<ID>ID_PARAMETER_0892</ID>
+											<Unit />
+											<Value>      50</Value>
+										</Parameter>
+									</Row>
+								</Table>
+							</Section>
+						</Section>
+					</Section>
+				</MethodDescription>
+			</MethodConfiguration>
+		</Content>
+	</Doc>
+</ACAML>

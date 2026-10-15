@@ -91,3 +91,18 @@ def test_tos_is_not_treated_as_a_channel(tmp_path):
 def test_empty_directory_raises(tmp_path):
     with pytest.raises(FileNotFoundError, match="No .txt"):
         LVData.from_b67_box5_txt(tmp_path)
+
+
+def test_netcdf_roundtrip_of_a_directory_read(tmp_path):
+    """A directory read has `filename_timestamp = None`, which NetCDF cannot store."""
+    logs = tmp_path / "logs"
+    logs.mkdir()
+    write_log(logs, "2026-07-23_16-30-00.txt", OLD_HEADER, minute=30)
+    write_log(logs, "2026-07-23_16-40-00.txt", NEW_HEADER, minute=40)
+    lv = LVData.from_b67_box5_txt(logs)
+    target = tmp_path / "lv.nc"
+    lv.to_netcdf(target)
+    back = LVData.from_netcdf(target)
+    assert back.channels == lv.channels
+    np.testing.assert_allclose(back.get_channel(lv.channels[0]), lv.get_channel(lv.channels[0]))
+    assert lv.ds.attrs["filename_timestamp"] is None  # the instance is untouched
