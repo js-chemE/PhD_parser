@@ -180,6 +180,7 @@ Applies to code comments, docstrings, printed/repr output, and figures (titles, 
 - Units and exponents use power notation, not slashes: `m^2 s^-1`, `mol m^-3 s^-1`, not `m^2/s`, `mol/m^3/s`. Applies in code, plots, printed output, and LaTeX math. In Obsidian notes, `\frac{}{}` fraction style is fine in math environments; code and plots still use the power form.
 - Chemical species, formulas and reactions use the mhchem `\ce{}` package, always inside math: `$\ce{CO2}$`, `$\ce{Cu^0}$`, `$\ce{Al^3+}$`, `$\ce{CO2 + 3H2 <=> CH3OH + H2O}$`. Applies to Obsidian notes and LaTeX (thesis). Plain text stays only where math cannot render: file names/note titles, wikilinks, frontmatter, and code/plot labels (matplotlib has no mhchem).
 - Fonts: two families, both open and bundled in `phd_ui`: Source Sans 3 and Source Serif 4. Source Sans 3 is used for all figure and slide text, with hierarchy by size and weight, never a second sans. Maths matches the body text it sits beside: Source Serif 4 in print figures and the thesis body, Source Sans 3 italic on slides. Words and units upright, quantities italic. Matplotlib uses mathtext, not usetex. Slides use Source Sans 3 (embedded in the pptx) instead of Segoe UI. Thesis: LuaLaTeX, Source Serif 4 body, Source Sans 3 headings and captions, unicode-math with Source Serif 4 letters over STIX Two Math symbols. Details, preamble and open to-dos: `phd_ui` CLAUDE.md, section *Typography*.
+- Citing a paper in running text, on a slide or in a source line on a figure (set 2026-10-18): `<first author> et al. (<group lead>), <journal abbreviation> <year>`, e.g. `Vico van Berkel et al. (Urakawa), J. Catal. 2024`. The bracket names the professor or well-known name behind the paper, usually the last author, and is dropped when the first author is that name (`Urakawa et al., J. Phys. Chem. C 2019`). Two authors: `Maeder & Zilian, Chemom. Intell. Lab. Syst. 1988`; one: `Noda, Appl. Spectrosc. 1993`. Journal abbreviations as Zotero gives them (ISO 4, with dots). `phd_ui.text.cite()` builds the string; in the vault it sits beside the Zotero wikilink, which stays `[[@Key.Title.Year]]`.
 
 ## Architecture
 
@@ -199,6 +200,7 @@ Each instrument type lives in its own subpackage under `src/phd_parser/`:
 | `massspec` | `MSData` | `xr.Dataset` |
 | `physisorption` | `PhysisorptionData` | `xr.DataArray` |
 | `chromatography` | `GCData` | `xr.Dataset` |
+| `kernels` | *(module, no data class)*; the peak shapes every fit uses, see *Kernels* below | none |
 | `naming` | *(no data class)*; `species` conventions and `rename_species` | JSON files |
 | `pipeline` | *(no data class)*; `Pipeline` and `Step` | JSON files |
 
@@ -411,7 +413,7 @@ as tab-separated text are read by `xrd/pdf_card.py` (`read_pdf_card`,
 k, l, comment`, card number and phase parsed from the file name;
 `two_theta(wavelength)` recomputes the card's 2θ from the d-spacings,
 `strongest(n)` picks lines. `xrd/analysis.py` holds the pure functions
-`pseudo_voigt`, `fit_reflection` (one line plus linear background,
+`fit_reflection` (its lines are `kernels.pseudo_voigt` and friends) (one line plus linear background,
 `scipy.optimize.curve_fit`, returns a `ReflectionFit`) and `scherrer`
 (instrumental width subtracted in quadrature); `XRDData.fit_reflection` and
 `XRDData.scherrer_size` wrap them, the latter taking the wavelength from
@@ -434,26 +436,62 @@ warning. Baselines accumulate in `<signal>_baseline`; `per_gram`,
 of the other classes. The TCD is not calibrated for H2, so a consumption is
 an area in mV s g^-1.
 
+### Kernels
+
+`kernels.py` (top level, technique-neutral, `pp.kernels`) holds every simple
+peak shape, and nothing that fits. Two families, told apart by the scale
+parameter: **height-scaled** `gaussian`, `lorentzian`, `pseudo_voigt`
+(`f(x, center, fwhm, height)`, plus `pseudo_voigt_area`), used by the XRD
+reflection fit and for mock spectra; **area-scaled** CasaXPS shapes
+`gaussian_lorentzian_product` (`GL(m)`), `gaussian_lorentzian_sum` (`SGL(m)`,
+the area-scaled pseudo-Voigt, tested equal to it) and `lorentzian_asymmetric`
+(`LA(a,b,n)`), with `Lineshape` and `parse_lineshape` for the notation. Every
+`fwhm` is the true FWHM, every `area` exact. The fits live with their
+technique (`xps/fitting.py`, `xrd/analysis.py`) and import from here; a new
+shape goes here, never into a technique module. Moved here on 2026-10-18 from
+`xps/fitting.py` and `xrd/analysis.py`; the old `phd_execute.utils.kernel`
+was removed in the same change.
+
 ### XPS peak fitting
 
-`spectroscopy/xps/fitting.py` does what CasaXPS did by hand: the lineshapes
-`GL(m)` (product), `SGL(m)` (sum) and `LA(α, β, n)` (asymmetric Lorentzian
-convolved with a Gaussian; α acts on the high binding energy side, the
-Gaussian FWHM is `w · n / gaussian_width_scale` with scale 500, our own
-mapping since CasaXPS does not publish one), parsed from the CasaXPS
-notation by `parse_lineshape`; `PeakSpec` with bounds and the constraints
-`position_offset_from`, `area_ratio_to`, `fwhm_equal_to`; `doublet(...)`
-with the nominal splittings in `DOUBLETS` (Mo 3d 3.13 eV 2:3, Ti 2p 5.7 eV
-1:2, Pd 3d 5.26 eV 2:3); `fit_peaks` on arrays (bounded least squares,
-standard errors from the Jacobian). `XPSData.fit_peaks` subtracts the
-background in the window, fits, and stores the result in the layout of a
-CasaXPS export (`peaks` on top of the background, `envelope`, coordinates
-`peak_name`, `peak_position_eV`, `peak_fwhm_eV`, `peak_area`,
-`peak_area_fraction`, `peak_lineshape`, `attrs["fit"]`); `peak_table()`
-reads either source. Fitted peaks are **peaks**, never components. The
-Mo(V)/Mo(VI) split of a broad, charged spectrum is not determined by the
-data: fix the chemical shift and tie the widths, or the share wanders with
-the lineshape.
+`spectroscopy/xps/fitting.py` does what CasaXPS did by hand; its lineshapes
+are the area-scaled kernels of `kernels.py`. Lineshapes:
+`GL(m)` (product), `SGL(m)` (sum) and `LA(a,n)` / `LA(a,b,n)` (asymmetric
+Lorentzian convolved with a Gaussian; α acts on the high binding energy side,
+the Gaussian FWHM is `w · n / gaussian_width_scale` with scale 500, our own
+mapping since CasaXPS does not publish one), parsed from the CasaXPS notation
+by `parse_lineshape`. The `fwhm` argument is the **true FWHM** of the curve
+for every shape, the number CasaXPS prints in its component table (for GL the
+shape parameter F is derived from it); checked against CasaXPS exports on
+2026-10-18, GL(30) reproduced to 0.3 % of the peak height. CasaXPS's
+one-number `LA(50)` is refused: its manual gives no formula and the curves it
+draws are no member of our LA family (closest LA(2,400) / LA(1.5,800), 0.5 %
+off). It is not a "50 % Gaussian-Lorentzian" blend, as a thesis using it claimed.
+
+`PeakSpec` carries bounds and the CasaXPS constraints: `position_offset_from`,
+`area_ratio_to` and `fwhm_ratio_to` each take `(other, value)` (fixed) or
+`(other, (low, high))` (the offset or ratio is itself fitted inside the
+range, CasaXPS's `#` constraint); `fwhm_equal_to` is the ratio 1. A ranged
+area ratio with low ≈ 0 caps a minor component below its main line.
+`doublet(...)` builds a spin-orbit pair with the nominal values of `DOUBLETS`
+(Mo 3d 3.13 eV 2:3, Ti 2p 5.7 eV 1:2, Pd 3d 5.26 eV 2:3); for Ti 2p give the
+2p1/2 a width ratio range, it is 1.4 to 1.9 times broader (Coster-Kronig).
+`fit_peaks` on arrays (bounded least squares, standard errors from the
+Jacobian, propagated through ranged relations); `FitResult.aic` / `.bic`
+decide whether an extra component earns its place (`bic` drop > 10).
+`XPSData.subtract_background(..., average_eV=)` averages each Shirley end
+point over that energy (CasaXPS's "average width"); `XPSData.fit_peaks`
+passes it on, subtracts the background in the window, fits, and stores the
+result in the layout of a CasaXPS export (`peaks` on top of the background,
+`envelope`, coordinates `peak_name`, `peak_position_eV`, `peak_fwhm_eV`,
+`peak_area`, `peak_area_fraction`, `peak_lineshape`, `attrs["fit"]` with
+chi-square, AIC, BIC); `peak_table()` reads either source. Fitted peaks are
+**peaks**, never components.
+
+The CasaXPS export reader (`casaxps.py`) read only the first peak of a
+multi-peak table until 2026-10-18 (a row with four or more cells was taken
+for alternating key/value pairs). The `Area` CasaXPS prints is in CPS·eV,
+while the curves of the export are counts; fractions are unaffected.
 
 ### Logging survives SpectroChemPy
 

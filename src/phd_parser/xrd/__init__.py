@@ -1,4 +1,4 @@
-from phd_parser.xrd.analysis import ReflectionFit, fit_reflection, pseudo_voigt, scherrer
+from phd_parser.xrd.analysis import ReflectionFit, fit_reflection, scherrer
 from phd_parser.xrd.bruker import read_xy
 from phd_parser.xrd.core import XRDData
 from phd_parser.xrd.pdf_card import ReferenceCard, read_pdf_card
@@ -12,6 +12,5 @@ __all__ = [
     "read_xy_e1290",
     "read_pdf_card",
     "fit_reflection",
-    "pseudo_voigt",
     "scherrer",
 ]

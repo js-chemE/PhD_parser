@@ -4,25 +4,12 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from phd_parser.xrd import ReferenceCard, ReflectionFit, XRDData, fit_reflection, pseudo_voigt, scherrer
-from phd_parser.xrd.analysis import gaussian, lorentzian, pseudo_voigt_area
+from phd_parser.kernels import gaussian, pseudo_voigt, pseudo_voigt_area
+from phd_parser.xrd import ReferenceCard, ReflectionFit, XRDData, fit_reflection, scherrer
 
 HERE = Path(__file__).parent
 FIXTURE = HERE / "bruker_SK0003_MoO3-12pct-TiO2_12-28deg.xy"
 ANATASE = HERE / "PDF 78-2486_TiO2-Anatase.txt"
-
-
-def test_pseudo_voigt_limits_and_width():
-    # wide enough that the Lorentzian tails hold less than 0.2 % of the area
-    x = np.linspace(-200.0, 200.0, 400001)
-    np.testing.assert_allclose(pseudo_voigt(x, 0.0, 1.0, 2.0, eta=0.0), gaussian(x, 0.0, 1.0, 2.0))
-    np.testing.assert_allclose(pseudo_voigt(x, 0.0, 1.0, 2.0, eta=1.0), lorentzian(x, 0.0, 1.0, 2.0))
-    for eta in (0.0, 0.3, 1.0):
-        y = pseudo_voigt(x, 0.0, 1.0, 2.0, eta=eta)
-        assert y.max() == pytest.approx(2.0)
-        above_half = x[y >= 1.0]
-        assert above_half.max() - above_half.min() == pytest.approx(1.0, abs=1e-3)
-        assert np.trapezoid(y, x) == pytest.approx(pseudo_voigt_area(1.0, 2.0, eta), rel=0.02)
 
 
 def test_fit_recovers_a_mock_line_on_a_sloped_background():

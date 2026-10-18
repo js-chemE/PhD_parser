@@ -4,7 +4,8 @@
 reads), ``avantage`` the Thermo Avantage ``.avg`` text dump, ``casaxps`` the
 tab-separated export of a CasaXPS fit. ``XPSData.from_vamas``,
 ``from_avantage_avg`` and ``from_casaxps_export`` build the data class from
-them.
+them. ``fitting`` holds the CasaXPS-style peak fit; its lineshapes are the
+kernels of :mod:`phd_parser.kernels`.
 """
 
 import phd_parser.spectroscopy.xps.avantage as avantage
@@ -14,4 +15,5 @@ from phd_parser.spectroscopy.xps.core import XPSData
 
 __all__ = ["fitting", "PeakSpec", "doublet", "DOUBLETS", "parse_lineshape", "fit_peaks", "XPSData", "avantage", "casaxps", "vamas"]
 from phd_parser.spectroscopy.xps import fitting
-from phd_parser.spectroscopy.xps.fitting import PeakSpec, doublet, DOUBLETS, parse_lineshape, fit_peaks
+from phd_parser.spectroscopy.xps.fitting import PeakSpec, doublet, DOUBLETS, fit_peaks
+from phd_parser.kernels import parse_lineshape

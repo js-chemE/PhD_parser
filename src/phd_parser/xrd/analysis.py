@@ -11,112 +11,11 @@ from typing import Any, Literal, Optional
 import numpy as np
 import numpy.typing as npt
 
+from phd_parser.kernels import gaussian, lorentzian, pseudo_voigt, pseudo_voigt_area
+
 logger = logging.getLogger(__name__)
 
 Lineshape = Literal["pseudo_voigt", "gaussian", "lorentzian"]
-
-_GAUSSIAN_AREA_FACTOR = float(np.sqrt(np.pi / (4.0 * np.log(2.0))))  # area / (height * fwhm)
-_LORENTZIAN_AREA_FACTOR = float(np.pi / 2.0)
-
-
-def gaussian(
-    x: npt.NDArray[np.float64], center: float, fwhm: float, height: float
-) -> npt.NDArray[np.float64]:
-    """Gaussian line of a given full width at half maximum and height.
-
-    Parameters
-    ----------
-    x : ndarray of float
-        Points to evaluate at.
-    center : float
-        Position of the maximum.
-    fwhm : float
-        Full width at half maximum, in the units of ``x``.
-    height : float
-        Value at the maximum.
-
-    Returns
-    -------
-    ndarray of float
-        The line at ``x``.
-    """
-    sigma = fwhm / (2.0 * np.sqrt(2.0 * np.log(2.0)))
-    return height * np.exp(-0.5 * ((x - center) / sigma) ** 2)
-
-
-def lorentzian(
-    x: npt.NDArray[np.float64], center: float, fwhm: float, height: float
-) -> npt.NDArray[np.float64]:
-    """Lorentzian line of a given full width at half maximum and height.
-
-    Parameters
-    ----------
-    x : ndarray of float
-        Points to evaluate at.
-    center : float
-        Position of the maximum.
-    fwhm : float
-        Full width at half maximum, in the units of ``x``.
-    height : float
-        Value at the maximum.
-
-    Returns
-    -------
-    ndarray of float
-        The line at ``x``.
-    """
-    half_width = fwhm / 2.0
-    return height / (1.0 + ((x - center) / half_width) ** 2)
-
-
-def pseudo_voigt(
-    x: npt.NDArray[np.float64],
-    center: float,
-    fwhm: float,
-    height: float,
-    eta: float = 0.5,
-) -> npt.NDArray[np.float64]:
-    """Pseudo-Voigt line: ``eta`` Lorentzian plus ``1 - eta`` Gaussian of one width and height.
-
-    Parameters
-    ----------
-    x : ndarray of float
-        Points to evaluate at.
-    center : float
-        Position of the maximum.
-    fwhm : float
-        Full width at half maximum shared by both parts, in the units of ``x``.
-    height : float
-        Value at the maximum.
-    eta : float, optional
-        Lorentzian fraction, 0 (Gaussian) to 1 (Lorentzian); default 0.5.
-
-    Returns
-    -------
-    ndarray of float
-        The line at ``x``.
-    """
-    return eta * lorentzian(x, center, fwhm, height) + (1.0 - eta) * gaussian(x, center, fwhm, height)
-
-
-def pseudo_voigt_area(fwhm: float, height: float, eta: float) -> float:
-    """Integrated area of a pseudo-Voigt line.
-
-    Parameters
-    ----------
-    fwhm : float
-        Full width at half maximum.
-    height : float
-        Value at the maximum.
-    eta : float
-        Lorentzian fraction.
-
-    Returns
-    -------
-    float
-        ``height * fwhm * (eta * pi / 2 + (1 - eta) * sqrt(pi / (4 ln 2)))``.
-    """
-    return float(height * fwhm * (eta * _LORENTZIAN_AREA_FACTOR + (1.0 - eta) * _GAUSSIAN_AREA_FACTOR))
 
 
 @dataclass

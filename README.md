@@ -74,7 +74,10 @@ raw files --> parser module --> (vendor converter) --> core data class --> your 
 
 **1. One subpackage per technique.** `spectroscopy` (with the `infrared`,
 `raman` and `xps` readers inside), `massspec`, `labview`, `xrd`, `tga`,
-`tpr`, `physisorption`, `chromatography`. Inside it sits the core class in `core.py`
+`tpr`, `physisorption`, `chromatography`. Peak shapes are not technique
+specific and sit in one top-level module, `phd_parser.kernels` (Gaussian,
+Lorentzian, pseudo-Voigt; CasaXPS `GL`, `SGL`, `LA`), which every fit
+imports. Inside each subpackage sits the core class in `core.py`
 and one parser module per instrument or software (`omnic.py`, `quadstar.py`,
 `b67box5.py`). Where a technique has several manufacturers, each gets its own
 subfolder (`chromatography/agilent/`), so a second vendor is added next to the
@@ -728,13 +731,13 @@ The parsers are `phd_parser.spectroscopy.xps.vamas.read_vamas` (NORM / REGULAR f
 `XPSData.fit_peaks` does what CasaXPS did by hand and stores the result the
 way a CasaXPS export is stored (`peaks` on top of the background, `envelope`,
 the peak coordinates and `attrs["fit"]`), so `peak_table()` reads a fit made
-here and an imported one alike. The tools live in
-`phd_parser.spectroscopy.xps.fitting`:
+here and an imported one alike. The fit lives in
+`phd_parser.spectroscopy.xps.fitting`, the lineshapes in `phd_parser.kernels`:
 
-- **Lineshapes in CasaXPS notation**, parsed by `parse_lineshape`: `GL(m)` (Gaussian-Lorentzian product), `SGL(m)` (sum) and `LA(α, β, n)` (asymmetric Lorentzian convolved with a Gaussian; α acts on the high binding energy side). CasaXPS does not publish how `n` maps onto the Gaussian width, so the mapping used here is our own (`gaussian_width_scale`, 500).
-- **`PeakSpec`**: start values, bounds and CasaXPS-style constraints to another peak: `position_offset_from`, `area_ratio_to`, `fwhm_equal_to`.
+- **Lineshapes in CasaXPS notation** (`phd_parser.kernels`), parsed by `parse_lineshape`: `GL(m)` (Gaussian-Lorentzian product), `SGL(m)` (sum) and `LA(α, β, n)` (asymmetric Lorentzian convolved with a Gaussian; α acts on the high binding energy side). CasaXPS does not publish how `n` maps onto the Gaussian width, so the mapping used here is our own (`gaussian_width_scale`, 500).
+- **`PeakSpec`**: start values, bounds and CasaXPS-style constraints to another peak: `position_offset_from`, `area_ratio_to`, `fwhm_ratio_to` (each fixed, or a `(low, high)` range that is fitted, CasaXPS's `#`), `fwhm_equal_to`.
 - **`doublet(...)`** builds both spin-orbit lines at once; `DOUBLETS` holds the nominal splittings and area ratios (Mo 3d 3.13 eV 2:3, Ti 2p 5.7 eV 1:2, Pd 3d 5.26 eV 2:3).
-- **`fit_peaks`** on plain arrays: bounded least squares, with standard errors from the Jacobian.
+- **`fit_peaks`** on plain arrays: bounded least squares, with standard errors from the Jacobian; `FitResult.bic` decides whether an extra component earns its place.
 
 ```python
 from phd_parser.spectroscopy.xps import DOUBLETS, doublet
@@ -827,7 +830,7 @@ co = gc.get_evolution("CO", detector="tcd")      # amount vs injection, with tos
 - **Constructors**: `from_bruker_xy` (Bruker D8 Advance-ECO, the DIFFRAC.EVA `.xy` export with its header line), `from_e1290` (the same two columns without the header; kept for old notebooks, the name is historical)
 - **Accessors**: `angle`, cached `angle_rad`, `theta_deg`, `theta_rad`; `d_spacing(wavelength_angstrom)` and `q_vector(wavelength_angstrom)` via Bragg's law (Cu Kα₁ is 1.5406 Å); `values`, `ndim`, `shape`, `timestamps`, `metadata`
 - **Processing**: `sort`, `select_angle_range`, `smooth_savgol`, `smooth_gaussian` (sigma in degrees), `smooth_moving`
-- **Analysis**: `fit_reflection(two_theta_deg, window_deg, lineshape)` (one pseudo-Voigt, Gaussian or Lorentzian line plus a linear background; returns a `ReflectionFit`), `scherrer_size(two_theta_deg, fwhm_deg, instrumental_fwhm_deg=...)` (crystallite size in nm; the instrumental width is subtracted in quadrature, the wavelength comes from the file's anode and falls back to 1.5406 Å)
+- **Analysis**: `fit_reflection(two_theta_deg, window_deg, lineshape)` (one pseudo-Voigt, Gaussian or Lorentzian line from `phd_parser.kernels` plus a linear background; returns a `ReflectionFit`), `scherrer_size(two_theta_deg, fwhm_deg, instrumental_fwhm_deg=...)` (crystallite size in nm; the instrumental width is subtracted in quadrature, the wavelength comes from the file's anode and falls back to 1.5406 Å)
 
 ```python
 xrd = pp.XRDData.from_bruker_xy(xy_file)                 # anode, operator, time per step in xrd.metadata

@@ -5,6 +5,7 @@ core classes reachable from the package root: ``pp.GCData`` is
 ``pp.chromatography.GCData``. See the README for the design.
 """
 
+import phd_parser.kernels as kernels
 import phd_parser.spectroscopy as spectroscopy
 import phd_parser.xrd as xrd
 import phd_parser.tga as tga
@@ -33,7 +34,7 @@ from phd_parser.pipeline import Pipeline, Step
 
 __all__ = [
     # subpackages
-    "logging", "spectroscopy", "xrd", "tga", "tpr", "massspec", "physisorption",
+    "kernels", "logging", "spectroscopy", "xrd", "tga", "tpr", "massspec", "physisorption",
     "labview", "chromatography", "naming", "pipeline",
     # core data containers and the spectroscopy readers
     "GCData", "IRData", "LVData", "MSData", "PhysisorptionData", "RamanData", "SpectroscopyData",

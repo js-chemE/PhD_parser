@@ -1,4 +1,4 @@
-"""CasaXPS-style peak fitting: lineshapes, constraints, the Mo 3d fixture and the stored result."""
+"""CasaXPS-style peak fitting: constraints, the Mo 3d fixture and the stored result."""
 from pathlib import Path
 
 import numpy as np
@@ -6,80 +6,13 @@ import pytest
 
 from phd_parser.spectroscopy.xps import XPSData
 from phd_parser.spectroscopy.xps import fitting
-from phd_parser.spectroscopy.xps.fitting import (
-    DOUBLETS,
-    Lineshape,
-    PeakSpec,
-    doublet,
-    fit_peaks,
-    gaussian_lorentzian_product,
-    gaussian_lorentzian_sum,
-    lorentzian_asymmetric,
-    parse_lineshape,
-)
+from phd_parser.kernels import gaussian_lorentzian_product, parse_lineshape
+from phd_parser.spectroscopy.xps.fitting import DOUBLETS, PeakSpec, doublet, fit_peaks
 
 FIXTURES = Path(__file__).parent
 AVG_MO3D = FIXTURES / "avantage" / "Mo3d Scan.avg"
 AVG_C1S = FIXTURES / "avantage" / "C1s Scan.avg"
 CASA_DOUBLET = FIXTURES / "casaxps_export_doublet.txt"
-
-FINE = np.linspace(-80.0, 80.0, 320_001)
-
-
-@pytest.mark.parametrize("text", ["GL(30)", "SGL(30)", "LA(1.53,243)", "LA(1.2,1.5,100)", "GL(0)", "GL(100)"])
-def test_every_lineshape_integrates_to_its_area(text):
-    curve = parse_lineshape(text).evaluate(FINE, 0.0, 1.0, 2.5)
-    # the Lorentzian tails beyond ±80 widths hold a few tenths of a percent at most
-    assert np.trapezoid(curve, FINE) == pytest.approx(2.5, rel=5e-3)
-
-
-def test_gaussian_lorentzian_forms_match_casaxps_definitions():
-    reduced = FINE
-    gaussian = np.exp(-4 * np.log(2) * reduced**2)
-    lorentzian = 1 / (1 + 4 * reduced**2)
-    product = gaussian_lorentzian_product(FINE, 0.0, 1.0, 1.0, 0.3)
-    total = gaussian_lorentzian_sum(FINE, 0.0, 1.0, 1.0, 0.3)
-    expected_product = gaussian**0.7 / (1 + 4 * 0.3 * reduced**2)
-    expected_sum = 0.7 * gaussian + 0.3 * lorentzian
-    np.testing.assert_allclose(product / product.max(), expected_product, atol=1e-12)
-    np.testing.assert_allclose(total / total.max(), expected_sum, atol=1e-12)
-    # the sum has the FWHM F, the product is a little narrower (CasaXPS's definition)
-    half = np.abs(FINE[total >= total.max() / 2])
-    assert 2 * half.max() == pytest.approx(1.0, abs=1e-3)
-    half = np.abs(FINE[product >= product.max() / 2])
-    assert 2 * half.max() < 1.0
-
-
-def test_lorentzian_asymmetric_is_normalised_and_tails_to_high_binding_energy():
-    symmetric = lorentzian_asymmetric(FINE, 0.0, 1.0, 1.0, 1.53, 1.53, 243)
-    assert np.trapezoid(symmetric, FINE) == pytest.approx(1.0, rel=2e-3)
-    np.testing.assert_allclose(symmetric, symmetric[::-1], atol=1e-6)
-    half = np.abs(FINE[symmetric >= symmetric.max() / 2])
-    assert 2 * half.max() == pytest.approx(1.0, abs=2e-3)  # fwhm is the width of the final curve
-    # alpha < beta: the smaller exponent, on the high binding energy side, gives the longer tail
-    asymmetric = lorentzian_asymmetric(FINE, 0.0, 1.0, 1.0, 1.0, 3.0, 50)
-    assert np.trapezoid(asymmetric, FINE) == pytest.approx(1.0, rel=1e-2)
-    at = lambda x: float(np.interp(x, FINE, asymmetric))  # noqa: E731
-    assert at(2.0) > 10 * at(-2.0)
-    assert at(0.75) > at(-0.75)
-    # no convolution for n = 0, and an exponent at or below 1/2 has no finite area
-    bare = lorentzian_asymmetric(np.array([0.0, 0.5]), 0.0, 1.0, 1.0, 1.0, 1.0, 0)
-    assert bare[1] == pytest.approx(bare[0] / 2)
-    with pytest.raises(ValueError):
-        lorentzian_asymmetric(FINE, 0.0, 1.0, 1.0, 0.5, 1.0, 0)
-
-
-def test_parse_lineshape_round_trips_the_casaxps_notation():
-    for text in ("GL(30)", "SGL(30)", "LA(1.53,243)", "LA(1.2,1.5,100)"):
-        shape = parse_lineshape(text)
-        assert shape.casaxps == text and str(shape) == text
-        assert parse_lineshape(shape) is shape
-    assert parse_lineshape("gl(30)") == Lineshape("GL", lorentzian_fraction=0.3)
-    la = parse_lineshape("LA(1.53,243)")
-    assert la.kind == "LA" and la.alpha == la.beta == 1.53 and la.gaussian_width_index == 243
-    for bad in ("Voigt(30)", "GL(30,40)", "LA(0.5)", "GL(130)", "LA(0.4,1,10)"):
-        with pytest.raises(ValueError):
-            parse_lineshape(bad)
 
 
 def test_single_gl_peak_is_recovered_within_one_percent():
@@ -231,17 +164,10 @@ def test_netcdf_round_trip_keeps_the_fit(tmp_path):
 # ranged relations, width ratio, LA(a), information criteria, end-point averaging
 # ----------------------------------------------------------------
 
-def test_la_with_one_number_is_la_a_a_0():
-    shape = fitting.parse_lineshape("LA(50)")
-    assert shape.alpha == shape.beta == 50 and shape.gaussian_width_index == 0 and shape.casaxps == "LA(50)"
-    energy = np.linspace(-10, 10, 4001)
-    assert np.trapezoid(shape.evaluate(energy, 0.0, 1.5, 2.0), energy) == pytest.approx(2.0, rel=1e-3)
-
-
 def test_ranged_offset_and_width_ratio_are_recovered():
     energy = np.linspace(450, 472, 1101)
-    truth = (fitting.gaussian_lorentzian_product(energy, 458.6, 1.2, 100.0, 0.3)
-             + fitting.gaussian_lorentzian_product(energy, 458.6 + 5.72, 1.2 * 1.45, 50.0, 0.3))
+    truth = (gaussian_lorentzian_product(energy, 458.6, 1.2, 100.0, 0.3)
+             + gaussian_lorentzian_product(energy, 458.6 + 5.72, 1.2 * 1.45, 50.0, 0.3))
     specs = [
         fitting.PeakSpec("2p3/2", 458.4, 1.0),
         fitting.PeakSpec("2p1/2", 464.0, 1.0, position_offset_from=("2p3/2", (5.5, 5.9)),
@@ -258,7 +184,7 @@ def test_ranged_offset_and_width_ratio_are_recovered():
 def test_bic_prefers_the_true_number_of_peaks():
     rng = np.random.default_rng(1)
     energy = np.linspace(225, 240, 751)
-    truth = fitting.gaussian_lorentzian_product(energy, 232.6, 1.4, 100.0, 0.3) + rng.normal(0, 0.05, energy.size)
+    truth = gaussian_lorentzian_product(energy, 232.6, 1.4, 100.0, 0.3) + rng.normal(0, 0.05, energy.size)
     one = fitting.fit_peaks(energy, truth, [fitting.PeakSpec("a", 232.5, 1.2)])
     two = fitting.fit_peaks(energy, truth, [fitting.PeakSpec("a", 232.5, 1.2), fitting.PeakSpec("b", 230.0, 1.2, area=1.0)])
     assert one.bic < two.bic
