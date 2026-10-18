@@ -37,7 +37,7 @@ from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
 logger = logging.getLogger(__name__)
 
-STANDARD_CONVENTION_PATH = Path(__file__).with_name("standard.json")
+STANDARD_CONVENTION_PATH = Path(__file__).with_name("naming_species_standard.json")
 
 _IGNORED_CHARACTERS = re.compile(r"[\s\-_.]+")
 
@@ -156,7 +156,7 @@ class SpeciesConvention(BaseModel):
 
     @classmethod
     def standard(cls) -> "SpeciesConvention":
-        """Return the standard convention of the phd_* packages (``naming/species/standard.json``)."""
+        """Return the standard convention of the phd_* packages (``naming/species/naming_species_standard.json``)."""
         return _standard()
 
     def to_json(self, path: Union[str, Path]) -> None:

@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Tuple, Dict, Any, List, Optional, Literal
+from typing import Dict, Any, Optional
 import pandas as pd
 import numpy as np
 
@@ -11,15 +11,8 @@ from enum import IntEnum
 import logging
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
-__all__ = ["read_export_txt", "read_export_wdf", "WDFResult"]
-
-# def _convert_value(value: str) -> Any:
-#     try:
-#         return float(value)
-#     except ValueError:
-#         return value
+__all__ = ["read_export_txt", "read_export_wdf", "wdf_metadata", "WDFResult"]
 
 # ================================================
 # wdf export format (WiRe)
@@ -28,6 +21,7 @@ __all__ = ["read_export_txt", "read_export_wdf", "WDFResult"]
 # Enumerations  (from SpectroChemPy / py-wdf-reader)
 
 class MeasurementType(IntEnum):
+    """Kind of measurement recorded in a WDF file (header field)."""
     Unspecified = 0
     Single      = 1
     Series      = 2
@@ -38,6 +32,7 @@ class MeasurementType(IntEnum):
 
 
 class ScanType(IntEnum):
+    """How the spectra of a WDF file were acquired (header field)."""
     Unspecified    = 0
     Static         = 1
     Continuous     = 2
@@ -139,6 +134,7 @@ class UnitType(IntEnum):
 
 
 class DataType(IntEnum):
+    """What a row of the WDF ORGN block holds (stage position, time, checksum, ...)."""
     Arbitrary   = 0
     RamanShift  = 1
     Intensity   = 2
@@ -156,6 +152,7 @@ class DataType(IntEnum):
 
 
 class MapAreaType(IntEnum):
+    """Layout flags of a WDF map (WMAP block)."""
     Unspecified       = 0
     RandomPoints      = 1
     ColumnMajor       = 2
@@ -172,7 +169,7 @@ class _Off(IntEnum):
     # Generic block header
     block_name  = 0x00   # 4 bytes ascii
     block_uid   = 0x04   # int32
-    block_size  = 0x08   # int64  (note: MATLAB used int32 — this is the spec)
+    block_size  = 0x08   # int64  (note: MATLAB used int32, this is the spec)
     block_data  = 0x10   # first data byte after the 16-byte header
 
     # Within WDF1 block
@@ -197,7 +194,7 @@ class _Off(IntEnum):
 # Result dataclass
 
 @dataclass
-class WDFResult(BaseException):
+class WDFResult:
     """Container for all data extracted from a Renishaw ``.wdf`` file.
 
     Populated by :func:`read_export_wdf`.  Fields cover core spectral data,
@@ -362,7 +359,7 @@ def _parse_orgn(fid, blocks: dict, result: WDFResult):
     # Each row: int32 type_flag | int32 unit | 16-byte utf8 title | capacity × double
     row_size = _Off.origin_incr + 8 * capacity
 
-    x_vals = y_vals = z_vals = times = None
+    x_vals = y_vals = z_vals = None
 
     curpos = pos + _Off.origin_info
     for _ in range(n_other):
@@ -380,20 +377,20 @@ def _parse_orgn(fid, blocks: dict, result: WDFResult):
             curpos += row_size
             continue
 
-        unit_int = _read_uint32(fid)
+        _read_uint32(fid)
         _read_utf8(fid, 0x10)  # annotation (16 bytes)
 
         if datatype == DataType.Time:
-            vals = np.array([_read_uint64(fid) for _ in range(count)])
-            try:
-                dts = [_windows_time_to_datetime(v) for v in vals]
-                result.acq_time = dts[0]
-                t0 = dts[0]
-                result.times = np.array([(d - t0).total_seconds() for d in dts])
-            except Exception:
-                pass
+            # Windows FILETIME per spectrum: 100 ns ticks, so seconds since the first one
+            vals = np.frombuffer(fid.read(8 * count), dtype="<u8")
+            if vals.size:
+                try:
+                    result.acq_time = _windows_time_to_datetime(int(vals[0]))
+                except (OverflowError, ValueError, OSError):
+                    result.acq_time = None
+                result.times = (vals.astype(np.float64) - float(vals[0])) / 1e7
         else:
-            vals = np.array([_read_double(fid) for _ in range(count)])
+            vals = np.frombuffer(fid.read(8 * count), dtype="<f8").astype(np.float64)
             if datatype == DataType.X:
                 x_vals = vals
             elif datatype == DataType.Y:
@@ -420,10 +417,10 @@ def _parse_wmap(fid, blocks: dict, result: WDFResult):
     _read_int32(fid)          # unknown
     x_offset    = _read_float(fid)
     y_offset    = _read_float(fid)
-    z_offset    = _read_float(fid)
+    _read_float(fid)
     x_step      = _read_float(fid)
     y_step      = _read_float(fid)
-    z_step      = _read_float(fid)
+    _read_float(fid)
     x_size      = _read_int32(fid)
     y_size      = _read_int32(fid)
 
@@ -535,11 +532,12 @@ def read_export_txt(file_path: str | Path) -> Dict[str, Any]:
             Provenance metadata containing ``"instrument"``, ``"folder"``,
             and ``"filename"``.
     """
-    data = np.loadtxt(file_path, dtype=str, encoding="utf-8", skiprows=1)
+    data = np.loadtxt(file_path, encoding="utf-8", skiprows=1, ndmin=2)
+    if data.shape[1] != 2:
+        raise ValueError(f"Expected two columns (Raman shift, intensity) in {file_path}, got {data.shape[1]}")
 
-    df = pd.DataFrame(data[1:], columns=["wavenumber", "intensity"])
-    df["wavenumber"] = df["wavenumber"].astype(float, errors="ignore") # this is actually raman shift in cm-1
-    df["intensity"] = df["intensity"].astype(float, errors="ignore")
+    # the first column is the Raman shift in cm^-1
+    df = pd.DataFrame(data, columns=["wavenumber", "intensity"])
 
     meta = {
         "instrument": "Renishaw",
@@ -549,4 +547,44 @@ def read_export_txt(file_path: str | Path) -> Dict[str, Any]:
     return {
         "data": df,
         "meta": meta,
+    }
+
+
+def wdf_metadata(result: WDFResult) -> Dict[str, Any]:
+    """The header fields of a WDF file as a plain dict, without the arrays.
+
+    This is what a ``SpectroscopyData`` keeps as ``metadata``: it is
+    JSON-safe, so it survives a NetCDF round trip, unlike the
+    :class:`WDFResult` itself.
+
+    Parameters
+    ----------
+    result : WDFResult
+        As returned by :func:`read_export_wdf`.
+
+    Returns
+    -------
+    dict
+        Instrument, title, user, file name, acquisition time (ISO string),
+        excitation wavenumber in cm^-1, measurement and scan type, units,
+        map geometry, and every scalar of the raw header.
+    """
+    scalars = {
+        key: value for key, value in result.meta.items()
+        if value is None or isinstance(value, (bool, int, float, str))
+    }
+    return {
+        "instrument": "Renishaw",
+        "title": result.title,
+        "username": result.username,
+        "source_filename": result.filename,
+        "acquisition_time": result.acq_time.isoformat() if result.acq_time is not None else None,
+        "excitation_wavenumber_per_cm": float(result.laser_cm1),
+        "measurement_type": result.measurement_type.name,
+        "scan_type": result.scan_type.name,
+        "x_unit": result.x_unit.name,
+        "data_unit": result.data_unit.name,
+        "height": int(result.height),
+        "width": int(result.width),
+        **scalars,
     }

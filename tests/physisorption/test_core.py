@@ -78,7 +78,7 @@ def test_get_quantity_adsorbed_tolerance_raises():
 
 
 # ----------------------------------------------------------------
-# from_arrays — minimal, instrument-agnostic construction
+# from_arrays: minimal, instrument-agnostic construction
 # ----------------------------------------------------------------
 
 def test_from_arrays_basic():

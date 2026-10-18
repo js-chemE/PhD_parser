@@ -4,11 +4,9 @@ from typing import List, Tuple
 import logging
 from pathlib import Path
 
-from phd_parser.tga.core import TGAData
 import re
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 # --------------------------------------
 # Read TGA E2290
@@ -94,7 +92,7 @@ def extract_lines(filepath: str | Path) -> List[str]:
     if not isinstance(filepath, Path):
         filepath = Path(filepath)
 
-    with open(filepath, "r") as f:
+    with open(filepath, "r", encoding="latin-1") as f:
         lines = f.readlines()
     return lines
 

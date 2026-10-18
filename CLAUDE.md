@@ -27,7 +27,7 @@ block, so any of the three orients you.
 | `000 AIOS/Maps/Vault Map.md` | folder structure and the AI tag system |
 | `000 AIOS/Maps/Skills Map.md` | index of the skills the AI can run on his behalf |
 | `Atlas.md` | topic map of the subject-matter notes |
-| `000 AIOS/History/` | where AI-written notes go |
+| `000 AIOS/History/` | where AI-written notes go (the review reports of this repo included) |
 | `000 AIOS/Skills/<name>/` | one self-contained folder per skill: the note is the contract, the assets beside it are the implementation |
 
 **Read those core notes from disk, via the shell, every time.** `me.md` asks for
@@ -63,7 +63,10 @@ They apply to work in this repo as well, so read it rather than guessing.
 ## Commands
 
 ```bash
-# Install in editable mode (run once)
+# Set up the environment (runtime deps, the optional backends and the dev tools)
+uv sync --group dev
+
+# Install in editable mode into an existing environment
 uv pip install -e .
 
 # Run all tests
@@ -74,9 +77,16 @@ pytest tests/spectroscopy/raman/test_raman_data.py
 
 # Run a single test by name
 pytest tests/spectroscopy/raman/test_raman_data.py::test_function_name
+
+# Build the wheel and sdist (what the group installs)
+uv build
 ```
 
-The project uses `uv` for dependency management. The lockfile is `uv.lock`; add new dependencies via `uv add <package>`.
+The project uses `uv` for dependency management. The lockfile is `uv.lock`; add
+new dependencies via `uv add <package>`. SpectroChemPy, RamanSPy and `requests`
+are optional extras (`phd_parser[spectrochempy]`, `[ramanspy]`, `[url]`,
+`[all]`); import them lazily inside the function that needs them, never at
+module level.
 
 ## Docstrings
 
@@ -116,7 +126,12 @@ Rules:
 
 ## Naming
 
-Use full, unabbreviated names for fields, columns, properties, and variables — `relative_pressure`, not `p_rel`; `quantity_adsorbed`, not `q`; `temperature`, not `temp`. Established names of the technique or method itself are fine to keep as-is (`BET`, `BJH`, `XRD`, `IR`, `MS`, `TGA`) — these are not abbreviations of a longer phrase, they're what the method is actually called.
+Use full, unabbreviated names for fields, columns, properties, and variables:
+`relative_pressure`, not `p_rel`; `quantity_adsorbed`, not `q`; `temperature`,
+not `temp`; `wavenumber_to_si_factor`, not `wavenumber_2SI_factor`. Established
+names of the technique or method itself are fine to keep as-is (`BET`, `BJH`,
+`XRD`, `IR`, `MS`, `TGA`): these are not abbreviations of a longer phrase, they
+are what the method is actually called.
 
 ### Species, not components
 
@@ -134,17 +149,24 @@ is an explicit `rename_species()` step, never done silently on read.
 
 ### Combining two datasets
 
-Three different operations, three different names — never mix them up:
+Three different operations, three different names, never mixed up:
 
-- **extend** — joining along the energy-related axis (wavenumber, Raman shift, 2θ, m/z), i.e. widening the spectral range.
-- **merge** — joining along the *other* axis (scan/time), i.e. appending more scans of the same spectral range. `IRData.merge` / `IRData.merge_all`.
-- **vstack** — taking already 2-D data and stacking it along a *new*, additional dimension.
+- **extend**: joining along the energy-related axis (wavenumber, Raman shift, 2θ, m/z), i.e. widening the spectral range.
+- **merge**: joining along the *other* axis (scan/time), i.e. appending more scans of the same spectral range. `SpectroscopyData.merge` / `merge_all`, `GCData.merge`.
+- **vstack**: taking already 2-D data and stacking it along a *new*, additional dimension.
+
+### Selection methods
+
+A `method` argument that is handed to `xarray`'s `.sel` offers exactly what
+`.sel` has: `"nearest"`, `"pad"`, `"backfill"`. Never advertise `"linear"`
+there; linear interpolation is `.interp`, a different operation, and gets its
+own method if it is ever needed.
 
 ## Text & plot style conventions
 
 Applies to code comments, docstrings, printed/repr output, and figures (titles, axis labels, tick labels, legends, annotations). The same rule set lives in `me.md` in the Obsidian vault and in the sibling repos' `CLAUDE.md` files (`phd_execute`, `phd_ui`, `phd_models`); keep them in sync if this changes.
 
-- No em dashes ("—"). Use a comma, period, or separate sentence instead.
+- No em dashes ("—"). Use a comma, colon, period, or separate sentence instead. En dashes in numeric ranges are fine (`780–900 cm⁻¹`).
 - Capitalize only in headers/titles, proper nouns, or where otherwise grammatically correct. Axis labels, tick labels, legend entries, and other in-plot text are lowercase by default.
 - Axis labels use the format `quantity / unit` (the quantity divided by its unit), e.g. `time / s`, `temperature / K`. If the quantity is dimensionless, use an en dash "–" in place of the unit, e.g. `fraction / –`.
 - Units and exponents use power notation, not slashes: `m^2 s^-1`, `mol m^-3 s^-1`, not `m^2/s`, `mol/m^3/s`. Applies in code, plots, printed output, and LaTeX math. In Obsidian notes, `\frac{}{}` fraction style is fine in math environments; code and plots still use the power form.
@@ -162,49 +184,52 @@ Each instrument type lives in its own subpackage under `src/phd_parser/`:
 |---|---|---|
 | `labview` | `LVData` | `xr.Dataset` |
 | `xrd` | `XRDData` | `xr.DataArray` |
-| `spectroscopy` | `SpectroscopyData`; thin `IRData` (`infrared/`) and `RamanData` (`raman/`); `xps/` reads files only | `xr.Dataset` |
+| `spectroscopy` | `SpectroscopyData`, the one class for IR and Raman; `IRData` (`infrared/readers.py`) and `RamanData` (`raman/readers.py`) are reader namespaces, not classes; `XPSData` (`xps/core.py`) for photoelectron spectra | `xr.Dataset` |
 | `tga` | `TGAData` | two NumPy arrays |
 | `massspec` | `MSData` | `xr.Dataset` |
-| `physisorption` | `PhysisorptionData` | `xr.Dataset` |
+| `physisorption` | `PhysisorptionData` | `xr.DataArray` |
 | `chromatography` | `GCData` | `xr.Dataset` |
 | `naming` | *(no data class)*; `species` conventions and `rename_species` | JSON files |
 
 Every subpackage follows the same structure:
-- `core.py` — the Pydantic `BaseModel` wrapper class
+- `core.py`: the Pydantic `BaseModel` wrapper class
 - one parser module per instrument/software (e.g. `renishaw.py`, `omnic.py`, `quadstar.py`)
 
 ### Core design patterns
 
-**Pydantic `BaseModel` wrappers.** All core classes subclass `pydantic.BaseModel`. The xarray object is stored as a field; field validators handle construction-time checks.
+**Pydantic `BaseModel` wrappers.** All core classes subclass `pydantic.BaseModel`. The xarray object is stored as a field; field validators handle construction-time checks and never edit the object they are given (copy, then assign attributes).
 
-**Core classes are re-exported at the package root.** `pp.GCData is pp.chromatography.GCData`, and the same for every core class plus `rename_species` / `SpeciesConvention`. A new core class gets its line in `phd_parser/__init__.py` (and in `tests/test_top_level_imports.py`) in the same change.
+**Core classes are re-exported at the package root.** `pp.GCData is pp.chromatography.GCData`, and the same for every core class plus `IRData` / `RamanData` (the spectroscopy readers) and `rename_species` / `SpeciesConvention`. A new core class gets its line in `phd_parser/__init__.py` (and in `tests/test_top_level_imports.py`) in the same change.
 
-**Immutable processing API.** Every processing method (smoothing, baseline correction, normalization, selection) returns a *new* instance rather than mutating `self`. Use chaining: `ir.normalise_max().smooth()`.
+**Immutable processing API.** Every processing method (smoothing, baseline correction, normalization, selection) returns a *new* instance rather than mutating `self`. Use chaining: `ir.normalise_max().smooth_savgol()`.
 
-**Classmethod constructors, not `__init__`.** Data is always loaded via a `from_*` classmethod (e.g. `RamanData.from_renishaw_wdf`, `MSData.from_quadstar_asc`). Each classmethod calls the corresponding parser, then passes the parsed dict into the model.
+**Classmethod constructors, not `__init__`.** Data is always loaded via a `from_*` classmethod (e.g. `RamanData.from_renishaw_wdf`, `MSData.from_quadstar_asc`). Each classmethod calls the corresponding parser, then passes the parsed dict into the model. Everything after the data arguments is keyword-only.
 
-**Parser convention.** Parser modules expose one or more functions that return a plain dict with at minimum a `"data"` key (an xarray object or dict of arrays) and a `"meta"` key (a dict of provenance metadata). Parsers do not return model instances.
+**Parser convention.** Parser modules expose one or more functions that return a plain dict with at minimum a `"data"` key (an xarray object or dict of arrays) and a `"meta"` key (a dict of provenance metadata). Parsers do not return model instances and do not interpret (no normalising on read). A parser module never sets the level of its logger; `phd_parser.logging.setup_logger` owns that.
 
-**Cached properties for derived quantities.** Expensive conversions (Raman shift per cm⁻¹, XRD d-spacing, IR wavenumber per cm⁻¹, MS trace indexing) are implemented as `@cached_property` so they are computed once and reused.
+**Cached properties for derived quantities.** Expensive conversions (wavelength and energy axes, XRD d-spacing, MS trace indexing) are implemented as `@cached_property` so they are computed once and reused.
 
 **`with_` / `set_` / `del_` mean specific things.** `with_X` applies X *and* recalculates whatever else must change so the physical meaning of the data is preserved (`with_background` recomputes the values; `with_tos_start` rebases `tos` so the absolute timestamps survive). `set_X` force-assigns X and recalculates nothing. `del_X` removes X and leaves the data alone. Keep this trio consistent when adding new state to a class.
 
-**One time origin, four operations.** Every class with a `tos_start` (`LVData`, `IRData`, `MSData`) exposes `with_tos_start` / `set_tos_start` / `del_tos_start` / `move_tos_start_by(delta)`, with identical semantics and docstrings. `move_tos_start_by` is defined as `with_tos_start(tos_start + delta)`, so a *later* origin means *smaller* `tos` values. `RamanData` has them through `SpectroscopyData`; `XRDData` stores absolute timestamps as a coordinate instead.
+**One time origin, four operations, one implementation.** Every class with a `tos_start` (`LVData`, `SpectroscopyData`, `MSData`, `GCData`) inherits `phd_parser._time.TimeOriginMixin`: the `tos_start` and `timestamps` properties, `with_tos_start` / `set_tos_start` / `del_tos_start` / `move_tos_start_by(delta)` and `select_timestamp_range`. `move_tos_start_by` is defined as `with_tos_start(tos_start + delta)`, so a *later* origin means *smaller* `tos` values. A timezone-naive `tos_start` handed to any of them is read as wall-clock time in the timezone of the current origin (`_to_timestamp(value, reference)`), never as UTC and never by dropping the zone. A host class provides `ds`, `tos`, `_new(ds)` and `select_tos_range`; a host that keeps the origin elsewhere too overrides the hooks `_tos_start_raw` and `_with_tos_start` (`LVData` mirrors it into `metadata`). Never copy these methods into a class. `XRDData` stores absolute timestamps as a coordinate instead.
 
-**Two ways to cut a time window.** The same three classes expose `select_tos_range(min_s, max_s)` (elapsed seconds) and `select_timestamp_range(start, end)` (absolute wall clock — `pd.Timestamp`, `datetime`, `np.datetime64` or a parseable string). The absolute form converts its bounds against `tos_start` and delegates to the elapsed form, so the two never drift apart; it raises if no `tos_start` is set. A timezone-naive bound is read as wall-clock time *in the origin's timezone* — never as UTC — because the timestamps in the log book are local. Keep this pair consistent when adding another time-anchored class.
+**Two ways to cut a time window.** The same four classes expose `select_tos_range(min_s, max_s)` (elapsed seconds) and `select_timestamp_range(start, end)` (absolute wall clock: `pd.Timestamp`, `datetime`, `np.datetime64` or a parseable string). The absolute form converts its bounds against `tos_start` and delegates to the elapsed form, so the two never drift apart; it raises if no `tos_start` is set. A timezone-naive bound is read as wall-clock time *in the origin's timezone*, because the timestamps in the log book are local. A window that contains no sample logs a warning naming the data's range and returns the empty selection (`phd_parser._selection.window_mask`), so a pipeline simply has nothing left to do; `empty="raise"` turns that into a `ValueError`. It never silently returns everything. Keep this pair, and the `empty` argument, consistent when adding another time-anchored class.
 
-**Time comes from the instrument, not from the filename.** OMNIC's `... at 0,90 Hours.spa` names are rounded to 0.01 h (36 s) and restart at zero for every new series, so a filename-derived `tos` silently stacks two measurements on top of each other. Both `.spa` readers take the per-scan acquisition timestamp recorded inside the file (`omnic.read_spa_datetime`); filenames are a last-resort fallback that warns. The same rule applies to any parser: prefer a recorded absolute time over anything reconstructed from a name or an index.
+**Time comes from the instrument, not from the filename.** OMNIC's `... at 0,90 Hours.spa` names are rounded to 0.01 h (36 s) and restart at zero for every new series, so a filename-derived `tos` silently stacks two measurements on top of each other. Both `.spa` readers take the per-scan acquisition timestamp recorded inside the file (`omnic.read_spa_datetime`), and `omnic.resolve_spa_files` orders a directory by that timestamp whenever the file names carry no unique spectrum index. The WDF reader takes `acq_time` and the per-spectrum times of the ORGN block. The same rule applies to any parser: prefer a recorded absolute time over anything reconstructed from a name or an index.
 
-**Instrument exports drift over time.** The same setup gains or renames a column between runs (e.g. LabView b67 box 5 gained `F1 CO PV` in 2026-07). A parser must read old *and* new files, and a directory may hold both: concatenate on the union of the columns and leave NaN where a file did not record a channel. An unrecognised column is skipped with a warning naming it — never a hard failure, and never silently carried through as un-parsed strings.
+**A library's row order is not your file order.** SpectroChemPy's `read_omnic(*files)` returns the spectra sorted by file name *as text* (`Index 10` before `Index 2`), whatever order the files were given in; `spectrochempy.read_spa` reads the order back from the file-name labels of `nd.y` (`_scp_row_order`) and puts the rows into file order before pairing them with the timestamps. Any bridge that hands several files to a library must check the order it got back; a test with mixed one- and two-digit indices (`test_backend_keeps_file_order_when_text_and_numeric_order_differ`) is the pattern.
+Two guards make the mispairing impossible to carry: `SpectroscopyData._build_ds` stores every series sorted by `tos` (only `merge(sort=False)` opts out, because it keeps its blocks on purpose), and the SpectroChemPy backend re-reads the first, middle and last file with the built-in parser and raises if a row is not the spectrum its file holds (`_verify_rows_against_files`). A new reader that takes several spectra from one library call gets the same two guards.
+
+**Instrument exports drift over time.** The same setup gains or renames a column between runs (e.g. LabView b67 box 5 gained `F1 CO PV` in 2026-07). A parser must read old *and* new files, and a directory may hold both: concatenate on the union of the columns and leave NaN where a file did not record a channel. An unrecognised column is skipped with a warning naming it, never a hard failure, and never silently carried through as un-parsed strings. Processing that follows (`LVData.resample`, `smooth_moving`) skips NaN samples instead of spreading them.
 
 ### Spectral axis conventions
 
 Each module stores its primary axis in SI units; convenience properties expose common alternative units:
 
-- **Raman**: the shift is the `wavenumber` coordinate in m⁻¹ (Stokes positive), as for IR; `.shift` / `.shift_per_cm` are aliases, `.scattered_wavenumber` the absolute scattered light
-- **XRD**: `angle` coordinate in degrees (2θ); `.d_spacing` and `.q_vector` depend on stored wavelength (default Cu Kα₁ 1.5406 Å)
-- **IR**: `wavenumber` coordinate in m⁻¹; `.wavenumber_per_cm` for cm⁻¹
-- **TGA**: temperature in K, mass in mg; `.mass_fraction` normalises to `mass_init`
+- **Spectroscopy**: the `wavenumber` coordinate in m⁻¹, stored once; `axis(unit)` reads it in any unit of `spectroscopy/units.py` (wavenumber, wavelength, frequency, photon energy per photon or per mole, the unit model of the IR-bands atlas) and `from_arrays(axis, values, axis_unit=...)` takes it in any. For Raman the stored value is the shift (Stokes positive), `.shift` / `.shift_per_cm` are its names; wavenumber, frequency and energy units read the shift, wavelength units read the scattered light and need `excitation_wavelength_nm`. A new unit goes into the table in `units.py`, never into a property
+- **XPS**: the `binding_energy` coordinate in eV, ascending; `kinetic_energy` is derived from `source_energy_eV` (`E_B = hν - E_K`, no work function term, Thermo's convention) and never stored
+- **XRD**: `angle` coordinate in degrees (2θ); `.d_spacing(wavelength)` and `.q_vector(wavelength)` take the wavelength in Å (Cu Kα₁ is 1.5406 Å)
+- **TGA**: temperature in K, mass in mg; `.mass_fraction` normalises to `mass_init` and raises without one
 
 ### Processing history
 
@@ -216,37 +241,104 @@ calling other recorded steps shows up once). A new processing method gets the
 decorator in the same change; a getter does not. A caller that builds its
 result from recorded steps but should be recorded as one (e.g.
 `GCData.from_ezchrom_rslt_groups`) uses `suppress_recording()` and
-`append_history()`. `LVData` keeps the history in `metadata` too, via
-`_with_history`. The history is plain JSON data; `to_netcdf` must write it
-(`encode_attrs` / `decode_attrs`, prefix `json:`), and a new class with
-`to_netcdf` gets a round-trip test of it in `tests/test_history.py`.
+`append_history()`. The `history` property and `format_history()` come from
+`history.HistoryMixin` (reads `ds.attrs`); `LVData` keeps the history in
+`metadata` too, via `_with_history`. The history is plain JSON data;
+`to_netcdf` must write it (`encode_attrs` / `decode_attrs`, prefix `json:`),
+and a new class with `to_netcdf` gets a round-trip test of it in
+`tests/test_history.py`. `SpectroscopyData`, `XPSData`, `GCData`, `MSData`
+and `LVData` record; `XRDData`, `TGAData` and `PhysisorptionData` do not yet.
+
+### Pipelines
+
+`phd_parser.pipeline.Pipeline` is a list of `Step`s (method name plus
+keyword arguments) that applies to any data object: `pipeline(ir)`,
+`pipeline.map(regions)`. It is JSON (`to_json` / `from_json`) and it is the
+inverse of the history: `Pipeline.from_history(processed)` returns the steps
+that made an object, ready to run on the next one. Keep the two consistent:
+a step is replayable exactly when its recorded arguments are plain values,
+so a method whose argument is an array or a data object (`with_background`)
+is recorded as a summary and `from_history` refuses it by name. Store the
+pipeline JSON next to the processed data, in the same numbered step folder.
+
+### NetCDF
+
+Every `to_netcdf` writes NetCDF4 through `h5netcdf`, with the engine pinned
+(`engine="h5netcdf"`), so the files do not depend on what else is installed.
+Nested attributes, booleans, `None` and non-ASCII text are JSON-encoded with
+`history.encode_attr` / `decode_attr` (the one codec; no class keeps its own)
+so they survive regardless of the backend. A reader loads the file into
+memory and closes it (`with xr.open_dataset(...) as handle: handle.load()`),
+because a lazy handle keeps the file locked on Windows. Never leave
+`scale_factor` as a variable attribute: xarray's CF decoder multiplies the
+data by it on reload (`GCData` packs raw counts as int32 with it in the
+*encoding* and stores it as `counts_scale_factor` otherwise).
 
 ### Spectroscopy layout
 
-IR and Raman are one data model. `spectroscopy/core.py` holds
-`SpectroscopyData`, which owns every processing step, the background and
-`data_type` conversions included; the axis is always the `wavenumber` dim in
-m⁻¹ (the Raman shift for Raman). `IRData` (`spectroscopy/infrared/`) and
-`RamanData` (`spectroscopy/raman/`) are thin subclasses: they set the class
-variables `_technique` (written to `ds.attrs["technique"]` by `_build_ds`) and
-`_default_data_type`, and add readers, community names (`shift`,
-`select_shift_range`, `get_evolution(shift_per_cm=...)`) and Raman's
-excitation wavelength and RamanSPy conversion. A new processing step goes into
-`SpectroscopyData`, never into a subclass, uses `self._new(ds=...)` to keep the
-caller's class and fields, and `self._carry_auxiliary` /
-`self._slice_auxiliary_to` to carry the background and map coordinates.
-`merge` rebases only `BACKGROUND_REFERENCED_TYPES`. `spectroscopy/xps/` is a
-reader only. The old import paths `phd_parser.infrared|raman|xps[.module]`
-are aliased to the same module objects in `phd_parser/__init__.py`; write new
-code against `phd_parser.spectroscopy`.
+IR and Raman are one class, `SpectroscopyData` in `spectroscopy/core.py`,
+and there are no subclasses. It owns the axis (always the `wavenumber` dim
+in m⁻¹), every processing step, the background and `data_type` conversions,
+the Raman names (`shift`, `select_shift_range`, the excitation wavelength and
+the scattered-light axes), NetCDF, and the library bridges (`to_spectrochempy`
+/ `from_spectrochempy`, `to_ramanspy` / `from_ramanspy`). `ds.attrs["technique"]`
+(`'infrared'`, `'raman'` or absent) records what measured the data; it
+decides nothing but the default `data_type` (`single_beam`, `intensity`) and
+the label of a CSV column. `metadata` is a field for whatever the reader
+found in the file, kept JSON-safe so `to_netcdf` stores it.
+
+The class is composed of mixins, one module per topic, so a method is found
+by what it does: `_axis.py` (axis in every unit, Raman names, getters),
+`_selection.py` (cutting by axis, scan, tos, scan id), `_background.py`
+(background and `data_type` conversions), `_baseline.py`, `_signal.py`
+(smoothing, averaging, normalisation, Gram-Schmidt, SNR), `_merge.py`,
+`_io.py` (NetCDF, CSV, SpectroChemPy, RamanSPy), plus the shared
+`TimeOriginMixin` and `HistoryMixin`. `core.py` keeps the fields, the
+validators, `_new`, `from_arrays`, `_build_ds`, the operators and `__repr__`;
+`_common.py` holds the constants the mixins share (`DataType`,
+`BACKGROUND_REFERENCED_TYPES`, the OMNIC label map). A mixin is a plain
+class that never imports `SpectroscopyData` (it uses
+`_common._is_spectroscopy_data` for type checks and `"SpectroscopyData"`
+string annotations); a new method goes into the module of its topic, or a
+new module if none fits, never into `core.py`.
+
+`IRData` (`spectroscopy/infrared/readers.py`) and `RamanData`
+(`spectroscopy/raman/readers.py`) are *reader namespaces*: plain classes that
+cannot be instantiated, whose `from_*` classmethods (`from_omnic_spa`,
+`from_renishaw_wdf`, `from_btc655n_export`, `from_arrays`) return a
+`SpectroscopyData` with the technique set. The generic constructors
+(`from_netcdf`, `from_xarray`, `from_spectrochempy`, `from_ramanspy`) live on
+`SpectroscopyData` only, and so do `isinstance` checks. A new file reader
+goes into the namespace of its technique and builds its result with
+`SpectroscopyData.from_arrays(..., axis_unit=..., technique=...)` or
+`SpectroscopyData._build_ds`; a new processing step goes into
+`SpectroscopyData`, uses `self._new(ds=...)` to keep the metadata, and
+`self._carry_auxiliary` / `self._slice_auxiliary_to` to carry the background
+and map coordinates. `merge` rebases only `BACKGROUND_REFERENCED_TYPES` and
+refuses maps. There are no compatibility shims: the old import paths
+`phd_parser.infrared|raman|xps` are gone, `from_scp` is `from_spectrochempy`,
+and `IRData(ds=...)` is `SpectroscopyData(ds=...)`. When the API changes,
+change `PhD_execute` with it (its `drifts/pipeline.py` and run notebooks)
+instead of keeping an alias here.
+
+`XPSData` (`spectroscopy/xps/core.py`) is its own class: one region of one
+sample, `data` over `binding_energy`, optional `transmission`, `background`,
+`envelope` and the 2-D `peaks` of a CasaXPS fit, the acquisition parameters
+in the attrs. Its readers are classmethods (`from_vamas` returns a dict of
+regions or one, `from_avantage_avg`, `from_casaxps_export`) over the parser
+modules `xps/vamas.py` (ISO 14976, NORM/REGULAR only, raises
+`NotImplementedError` for the rest), `xps/avantage.py` and `xps/casaxps.py`.
+Fitted peaks are called **peaks** (`peak_name`, `peak_position_eV`), never
+components. The real files of the Thermo instrument live under
+`tests/spectroscopy/xps/{vamas,avantage}/`.
 
 ### MS block structure
 
-`MSData` wraps an `xr.Dataset` with a shared `cycle` dimension. `block_0` holds m/z channels (`cycle × mz`); additional datablocks hold auxiliary sensors (`cycle × ch_N`). Trace corrections are also logged in `ds.attrs["trace_corrections"]`, next to the general history.
+`MSData` wraps an `xr.Dataset` with a shared `cycle` dimension. `block_0` holds m/z channels (`cycle × mz`); additional datablocks hold auxiliary sensors (`cycle × ch_N`). Trace corrections are also logged in `ds.attrs["trace_corrections"]`, next to the general history. `get_trace` smooths (rolling mean) before it normalises, so a normalised trace peaks at 1.
 
-### IR background and merging
+### Background and merging
 
-`IRData` keeps the background as a separate 1-D `single_beam` variable (`ds["background"]`), never folded into the data, so `data_type` conversions and background switches are reversible. `merge` (scan axis) leans on exactly that: two measurements are only comparable across a spectrometer restart in raw detector units, so background-dependent segments are converted with `to_single_beam()`, merged, and converted back against the surviving background (`convert_to_single_beam=False` refuses instead; segments already sharing a background skip the round trip). It keeps exactly one background (the pre-experiment one, i.e. the chronologically first segment's), orders segments by absolute timestamp rather than by `tos`, and rebases the later segment's `tos` onto the first's `tos_start`.
+`SpectroscopyData` keeps the background as a separate 1-D `single_beam` variable (`ds["background"]`), never folded into the data, so `data_type` conversions and background switches are reversible. `merge` (scan axis) leans on exactly that: two measurements are only comparable across a spectrometer restart in raw detector units, so background-dependent segments are converted with `to_single_beam()`, merged, and converted back against the surviving background (`convert_to_single_beam=False` refuses instead; segments already sharing a background skip the round trip). It keeps exactly one background (the pre-experiment one, i.e. the chronologically first segment's), orders segments by absolute timestamp rather than by `tos`, and rebases the later segment's `tos` onto the first's `tos_start`.
 
 ### Chromatography layout
 
@@ -260,25 +352,32 @@ The contract between them is the list of common *injection records*
 - Every detector has its own `retention_time_<detector>` dim, even when the axes are identical, so one code path covers instruments that sample detectors differently.
 - Different run lengths are padded with NaN. A different sampling interval within one detector is never resampled: `group_injections` splits such records and `from_injections` raises, pointing there.
 - The analysis (peak table along `peak`, amounts along `(injection, species)`) is one per object and named in `attrs["analysis_source"]`. An own integration returns a new object; the vendor's stays on the original.
-- `to_netcdf` writes NetCDF3 through scipy when neither `netCDF4` nor `h5netcdf` is installed (the case in this venv), which cannot store non-ASCII attribute text or string lists: those are JSON-encoded, int64 comes back as int32 and is cast back on load.
 
 ### Species naming conventions
 
 `phd_parser.naming.species` maps the spellings of a species onto one canonical
 name. A convention is human-readable JSON; the standard one,
-`naming/species/standard.json`, uses the canonical names of `phd_models`
+`naming/species/naming_species_standard.json`, uses the canonical names of `phd_models`
 (`CO2`, `MeOH`, `EtOH`, `PrOH`, ...). Matching ignores case, spaces, hyphens,
 underscores and dots and reads subscript digits as digits; a convention where
 two species claim one spelling is refused on load. Every function taking a
 convention accepts `None` (the standard), a JSON path, an already read dict
 (full form, or the flat `{canonical: [aliases]}` form of `phd_ui`), or a
-`SpeciesConvention`. Add a spelling to `standard.json` rather than mapping it
+`SpeciesConvention`. Add a spelling to `naming_species_standard.json` rather than mapping it
 in a notebook.
 
 ### LabView channel metadata
 
-`LVData` stores per-channel metadata (unit, group, species, location) in `xr.DataArray.attrs`. The single dimension is `tos` (elapsed seconds since run start). Channels absent from `b67box5.CHANNEL_META` are dropped on read (see *Instrument exports drift over time*); adding a channel means adding its metadata entry.
+`LVData` stores per-channel metadata (unit, group, species, location) in `xr.DataArray.attrs`. The single dimension is `tos` (elapsed seconds since run start). Channels absent from `b67box5.CHANNEL_META` are dropped on read (see *Instrument exports drift over time*); adding a channel means adding its metadata entry. `metadata` and `ds.attrs` are two copies of the same dict: every method that changes one updates the other (a known wart, see the review note in the vault).
 
 ### Physisorption isotherm shape
 
-`PhysisorptionData` wraps a *single* isotherm branch — one `xr.DataArray` named `quantity_adsorbed`, dims `("relative_pressure",)` — exactly like a single Raman spectrum or XRD pattern elsewhere in this repo. There is no "branch" concept baked into the type: a reading that produces both adsorption and desorption (e.g. `from_tristar_xls`) returns a `dict[str, PhysisorptionData]` with keys `"adsorption"`/`"desorption"` instead of one dual-branch object. The BET fit (conventionally derived from the adsorption branch) is modelled directly as `.attrs["bet"]`, since every physisorption instrument and analysis method agrees on it. Everything else a parser extracts (t-Plot, BJH, sample log, instrument header) is preserved verbatim under `.attrs["report"]` (JSON-encoded so both survive NetCDF round-trips) rather than given dedicated properties. Parser modules (e.g. `tristar.py`) should still extract as much as the source format offers; the core class only grows new typed accessors when one is actually needed.
+`PhysisorptionData` wraps a *single* isotherm branch, one `xr.DataArray` named `quantity_adsorbed`, dims `("relative_pressure",)`, exactly like a single spectrum or XRD pattern elsewhere in this repo. There is no "branch" concept baked into the type: a reading that produces both adsorption and desorption (e.g. `from_tristar_xls`) returns a `dict[str, PhysisorptionData]` with keys `"adsorption"`/`"desorption"` instead of one dual-branch object. The BET fit (conventionally derived from the adsorption branch) is modelled directly as `.attrs["bet"]`, since every physisorption instrument and analysis method agrees on it. Everything else a parser extracts (t-Plot, BJH, sample log, instrument header) is preserved verbatim under `.attrs["report"]` (JSON-encoded so both survive NetCDF round-trips) rather than given dedicated properties. Parser modules (e.g. `tristar.py`) should still extract as much as the source format offers; the core class only grows new typed accessors when one is actually needed.
+
+## Open work
+
+The full review of 2026-10-17 (bugs fixed, what is still open, the refactoring
+plan: splitting `spectroscopy/core.py` into mixins, one `_time.py` mixin for
+the `tos_start` family, `TGAData` on xarray, history for XRD/TGA/physisorption,
+`logging.py` renamed) lives in the vault:
+`000 AIOS/History/2026-10-17 2339 PhD_parser Repository Review.md`.

@@ -2,7 +2,7 @@
 
 OMNIC filenames encode elapsed hours rounded to two decimals (0.01 h = 36 s) and
 restart at zero for every new series, so a filename-derived axis cannot place two
-measurements on a common timeline — which is exactly what merging needs.
+measurements on a common timeline, which is exactly what merging needs.
 """
 import os
 from pathlib import Path
@@ -51,10 +51,10 @@ def test_both_backends_agree_on_tos():
     pytest.importorskip("spectrochempy")
 
     from_omnic = IRData.from_omnic_spa(MOCK_DIR_PATH, tos_start=TOS_START, backend="omnic")
-    from_scp = IRData.from_omnic_spa(MOCK_DIR_PATH, tos_start=TOS_START, backend="spectrochempy")
+    from_spectrochempy = IRData.from_omnic_spa(MOCK_DIR_PATH, tos_start=TOS_START, backend="spectrochempy")
 
-    np.testing.assert_allclose(from_omnic.tos, from_scp.tos)
-    assert from_omnic.tos_start == from_scp.tos_start
+    np.testing.assert_allclose(from_omnic.tos, from_spectrochempy.tos)
+    assert from_omnic.tos_start == from_spectrochempy.tos_start
 
 
 @pytest.mark.parametrize("backend", ["omnic", "spectrochempy"])

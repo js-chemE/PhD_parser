@@ -1,16 +1,15 @@
 import logging
 from functools import cached_property
 from pathlib import Path
-from typing import Any, Literal, Optional, Union
+from typing import Any, Optional, Union
 
 import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import xarray as xr
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 class XRDData(BaseModel):
     """Pydantic model for X-ray diffraction (XRD) data.
@@ -42,7 +41,7 @@ class XRDData(BaseModel):
     # Fields
     # ----------------------------------------------------------------
 
-    # Core data — angle in degrees (2θ), consistent throughout
+    # Core data: angle in degrees (2θ), consistent throughout
     da: xr.DataArray = Field(
         description=(
             "xarray DataArray with dims ('angle',) or ('scan', 'angle'). "
@@ -63,6 +62,7 @@ class XRDData(BaseModel):
     @field_validator("da", mode="before")
     @classmethod
     def validate_da(cls, v: Any) -> xr.DataArray:
+        """Check the layout of ``da``: an ``angle`` dimension, 1-D or ``(scan, angle)``; adds ``angle_units``."""
         if not isinstance(v, xr.DataArray):
             raise TypeError(f"'da' must be an xr.DataArray, got {type(v)}")
         if "angle" not in v.dims:
@@ -71,12 +71,9 @@ class XRDData(BaseModel):
             raise ValueError(f"DataArray must be 1-D or 2-D, got {v.ndim}-D")
         if v.ndim == 2 and v.dims[0] != "scan":
             raise ValueError("2-D DataArray must have dims ('scan', 'angle')")
+        if "angle_units" not in v.attrs:
+            v = v.assign_attrs(angle_units="deg")  # a copy: the caller's array is not edited
         return v
-
-    @model_validator(mode="after")
-    def validate_attrs(self) -> "XRDData":
-        self.da.attrs.setdefault("angle_units", "deg")
-        return self
 
     # ----------------------------------------------------------------
     # Core properties
@@ -264,14 +261,7 @@ class XRDData(BaseModel):
         if max_deg is not None:
             mask &= self.angle <= max_deg
 
-        da = self.da.isel(angle=mask)
-        return XRDData(
-            da=self._build_da(
-                angle=da.coords["angle"].values,
-                values=da.values,
-            ),
-            metadata=self.metadata,
-        )
+        return XRDData(da=self.da.isel(angle=mask), metadata=self.metadata)
 
     def smooth_savgol(
         self, window_length: int = 11, polyorder: int = 3
@@ -304,11 +294,7 @@ class XRDData(BaseModel):
                 axis=1,
                 arr=self.values,
             )
-        da_s = self._build_da(
-            angle=self.angle,
-            values=smoothed,
-        )
-        return XRDData(da=da_s, metadata=self.metadata)
+        return XRDData(da=self.da.copy(data=smoothed), metadata=self.metadata)
 
     def smooth_gaussian(self, sigma_deg: float = 0.05) -> "XRDData":
         """Smooth intensities with a Gaussian filter.
@@ -343,11 +329,7 @@ class XRDData(BaseModel):
                 axis=1,
                 arr=self.values,
             )
-        da_s = self._build_da(
-            angle=self.angle,
-            values=smoothed,
-        )
-        return XRDData(da=da_s, metadata=self.metadata)
+        return XRDData(da=self.da.copy(data=smoothed), metadata=self.metadata)
 
     def smooth_moving(self, window_size: int = 5) -> "XRDData":
         """Smooth intensities with a uniform moving-average filter.
@@ -381,11 +363,7 @@ class XRDData(BaseModel):
                 axis=1,
                 arr=self.values,
             )
-        da_s = self._build_da(
-            angle=self.angle,
-            values=smoothed,
-        )
-        return XRDData(da=da_s, metadata=self.metadata)
+        return XRDData(da=self.da.copy(data=smoothed), metadata=self.metadata)
 
 
     # ----------------------------------------------------------------

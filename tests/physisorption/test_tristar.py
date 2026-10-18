@@ -56,7 +56,7 @@ def test_parse_value_none_and_nan():
 
 
 # ----------------------------------------------------------------
-# read_export — structure
+# read_export: structure
 # ----------------------------------------------------------------
 
 def test_read_export_data_keys():
@@ -141,7 +141,7 @@ def test_read_export_rejects_wrong_extension(tmp_path):
 
 
 # ----------------------------------------------------------------
-# read_export — BET
+# read_export: BET
 # ----------------------------------------------------------------
 
 def test_read_export_bet_values():

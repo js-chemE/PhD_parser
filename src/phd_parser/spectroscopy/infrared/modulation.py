@@ -1,9 +1,14 @@
-"""Modulation excitation spectroscopy (MES) helpers for :class:`IRData`.
+"""Modulation excitation spectroscopy (MES): folding, averaging and demodulating a period.
+
+The steps that return a new spectrum (``mask_wavenumber_ranges``, ``drop_scans``,
+``drop_spike_scans``, ``find_spike_scans``, ``correct_drift``) are methods of
+``SpectroscopyData``, recorded in its history; this module keeps what works on
+the folded ``xarray.DataArray`` of cycles.
 
 Preprocessing and cycle folding for periodic-stimulation experiments (e.g.
 switching the feed between H2 and CO2 + H2). Every function takes an
-``IRData`` and returns a new object; nothing is modified in place, in keeping
-with the ``IRData`` convention.
+``SpectroscopyData`` and returns a new object; nothing is modified in place, in keeping
+with the ``SpectroscopyData`` convention.
 
 Cycle times are plain ``tos`` values in seconds (the start of each period,
 usually the moment the stimulus is switched on), so this module does not
@@ -17,203 +22,14 @@ import numpy as np
 import numpy.typing as npt
 import xarray as xr
 
-from phd_parser.spectroscopy.infrared.core import IRData
+from phd_parser.history import HISTORY_KEY, decode_attr, encode_attr, records_step
+from phd_parser.spectroscopy._baseline import full_cycle_starts as _full_cycle_starts
+from phd_parser.spectroscopy.core import SpectroscopyData
 
 logger = logging.getLogger(__name__)
 
-
-def mask_wavenumber_ranges(ir: IRData, ranges_cm: Sequence[Tuple[float, float]]) -> IRData:
-    """Set the data in the given wavenumber ranges to NaN.
-
-    Use for regions that cannot be corrected, e.g. a saturated gas-phase
-    band. The wavenumber axis is kept intact so the result still lines up
-    with unmasked data.
-
-    Parameters
-    ----------
-    ir : IRData
-        Input data, 1-D or 2-D.
-    ranges_cm : sequence of (float, float)
-        ``(low, high)`` wavenumber bounds in cm⁻¹, inclusive, order within a
-        pair does not matter.
-
-    Returns
-    -------
-    IRData
-        New instance with NaN in the masked ranges. The ranges are recorded
-        flat, ``[low1, high1, low2, high2, ...]``, in
-        ``ds.attrs['masked_ranges_cm']`` (NetCDF cannot store nested lists).
-    """
-    wn_cm = ir.wavenumber_per_cm
-    mask = np.zeros(wn_cm.size, dtype=bool)
-    for lo, hi in ranges_cm:
-        mask |= (wn_cm >= min(lo, hi)) & (wn_cm <= max(lo, hi))
-    mask_da = xr.DataArray(mask, coords={"wavenumber": ir.ds.coords["wavenumber"]}, dims=["wavenumber"])
-    ds_new = ir.ds.assign(data=ir.ds["data"].where(~mask_da))
-    previous = list(ir.ds.attrs.get("masked_ranges_cm", []))
-    ds_new.attrs = {**ir.ds.attrs, "masked_ranges_cm": previous + [float(v) for r in ranges_cm for v in sorted(r)]}
-    logger.debug(f"Masked {mask.sum()} of {mask.size} wavenumber points")
-    return IRData(ds=ds_new)
-
-
-def find_spike_scans(
-    ir: IRData,
-    window: int = 7,
-    threshold: float = 6.0,
-    min_fraction: float = 0.1,
-) -> npt.NDArray[np.bool_]:
-    """Flag scans that jump away from their neighbours in time (Hampel test).
-
-    Every point is compared with the running median over ``window`` scans at
-    its wavenumber, and flagged when it deviates by more than ``threshold``
-    noise standard deviations. A scan is a spike when at least
-    ``min_fraction`` of its (finite) wavenumbers are flagged.
-
-    The noise of each wavenumber is estimated from the second difference in
-    time, ``1.4826 * MAD(x[i+1] - 2 x[i] + x[i-1]) / sqrt(6)``, which a slow
-    or linear change does not bias, so genuine transients such as the
-    response right after a feed switch are not mistaken for spikes.
-
-    Parameters
-    ----------
-    ir : IRData
-        2-D input data.
-    window : int, optional
-        Length of the running window in scans, odd (default is ``7``).
-    threshold : float, optional
-        Per-point threshold in local robust standard deviations (default is
-        ``6.0``).
-    min_fraction : float, optional
-        Fraction of wavenumbers that must be flagged for the whole scan to
-        count as a spike (default is ``0.1``).
-
-    Returns
-    -------
-    numpy.ndarray of bool
-        Shape ``(n_scan,)``, ``True`` for a spike scan.
-
-    Raises
-    ------
-    ValueError
-        If the data are 1-D or ``window`` is not an odd integer >= 3.
-    """
-    from scipy.ndimage import median_filter
-
-    if ir.ndim != 2:
-        raise ValueError("find_spike_scans requires 2-D data")
-    if window < 3 or window % 2 == 0:
-        raise ValueError("window must be an odd integer >= 3")
-    values = ir.values[:, np.isfinite(ir.values).all(axis=0)]
-    running_median = median_filter(values, size=(window, 1), mode="nearest")
-    deviation = np.abs(values - running_median)
-    second_difference = np.diff(values, n=2, axis=0)
-    noise = 1.4826 * np.median(np.abs(second_difference), axis=0) / np.sqrt(6.0)
-    flagged = deviation > threshold * np.where(noise > 0, noise, np.inf)
-    return flagged.mean(axis=1) >= min_fraction
-
-
-def drop_scans(ir: IRData, drop: npt.NDArray[np.bool_]) -> IRData:
-    """Remove scans by boolean mask, keeping ``tos``, background and baseline aligned.
-
-    Parameters
-    ----------
-    ir : IRData
-        2-D input data.
-    drop : numpy.ndarray of bool
-        Shape ``(n_scan,)``, ``True`` for scans to remove.
-
-    Returns
-    -------
-    IRData
-        New instance without the dropped scans. The number dropped is added
-        to ``ds.attrs['n_scans_dropped']``.
-
-    Raises
-    ------
-    ValueError
-        If the data are 1-D or ``drop`` has the wrong shape.
-    """
-    drop = np.asarray(drop, dtype=bool)
-    if ir.ndim != 2:
-        raise ValueError("drop_scans requires 2-D data")
-    if drop.shape != (ir.shape[0],):
-        raise ValueError(f"drop has shape {drop.shape}, expected ({ir.shape[0]},)")
-    ds_new = ir.ds.isel(scan=~drop)
-    ds_new.attrs = {**ir.ds.attrs, "n_scans_dropped": int(ir.ds.attrs.get("n_scans_dropped", 0)) + int(drop.sum())}
-    return IRData(ds=ds_new)
-
-
-def _full_cycle_starts(tos: npt.NDArray, cycle_starts: Sequence[float], period: float) -> npt.NDArray:
-    """Cycle starts whose whole period is covered by ``tos``."""
-    starts = np.asarray(cycle_starts, dtype=float)
-    return starts[(starts >= tos[0]) & (starts + period <= tos[-1])]
-
-
-def correct_drift(
-    ir: IRData,
-    cycle_starts: Sequence[float],
-    period: float,
-    order: int = 1,
-) -> IRData:
-    """Subtract a slow polynomial drift in time, fitted to the per-cycle means.
-
-    Fitting the trend to one mean per full cycle, instead of to every scan,
-    keeps the periodic response out of the fit: a line fitted directly to a
-    periodic signal picks up part of it as slope.
-
-    Parameters
-    ----------
-    ir : IRData
-        2-D input data with a ``tos`` coordinate.
-    cycle_starts : sequence of float
-        Start of each period in seconds (same time base as ``ir.tos``). Only
-        cycles fully inside the data are used.
-    period : float
-        Modulation period ``T`` in seconds.
-    order : int, optional
-        Polynomial order of the drift in time (default is ``1``, linear).
-
-    Returns
-    -------
-    IRData
-        New instance with the drift subtracted from every scan. The drift is
-        added to ``ds['baseline']``; recover the uncorrected values via
-        ``data_unbaselined``.
-
-    Raises
-    ------
-    ValueError
-        If the data are 1-D, or fewer than ``order + 1`` full cycles are
-        available.
-    """
-    if ir.ndim != 2 or ir.tos is None:
-        raise ValueError("correct_drift requires 2-D data with a 'tos' coordinate")
-    tos = ir.tos
-    starts = _full_cycle_starts(tos, cycle_starts, period)
-    if starts.size < order + 1:
-        raise ValueError(f"need at least {order + 1} full cycles for order {order}, got {starts.size}")
-
-    means = np.stack([ir.values[(tos >= s) & (tos < s + period)].mean(axis=0) for s in starts])
-    centres = starts + period / 2
-    # Centre time for conditioning; polyfit fits every wavenumber column at once.
-    t_ref = centres.mean()
-    finite = np.isfinite(means).all(axis=0)
-    coefficients = np.full((order + 1, means.shape[1]), np.nan)
-    coefficients[:, finite] = np.polyfit(centres - t_ref, means[:, finite], deg=order)
-    # Zero the constant term: remove the change over time, keep the absolute level.
-    coefficients[-1] = 0.0
-    powers = (tos - t_ref)[:, None] ** np.arange(order, -1, -1)[None, :]
-    drift = powers @ np.nan_to_num(coefficients)
-
-    ds_new = ir.ds.assign(data=ir.ds["data"] - drift)
-    baseline = ir.ds["baseline"].values + drift if "baseline" in ir.ds else drift
-    ds_new = ds_new.assign(baseline=(ir.ds["data"].dims, baseline))
-    ds_new.attrs = {**ir.ds.attrs, "drift_order": order, "drift_n_cycles": int(starts.size)}
-    return IRData(ds=ds_new)
-
-
 def fold_cycles(
-    ir: IRData,
+    ir: SpectroscopyData,
     cycle_starts: Sequence[float],
     period: float,
     n_discard: int = 2,
@@ -223,7 +39,7 @@ def fold_cycles(
 
     Parameters
     ----------
-    ir : IRData
+    ir : SpectroscopyData
         2-D input data with a ``tos`` coordinate.
     cycle_starts : sequence of float
         Start of each period in seconds, e.g. the logged switch-on times.
@@ -243,7 +59,7 @@ def fold_cycles(
     xarray.DataArray
         Dims ``('cycle', 'time', 'wavenumber')``: ``cycle`` holds the start
         ``tos`` of each kept cycle, ``time`` runs over ``[0, period)`` in s,
-        ``wavenumber`` is in m⁻¹ as in ``IRData``. Attrs carry ``period`` and
+        ``wavenumber`` is in m⁻¹ as in ``SpectroscopyData``. Attrs carry ``period`` and
         ``n_discarded``.
 
     Raises
@@ -279,11 +95,13 @@ def fold_cycles(
             "period": float(period),
             "n_discarded": int(n_discard),
             "data_type": ir.ds.attrs.get("data_type", ""),
+            "history": encode_attr(ir.history),  # carried to average_cycles, JSON so the array stays writable
         },
     )
 
 
-def average_cycles(folded: xr.DataArray) -> IRData:
+@records_step
+def average_cycles(folded: xr.DataArray) -> SpectroscopyData:
     """Average folded cycles into one period.
 
     Parameters
@@ -293,13 +111,13 @@ def average_cycles(folded: xr.DataArray) -> IRData:
 
     Returns
     -------
-    IRData
+    SpectroscopyData
         One period, ``tos`` is the time within the period in seconds and no
         ``tos_start`` is set. ``ds.attrs`` carries ``modulation_period`` and
         ``n_cycles_averaged``.
     """
     mean = folded.mean(dim="cycle").values
-    ir = IRData.from_arrays(
+    ir = SpectroscopyData.from_arrays(
         folded.coords["wavenumber"].values / 100.0,
         mean,
         tos=folded.coords["time"].values,
@@ -308,15 +126,16 @@ def average_cycles(folded: xr.DataArray) -> IRData:
     ds_new = ir.ds.copy()
     ds_new.attrs = {
         **ir.ds.attrs,
+        HISTORY_KEY: list(decode_attr(folded.attrs.get("history", [])) or []),  # the parent's steps, then this one
         "modulation_period": folded.attrs["period"],
         "n_cycles_averaged": int(folded.sizes["cycle"]),
         "n_cycles_discarded": folded.attrs.get("n_discarded", 0),
     }
-    return IRData(ds=ds_new)
+    return SpectroscopyData(ds=ds_new)
 
 
 def _quadrature_components(
-    ir_period: IRData,
+    ir_period: SpectroscopyData,
     harmonics: Sequence[int],
     period: Optional[float],
 ) -> Tuple[npt.NDArray, npt.NDArray, float]:
@@ -343,7 +162,7 @@ def _quadrature_components(
 
 
 def demodulate(
-    ir_period: IRData,
+    ir_period: SpectroscopyData,
     harmonics: Sequence[int] = (1, 2, 3),
     phases_deg: Optional[Sequence[float]] = None,
     period: Optional[float] = None,
@@ -358,7 +177,7 @@ def demodulate(
 
     Parameters
     ----------
-    ir_period : IRData
+    ir_period : SpectroscopyData
         One averaged period, as returned by :func:`average_cycles`: ``tos``
         is the time within the period on a uniform grid over ``[0, T)``.
     harmonics : sequence of int, optional
@@ -374,7 +193,7 @@ def demodulate(
     -------
     xarray.DataArray
         Dims ``('harmonic', 'phase', 'wavenumber')``, ``phase`` in degrees,
-        ``wavenumber`` in m⁻¹ as in ``IRData``. A NaN (masked) wavenumber
+        ``wavenumber`` in m⁻¹ as in ``SpectroscopyData``. A NaN (masked) wavenumber
         stays NaN.
 
     Raises
@@ -420,7 +239,7 @@ def demodulate(
 
 
 def phase_of_maximum(
-    ir_period: IRData,
+    ir_period: SpectroscopyData,
     harmonics: Sequence[int] = (1, 2, 3),
     period: Optional[float] = None,
 ) -> xr.Dataset:
@@ -432,7 +251,7 @@ def phase_of_maximum(
 
     Parameters
     ----------
-    ir_period : IRData
+    ir_period : SpectroscopyData
         One averaged period, see :func:`demodulate`.
     harmonics : sequence of int, optional
         Harmonics ``k`` (default is ``(1, 2, 3)``).

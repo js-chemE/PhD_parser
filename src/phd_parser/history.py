@@ -90,7 +90,8 @@ def to_json_safe(value: Any) -> Any:
         return {str(key): to_json_safe(item) for key, item in value.items()}
     if isinstance(value, (np.ndarray, list, tuple)):
         array = np.asarray(value, dtype=object) if not isinstance(value, np.ndarray) else value
-        if array.size <= _MAX_LISTED_VALUES and array.ndim <= 1:
+        if array.size <= _MAX_LISTED_VALUES:
+            # small, also when nested ([[2220, 2420]]): kept as (nested) lists, so the step stays replayable
             return [to_json_safe(item) for item in (value.tolist() if isinstance(value, np.ndarray) else value)]
         flat = array.ravel()
         return {"array_shape": list(array.shape), "first": to_json_safe(flat[0]), "last": to_json_safe(flat[-1])}
@@ -290,3 +291,26 @@ def format_history(history: list[dict[str, Any]]) -> str:
             parameters = parameters[:157] + "..."
         lines.append(f"{number}. {entry.get('time', '')}  {entry.get('step', '?')}({parameters})")
     return "\n".join(lines)
+
+
+class HistoryMixin:
+    """``history`` and ``format_history`` for a data class that keeps the history in ``ds.attrs``."""
+
+    @property
+    def history(self) -> list[dict[str, Any]]:
+        """Every processing step that produced this object, oldest first.
+
+        Each entry is ``{"step", "parameters", "time", "version"}``; the first
+        one names the constructor and the file(s) read. Stored in
+        ``ds.attrs["history"]`` and saved by ``to_netcdf``.
+
+        Returns
+        -------
+        list of dict
+            The entries; empty for an object built directly from a Dataset.
+        """
+        return get_history(self.ds.attrs)
+
+    def format_history(self) -> str:
+        """Return :attr:`history` as readable text, one numbered step per line."""
+        return format_history(self.history)

@@ -23,8 +23,8 @@ class PhysisorptionData(BaseModel):
     """A single gas-physisorption isotherm branch (adsorption or desorption).
 
     Wraps one ``xarray.DataArray`` of quantity adsorbed versus relative
-    pressure — the one thing every physisorption instrument and analysis
-    method (BET, t-Plot, BJH, ...) agrees on — exactly the way a single
+    pressure, the one thing every physisorption instrument and analysis
+    method (BET, t-Plot, BJH, ...) agrees on, exactly the way a single
     Raman spectrum or XRD pattern is wrapped elsewhere in this repo: the
     physical axis (relative pressure) is the array's own dimension, and
     there is no separate "branch" concept baked into the type. A reading
@@ -154,7 +154,7 @@ class PhysisorptionData(BaseModel):
     def get_quantity_adsorbed(
         self,
         target_relative_pressure: Union[float, Sequence[float]],
-        method: Literal["nearest", "linear"] = "nearest",
+        method: Literal["nearest", "pad", "backfill"] = "nearest",
         tolerance: Optional[float] = 0.02,
     ) -> Union[float, npt.NDArray]:
         """Quantity adsorbed at one or more relative-pressure values.
@@ -163,7 +163,7 @@ class PhysisorptionData(BaseModel):
         ----------
         target_relative_pressure : float or sequence of float
             Target P/P₀ value(s).
-        method : {"nearest", "linear"}, optional
+        method : {"nearest", "pad", "backfill"}, optional
             xarray selection method (default is ``"nearest"``).
         tolerance : float or None, optional
             Maximum allowed distance between a requested value and the
@@ -217,7 +217,7 @@ class PhysisorptionData(BaseModel):
         filepath : str or Path
             Destination file path.
         """
-        self.quantity_adsorbed.to_netcdf(filepath)
+        self.quantity_adsorbed.to_netcdf(filepath, engine="h5netcdf")
         logger.debug("Saved NetCDF → %s", filepath)
 
     @classmethod
@@ -234,7 +234,10 @@ class PhysisorptionData(BaseModel):
         PhysisorptionData
             Instance reconstructed from the file.
         """
-        return cls(quantity_adsorbed=xr.open_dataarray(filepath))
+        # read into memory and close: a lazy handle keeps the file locked (Windows)
+        with xr.open_dataarray(filepath) as handle:
+            quantity_adsorbed = handle.load()
+        return cls(quantity_adsorbed=quantity_adsorbed)
 
     # ----------------------------------------------------------------
     # Private: array builder

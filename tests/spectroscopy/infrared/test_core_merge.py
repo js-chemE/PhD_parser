@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from phd_parser.spectroscopy.infrared import IRData
+from phd_parser.spectroscopy import IRData, SpectroscopyData
 
 WAVENUMBER_PER_CM = np.linspace(1000.0, 4000.0, 61)
 
@@ -189,8 +189,8 @@ def test_merge_without_backgrounds_merges_as_recorded(caplog):
     # There is nothing to rebase with, so the scans are merged exactly as they are.
     left = make_ir(3, "2024-05-01 10:00:00", level=1.0, background_level=1.0).del_background()
     right = make_ir(2, "2024-05-01 10:02:00", level=2.0, background_level=1.0).del_background()
-    left = IRData(ds=left.ds.assign_attrs(data_type="absorbance"))
-    right = IRData(ds=right.ds.assign_attrs(data_type="absorbance"))
+    left = SpectroscopyData(ds=left.ds.assign_attrs(data_type="absorbance"))
+    right = SpectroscopyData(ds=right.ds.assign_attrs(data_type="absorbance"))
 
     with caplog.at_level("WARNING"):
         merged = left.merge(right)
@@ -305,7 +305,7 @@ def test_merge_survives_netcdf_roundtrip(first, second, tmp_path):
     merged = first.merge(second)
     path = tmp_path / "merged.nc"
     merged.to_netcdf(path)
-    loaded = IRData.from_netcdf(path)
+    loaded = SpectroscopyData.from_netcdf(path)
 
     np.testing.assert_allclose(loaded.values, merged.values)
     np.testing.assert_allclose(loaded.tos, merged.tos)
@@ -315,7 +315,7 @@ def test_merge_survives_netcdf_roundtrip(first, second, tmp_path):
 
 def test_merge_all_folds_in_chronological_order(first, second):
     third = make_ir(3, "2024-05-01 10:05:00", level=400.0, background_level=4.0)
-    merged = IRData.merge_all([second, third, first])
+    merged = SpectroscopyData.merge_all([second, third, first])
 
     assert merged.shape[0] == 12
     assert merged.tos_start == pd.Timestamp("2024-05-01 10:00:00")
@@ -325,11 +325,11 @@ def test_merge_all_folds_in_chronological_order(first, second):
 
 def test_merge_all_requires_items():
     with pytest.raises(ValueError):
-        IRData.merge_all([])
+        SpectroscopyData.merge_all([])
 
 
 def test_merge_all_single_item_returns_it(first):
-    assert IRData.merge_all([first]) is first
+    assert SpectroscopyData.merge_all([first]) is first
 
 
 def test_to_single_beam_round_trips(first):

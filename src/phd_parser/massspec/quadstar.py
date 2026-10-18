@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Tuple, Dict, Any, List, Optional
+from typing import Tuple, Dict, Any, List
 import pandas as pd
 
 import logging
@@ -135,11 +135,6 @@ def parse_metadata_lines(
         key, _, value = line.partition(" :")
         return key.strip(), value.strip()
 
-    KEY_MAP_0 = {
-        "ASCII SAMPLE CYCLES": "file_name",
-        "DATE":                 None,   # handled specially (DATE + TIME on same line)
-        "CONVERTED CYCLES":     "converted_cycles",
-    }
 
     for line in meta_0:
         stripped = line.strip()
@@ -286,7 +281,7 @@ def parse_data_lines(data: List[str], drop_threshold_cols: bool = False, tz_str:
         utc = False,
         errors = "coerce",
     )
-    df["Timestamp"] = df["Timestamp"].dt.tz_localize(tz_str, ambiguous="NaT")
+    df["Timestamp"] = df["Timestamp"].dt.tz_localize(tz_str, ambiguous="infer")
 
 
     # Threshold columns to category
@@ -343,7 +338,7 @@ def _build_column_map(meta: Dict[str, Any], current_columns: List[str]) -> Dict[
         elif col == "Threshold":
             count = threshold_counters.get(current_block, 0)
             threshold_counters[current_block] = count + 1
-            new_column_names.append(f"Thresh    old_{current_block}_{count}")
+            new_column_names.append(f"Threshold_{current_block}_{count}")
             units.append("")
             sources.append(current_block)
 
@@ -392,10 +387,8 @@ def read_export_single(file_path: str | Path, drop_threshold_cols: bool = True, 
     df = parse_data_lines(data, drop_threshold_cols=drop_threshold_cols, tz_str=tz_str)
 
     column_map = _build_column_map(meta, list(df.columns))
-    df = df.rename(columns=dict(zip(
-        column_map["original"],
-        column_map["new"],
-    )))
+    # positional, because the original names repeat ("Threshold" once per channel)
+    df.columns = list(column_map["new"])
 
     meta["column_map"] = column_map
 
@@ -443,7 +436,7 @@ def read_export(path: str | Path, drop_threshold_cols: bool = True, tz_str: str 
     elif path.is_dir():
         all_meta = []
         all_dfs = []
-        for file in path.iterdir():
+        for file in sorted(path.iterdir()):
             if file.suffix.lower() in ACCEPTED_FILE_EXTENSIONS:
                 logger.info(f"Processing file: {file.name}")
                 meta, df = read_export_single(file, drop_threshold_cols=drop_threshold_cols, tz_str=tz_str)

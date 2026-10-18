@@ -5,7 +5,6 @@ import pandas as pd
 import logging
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
 
 def _convert_value(value: str) -> Any:
     """Convert string to int/float if possible, otherwise return string."""

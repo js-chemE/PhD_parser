@@ -57,11 +57,16 @@ class TGAData(BaseModel):
         Returns
         -------
         ndarray of float64
-            Element-wise ``mass / mass_init``.  Returns an array of
-            zeros when :attr:`mass_init` is ``None``.
+            Element-wise ``mass / mass_init``.
+
+        Raises
+        ------
+        ValueError
+            When :attr:`mass_init` is not set, so there is nothing to
+            normalise by.
         """
         if self.mass_init is None:
-            return np.zeros_like(self.mass)
+            raise ValueError("mass_fraction needs mass_init; the export carried no initial sample mass.")
         return self.mass / self.mass_init
 
     @property
@@ -88,7 +93,7 @@ class TGAData(BaseModel):
         return np.gradient(self.mass_fraction, self.temperature)
 
     # ----------------------------------------------------------------------
-    # Immutable processing — all return a new TGAData
+    # Immutable processing: all return a new TGAData
     # ----------------------------------------------------------------------
 
     def cut_front(self, index: int | None = None, temperature: float | None = None) -> "TGAData":

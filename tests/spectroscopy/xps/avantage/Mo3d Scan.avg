@@ -1,0 +1,136 @@
+;========================================================================
+;Dump of DataSpace 'Z:\Ivan Lopez\20260127_ILL\Experiment_2\X-Ray002 400um - FG  ON\SK_0001_3\Mo3d Scan.VGD'
+; on 28/1/2026 at 12:56:35
+;========================================================================
+
+
+;[Note that this file can be reloaded only if certain syntax rules are NOT broken]
+
+$FORMAT=4
+
+
+;Summary Properties present:
+$PROPERTIES=SUM
+DS_EXT_SUPROPID_TITLE       : VT_BSTR = 'Mo3d Scan'
+DS_EXT_SUPROPID_SUBJECT     : VT_BSTR = '20260127_ILL'
+DS_EXT_SUPROPID_AUTHOR      : VT_BSTR = 'expert'
+DS_EXT_SUPROPID_COMMENTS    : VT_BSTR = ''
+DS_EXT_SUPROPID_CREATED     : VT_DATE = 28/1/2026   08:23:11
+DS_EXT_SUPROPID_SAVED       : VT_DATE = 28/1/2026   10:43:21
+
+;Standard Properties present:
+$PROPERTIES=STD
+DS_GEPROPID_INSTRUMENT                      : VT_BSTR = 'Alpha'
+DS_GEPROPID_SOURCE_TYPE                     : VT_I4   = 1
+DS_GEPROPID_GUID                            : VT_BSTR = '{79B8BD3C-03E7-4E75-BC9C-E8A1B9180140}'
+DS_GEPROPID_SOURCE_GUID                     : VT_BSTR = '{79B8BD3C-03E7-4E75-BC9C-E8A1B9180140}'
+DS_GEPROPID_EXPT_RUN_GUID                   : VT_BSTR = '{9ABE37BB-4DA0-46BD-A813-AB7462DBED82}'
+DS_GEPROPID_VALUE_TYPE                      : VT_I4   = 11
+DS_GEPROPID_VALUE_LABEL                     : VT_BSTR = 'Counts'
+DS_GEPROPID_VALUE_SYMBOL                    : VT_BSTR = 'C'
+DS_GEPROPID_VALUE_UNIT                      : VT_BSTR = ''
+DS_DATASTORAGEID_DATA_STORAGE_METHOD        : VT_I4   = 0
+DS_SOPROPID_STYPE                           : VT_I4   = 10
+DS_SOPROPID_MONO                            : VT_BOOL = True
+DS_SOPROPID_ENERGY                          : VT_R4   = 1486.680054
+DS_SOPROPID_VOLTAGE                         : VT_R4   = 12000.000000
+DS_SOPROPID_CURRENT                         : VT_R4   = 0.003000
+DS_SOPROPID_WIDTH                           : VT_R4   = 400.000000
+DS_SOPROPID_LENGTH                          : VT_R4   = 400.000000
+DS_SOPROPID_GUN                             : VT_I2   = 9
+DS_STPROPID_POS_X                           : VT_I4   = 13048686
+DS_STPROPID_POS_Y                           : VT_I4   = 37704791
+DS_STPROPID_POS_Z                           : VT_I4   = 34084979
+DS_STPROPID_POS_TILT                        : VT_I4   = 0
+DS_STPROPID_POS_AZIM                        : VT_I4   = 0
+DS_ACPROPID_START_TIME                      : VT_DATE = 28/1/2026   10:41:08
+DS_ACPROPID_END_TIME                        : VT_DATE = 28/1/2026   10:43:21
+DS_ACPROPID_ACQ_TIME                        : VT_R4   = 0.050000
+DS_ACPROPID_PERIODS                         : VT_I4   = 10
+DS_ACPROPID_MODE                            : VT_I2   = 2
+DS_ACPROPID_DIRECTION                       : VT_I2   = 1
+DS_ACPROPID_SIG_COMP                        : VT_BOOL = False
+DS_ACPROPID_EV_SCALE                        : VT_I2   = 1
+DS_SOURCE_FLOODGUNPROPID_CURRENT            : VT_R4   = 150.000000
+DS_SOURCE_FLOODGUNPROPID_ENERGY             : VT_R4   = 1.000000
+DS_SOURCE_FLOODGUNPROPID_DESCRIPTION        : VT_BSTR = 'Default FG03 mode'
+DS_ANPROPID_MODE                            : VT_I2   = 1
+DS_ANPROPID_PASS                            : VT_R4   = 50.000000
+DS_ANPROPID_WORK_FTN                        : VT_R4   = 4.200000
+DS_ANPROPID_LENS_MODE_NAME                  : VT_BSTR = 'Standard'
+DS_ANPROPID_TXFN_COEFFS                     : VT_I4   = 4
+DS_ANPROPID_TXFN_REMOVED                    : VT_BOOL = True
+; Property list for DS_ANPROPID_TXFN_COEFF (expecting 4) follows:
+DS_ANPROPID_TXFN_COEFF[0]                        : VT_R4   = 4.196270
+DS_ANPROPID_TXFN_COEFF[1]                        : VT_R4   = 0.667161
+DS_ANPROPID_TXFN_COEFF[2]                        : VT_R4   = -0.575261
+DS_ANPROPID_TXFN_COEFF[3]                        : VT_R4   = 0.046197
+
+;Extended Properties present:
+$PROPERTIES=EXT
+;   NONE found
+
+;========================================================================
+
+;DataSpace has 1 data axes as follows:
+;   #=      start,     end,       numSpaceAxes
+$DATAAXES=1,#empty#
+    0=        0,      180,          1
+
+;========================================================================
+
+;DataSpace has 1 space axes as follows:
+;   #=       start,         width,       numPoints,  axisType,   linear,  symbol,     unit,      label
+$SPACEAXES=1
+    0=    1246.600000,       0.100000,      181,  ENERGY,   LINEAR,  'E',   'eV',    'Energy'
+
+;========================================================================
+
+;Values on axis 0
+$DATA=*
+LIST@   0=     1088.787256,     1082.974662,     1114.863246,     1092.801879
+LIST@   4=     1186.409690,     1111.906062,     1126.227195,     1158.058446
+LIST@   8=     1133.502344,     1129.892849,     1165.359494,     1147.396514
+LIST@  12=     1173.346526,     1159.707872,     1141.354422,     1127.006817
+LIST@  16=     1160.011053,     1188.644153,     1164.236037,     1125.035055
+LIST@  20=     1165.560395,     1121.139197,     1113.856293,     1153.812361
+LIST@  24=     1125.904291,     1175.100133,     1128.369078,     1174.225302
+LIST@  28=     1185.473032,     1252.875315,     1214.852945,     1240.094302
+LIST@  32=     1187.769403,     1245.539793,     1309.348457,     1330.692122
+LIST@  36=     1383.836156,     1386.121160,     1508.184054,     1495.230462
+LIST@  40=     1585.933866,     1620.498928,     1659.855123,     1789.707495
+LIST@  44=     1790.463539,     1832.173873,     1996.953756,     2012.741976
+LIST@  48=     2100.645140,     1958.376981,     2041.314416,     2184.477765
+LIST@  52=     2170.871348,     2089.724501,     2190.891187,     2062.167482
+LIST@  56=     1988.875590,     2029.738298,     1976.108344,     1783.278400
+LIST@  60=     1785.669821,     1736.596776,     1767.532473,     1776.939093
+LIST@  64=     1744.606302,     1758.607998,     1718.538648,     1660.553914
+LIST@  68=     1733.005729,     1729.313929,     1764.277948,     1844.661659
+LIST@  72=     1924.084382,     1956.869385,     2071.912848,     2154.536729
+LIST@  76=     2185.577811,     2302.062587,     2339.605498,     2431.696389
+LIST@  80=     2557.340954,     2434.579187,     2595.332515,     2511.706183
+LIST@  84=     2515.639461,     2549.334390,     2396.625585,     2276.751730
+LIST@  88=     2337.568239,     2271.737389,     2203.265052,     2122.666739
+LIST@  92=     1934.940940,     1902.419351,     1805.074083,     1673.162809
+LIST@  96=     1681.983092,     1611.416952,     1556.605847,     1506.868793
+LIST@ 100=     1391.489667,     1373.833962,     1290.021655,     1205.146535
+LIST@ 104=     1197.050041,     1164.883424,     1174.608768,     1132.785331
+LIST@ 108=     1062.461246,     1085.186453,     1049.006940,     1046.926946
+LIST@ 112=      997.561015,     1009.923539,      985.365192,      976.640840
+LIST@ 116=      993.413889,      979.541185,      961.536020,      923.833053
+LIST@ 120=      946.942406,     1003.989727,      972.018617,      969.090238
+LIST@ 124=     1014.899578,      993.588866,      981.254978,      963.313152
+LIST@ 128=      980.211036,      979.980227,      939.557121,      953.931659
+LIST@ 132=      942.234701,      949.752216,      922.978567,      936.271559
+LIST@ 136=      964.652480,      966.946042,      992.903562,      973.374150
+LIST@ 140=      892.457772,      993.318353,      974.985961,      992.757808
+LIST@ 144=      965.381157,      952.288804,      927.214262,      948.309906
+LIST@ 148=      926.668896,      922.059709,      879.421845,      963.501122
+LIST@ 152=      967.225082,      954.571923,      958.545325,      985.813876
+LIST@ 156=      938.253077,      925.464431,      958.999251,      963.222655
+LIST@ 160=      910.801836,      922.668935,      913.661395,      925.636828
+LIST@ 164=      935.326549,      954.723712,      909.563660,      895.024595
+LIST@ 168=      978.382871,      941.904706,      924.236911,      934.852668
+LIST@ 172=      906.772510,      884.213952,      933.404439,      938.511452
+LIST@ 176=      951.223679,      904.430197,      920.232460,      953.857186
+LIST@ 180=      911.986195

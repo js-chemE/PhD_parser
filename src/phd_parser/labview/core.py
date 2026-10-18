@@ -1,5 +1,4 @@
 import logging
-from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Callable, Literal, Optional, Union, List
@@ -10,45 +9,19 @@ import pandas as pd
 import xarray as xr
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from phd_parser.history import HISTORY_KEY, decode_attrs, encode_attrs, format_history, get_history, records_step
+from phd_parser._selection import EmptyWindow, window_mask
+from phd_parser._time import TimeOriginMixin
+from phd_parser.history import HistoryMixin
+from phd_parser.history import HISTORY_KEY, decode_attrs, encode_attrs, get_history, records_step
 from phd_parser.labview.b67box5 import read as read_b67box5
 from phd_parser.naming.species.convention import ConventionLike, Unknown, get_convention
 
 logger = logging.getLogger(__name__)
 
-# Anything pandas.Timestamp can parse into an absolute point in time.
-TimestampLike = Union[pd.Timestamp, datetime, np.datetime64, str]
 
 
-def _to_timedelta(delta: Union[float, pd.Timedelta, str]) -> pd.Timedelta:
-    """Read a plain number as seconds; hand anything else to pandas.Timedelta."""
-    if isinstance(delta, (int, float, np.integer, np.floating)) and not isinstance(delta, bool):
-        return pd.Timedelta(seconds=float(delta))
-    return pd.Timedelta(delta)
 
-
-def _to_timestamp(value: TimestampLike, reference: Optional[pd.Timestamp] = None) -> pd.Timestamp:
-    """Parse a timestamp-like value and align its timezone with *reference*.
-
-    A naive value is read as wall-clock time in the reference's timezone; an
-    aware value handed to a naive reference keeps its wall-clock reading and
-    drops the offset.  Both sides tz-aware (or both naive) is left alone.
-    """
-    ts = pd.Timestamp(value)
-    if reference is None:
-        return ts
-    if ts.tzinfo is None and reference.tzinfo is not None:
-        return ts.tz_localize(reference.tzinfo)
-    if ts.tzinfo is not None and reference.tzinfo is None:
-        logger.warning(
-            f"tos_start {reference} is timezone-naive but {ts} is not; "
-            "comparing wall-clock times and ignoring the offset."
-        )
-        return ts.tz_localize(None)
-    return ts
-
-
-class LVData(BaseModel):
+class LVData(TimeOriginMixin, HistoryMixin, BaseModel):
     """Pydantic wrapper for LabView process-data exported as a tab-separated log.
 
     The backing store is an ``xr.Dataset`` with a single ``tos`` dimension
@@ -61,6 +34,27 @@ class LVData(BaseModel):
     and leave the original unchanged.
     """
 
+    def _new(self, ds: xr.Dataset) -> "LVData":
+        """A new instance around ``ds``, keeping the metadata."""
+        return LVData(ds=ds, metadata=self.metadata)
+
+    def _tos_start_raw(self) -> Any:
+        """The origin lives in ``metadata`` (mirrored into ``ds.attrs``)."""
+        return self.metadata.get("tos_start")
+
+    def _with_tos_start(self, ds: xr.Dataset, tos_start: Optional[pd.Timestamp]) -> "LVData":
+        """Stamp (or drop) ``tos_start`` on both the metadata dict and the dataset attrs."""
+        metadata = dict(self.metadata)
+        attrs = dict(ds.attrs)
+        for store in (metadata, attrs):
+            if tos_start is None:
+                store.pop("tos_start", None)
+            else:
+                store["tos_start"] = tos_start.isoformat()
+        ds.attrs = attrs
+        return LVData(ds=ds, metadata=metadata)
+
+
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
         validate_assignment=True,
@@ -71,10 +65,10 @@ class LVData(BaseModel):
     # Fields
     # ----------------------------------------------------------------
 
-    # Core data — dims: ('tos',). Each recorded channel is a data_var.
+    # Core data: dims: ('tos',). Each recorded channel is a data_var.
     # 'tos' is elapsed seconds since tos_start (mirrors IRData convention).
     # Per-channel metadata (unit, group, species, ...) lives in each variable's attrs.
-    # 'timestamps' is NOT stored — derived on demand from tos + tos_start.
+    # 'timestamps' is NOT stored: derived on demand from tos + tos_start.
     ds: xr.Dataset = Field(
         description=(
             "xarray Dataset with one dim 'tos' (seconds since tos_start). "
@@ -92,12 +86,11 @@ class LVData(BaseModel):
     @field_validator("ds", mode="before")
     @classmethod
     def validate_ds(cls, v: Any) -> xr.Dataset:
+        """Check the layout of ``ds``: a single ``tos`` dimension shared by every channel."""
         if not isinstance(v, xr.Dataset):
             raise TypeError(f"'ds' must be an xr.Dataset, got {type(v)}")
         if "tos" not in v.dims:
             raise ValueError("Dataset must have a 'tos' dimension")
-        if v.sizes["tos"] == 0:
-            raise ValueError("Dataset 'tos' dimension is empty")
         return v
 
     # ----------------------------------------------------------------
@@ -116,10 +109,6 @@ class LVData(BaseModel):
             ``{"step", "parameters", "time", "version"}`` per step.
         """
         return get_history(self.metadata)
-
-    def format_history(self) -> str:
-        """Return :attr:`history` as readable text, one numbered step per line."""
-        return format_history(self.history)
 
     def _with_history(self, history: list[dict[str, Any]]) -> "LVData":
         """Copy carrying ``history`` in both ``metadata`` and ``ds.attrs`` (used by phd_parser.history)."""
@@ -161,37 +150,6 @@ class LVData(BaseModel):
         """
         # Elapsed seconds since tos_start (the single source of truth in the Dataset)
         return self.ds.coords["tos"].values
-
-    @property
-    def tos_start(self) -> Optional[pd.Timestamp]:
-        """Absolute start time of the run, parsed from ``metadata``.
-
-        Returns
-        -------
-        pandas.Timestamp or None
-            Start timestamp, or ``None`` if ``"tos_start"`` is absent from
-            ``metadata``.
-        """
-        # Parsed on demand from metadata ISO string — survives all transformations
-        raw = self.metadata.get("tos_start")
-        if raw is None:
-            return None
-        return pd.Timestamp(raw)
-
-    @property
-    def timestamps(self) -> Optional[pd.DatetimeIndex]:
-        """Absolute datetime for every sample, derived from ``tos`` and ``tos_start``.
-
-        Returns
-        -------
-        pandas.DatetimeIndex or None
-            Index of absolute timestamps, or ``None`` when ``tos_start`` is
-            unavailable.
-        """
-        # Derived on demand from tos + tos_start; not stored as a coordinate
-        if self.tos_start is None:
-            return None
-        return self.tos_start + pd.to_timedelta(self.tos, unit="s")
 
     @property
     def sampling_interval(self) -> Optional[float]:
@@ -276,128 +234,7 @@ class LVData(BaseModel):
         ]
 
     # ----------------------------------------------------------------
-    # Immutable — time origin (tos_start)
-    # ----------------------------------------------------------------
-
-    @records_step
-    def with_tos_start(self, tos_start: Union[pd.Timestamp, str]) -> "LVData":
-        """Re-anchor ``tos`` to a new origin, leaving every absolute timestamp unchanged.
-
-        Moves the zero of the ``tos`` axis: each value is shifted by minus the
-        distance the origin moved, so ``tos_start + tos`` still resolves to the
-        moment each sample was actually recorded.  This is what you want when
-        the experiment's reference point changes (e.g. aligning to when gas
-        flow started rather than when logging did).
-
-        Parameters
-        ----------
-        tos_start : pandas.Timestamp or str
-            New absolute origin.  Strings are parsed by ``pandas.Timestamp``.
-
-        Returns
-        -------
-        LVData
-            New instance with the new origin and rebased ``tos`` values.  If no
-            origin was set before, ``tos`` is left untouched and simply
-            anchored to the new one.
-
-        See Also
-        --------
-        set_tos_start : Replace the origin *without* touching ``tos``.
-        move_tos_start_by : Move the origin by a relative amount.
-        """
-        new_tos_start = pd.Timestamp(tos_start)
-        old_tos_start = self.tos_start
-
-        ds = self.ds.copy()
-        if old_tos_start is None:
-            logger.info(
-                f"No previous tos_start: keeping tos as-is and anchoring it to {new_tos_start}."
-            )
-        else:
-            shift_seconds = (new_tos_start - old_tos_start).total_seconds()
-            ds = ds.assign_coords(tos=ds.coords["tos"] - shift_seconds)
-        return self._with_tos_start_metadata(ds, new_tos_start)
-
-    @records_step
-    def set_tos_start(self, tos_start: Union[pd.Timestamp, str]) -> "LVData":
-        """Replace the origin without touching ``tos`` — every absolute timestamp moves.
-
-        Use this to correct a wrong origin: the elapsed times are right, the
-        wall-clock they were anchored to was not.
-
-        Parameters
-        ----------
-        tos_start : pandas.Timestamp or str
-            New absolute origin.  Strings are parsed by ``pandas.Timestamp``.
-
-        Returns
-        -------
-        LVData
-            New instance with the new origin and unchanged ``tos`` values.
-
-        See Also
-        --------
-        with_tos_start : Re-anchor ``tos`` so the absolute timestamps survive.
-        """
-        return self._with_tos_start_metadata(self.ds.copy(), pd.Timestamp(tos_start))
-
-    @records_step
-    def del_tos_start(self) -> "LVData":
-        """Drop the origin, keeping ``tos`` as a purely relative axis.
-
-        Returns
-        -------
-        LVData
-            New instance without a ``tos_start``; ``timestamps`` becomes
-            ``None``.  Returns an equivalent instance if none was set.
-        """
-        metadata = dict(self.metadata)
-        metadata.pop("tos_start", None)
-        ds = self.ds.copy()
-        ds.attrs = dict(metadata)
-        return LVData(ds=ds, metadata=metadata)
-
-    @records_step
-    def move_tos_start_by(self, delta: Union[float, pd.Timedelta, str]) -> "LVData":
-        """Move the origin by a relative amount and re-anchor ``tos`` to it.
-
-        Equivalent to ``with_tos_start(tos_start + delta)``: absolute
-        timestamps never change, so moving the origin *later* by ``delta``
-        makes every ``tos`` value *smaller* by ``delta``.  Pass a negative
-        ``delta`` to move the origin earlier and grow the ``tos`` values.
-
-        Parameters
-        ----------
-        delta : float or pandas.Timedelta or str
-            How far to move the origin.  A plain number is read as seconds;
-            anything else is passed to ``pandas.Timedelta`` (e.g. ``"90s"``,
-            ``"1h30min"``).
-
-        Returns
-        -------
-        LVData
-            New instance with the moved origin and rebased ``tos`` values.
-
-        Raises
-        ------
-        ValueError
-            If no ``tos_start`` is set, so there is nothing to move.
-        """
-        if self.tos_start is None:
-            raise ValueError(
-                "No tos_start to move. Anchor the data first with set_tos_start(...)."
-            )
-        return self.with_tos_start(self.tos_start + _to_timedelta(delta))
-
-    def _with_tos_start_metadata(self, ds: xr.Dataset, tos_start: pd.Timestamp) -> "LVData":
-        """Stamp tos_start onto both the metadata dict and the dataset attrs."""
-        metadata = {**self.metadata, "tos_start": tos_start.isoformat()}
-        ds.attrs = {**ds.attrs, "tos_start": tos_start.isoformat()}
-        return LVData(ds=ds, metadata=metadata)
-
-    # ----------------------------------------------------------------
-    # Immutable — selection
+    # Immutable: selection
     # ----------------------------------------------------------------
 
     @records_step
@@ -453,87 +290,36 @@ class LVData(BaseModel):
         self,
         min_s: Optional[float] = None,
         max_s: Optional[float] = None,
+        empty: EmptyWindow = "warn",
     ) -> "LVData":
         """Return a new ``LVData`` sliced to a time-on-stream window.
 
         Parameters
         ----------
         min_s : float, optional
-            Lower bound of ``tos`` in seconds (inclusive).  If the value
-            exceeds the data range, the first sample is used and a warning
-            is emitted.
+            Lower bound of ``tos`` in seconds (inclusive).
         max_s : float, optional
-            Upper bound of ``tos`` in seconds (inclusive).  If the value is
-            below the data range, the last sample is used and a warning is
-            emitted.
+            Upper bound of ``tos`` in seconds (inclusive).
+        empty : {"warn", "raise"}, optional
+            What to do when nothing falls inside the window: log it and
+            return the empty selection (default), or raise ``ValueError``.
 
         Returns
         -------
         LVData
             New instance containing only samples within ``[min_s, max_s]``.
-        """
-        ds = self.ds
-        tos = ds.coords["tos"].values
-        if min_s is not None:
-            if not np.any(tos >= min_s):
-                min_s = tos[0]
-                logger.warning(f"min_s exceeds data range; using min_s={min_s:.1f}s")
-            ds = ds.isel(tos=tos >= min_s)
-            tos = ds.coords["tos"].values
-        if max_s is not None:
-            if not np.any(tos <= max_s):
-                max_s = tos[-1]
-                logger.warning(f"max_s below data range; using max_s={max_s:.1f}s")
-            ds = ds.isel(tos=tos <= max_s)
-        return LVData(ds=ds, metadata=self.metadata)
-
-    @records_step
-    def select_timestamp_range(
-        self,
-        start: Optional[TimestampLike] = None,
-        end: Optional[TimestampLike] = None,
-    ) -> "LVData":
-        """Return a new ``LVData`` sliced to an absolute time window.
-
-        The wall-clock counterpart of ``select_tos_range``: bounds are given as
-        absolute timestamps instead of elapsed seconds, and are converted against
-        ``tos_start`` before the selection is made.  Naive bounds are read as
-        wall-clock time in the timezone of ``tos_start``.
-
-        Parameters
-        ----------
-        start : pandas.Timestamp, datetime, numpy.datetime64, str or None, optional
-            Lower bound (inclusive).  ``None`` means no lower bound.
-        end : pandas.Timestamp, datetime, numpy.datetime64, str or None, optional
-            Upper bound (inclusive).  ``None`` means no upper bound.
-
-        Returns
-        -------
-        LVData
-            New instance containing only samples within ``[start, end]``.
 
         Raises
         ------
         ValueError
-            If no ``tos_start`` is set, so absolute timestamps cannot be
-            resolved.
-
-        See Also
-        --------
-        select_tos_range : Same selection, bounds given in elapsed seconds.
+            If the window is empty and ``empty="raise"``.
         """
-        tos_start = self.tos_start
-        if tos_start is None:
-            raise ValueError(
-                "select_timestamp_range requires a tos_start. "
-                "Anchor the data first with set_tos_start(...)."
-            )
-        min_s = None if start is None else (_to_timestamp(start, tos_start) - tos_start).total_seconds()
-        max_s = None if end is None else (_to_timestamp(end, tos_start) - tos_start).total_seconds()
-        return self.select_tos_range(min_s, max_s)
+        mask = window_mask(self.ds.coords["tos"].values, min_s, max_s,
+                           what="sample", axis="tos", unit="s", empty=empty)
+        return LVData(ds=self.ds.isel(tos=mask), metadata=self.metadata)
 
     # ----------------------------------------------------------------
-    # Immutable — resampling / averaging
+    # Immutable: resampling / averaging
     # ----------------------------------------------------------------
 
     @records_step
@@ -550,17 +336,19 @@ class LVData(BaseModel):
             Bin width in seconds.
         method : {"mean", "median", "first", "last"}, optional
             Aggregation function applied within each bin (default is
-            ``"mean"``).
+            ``"mean"``).  NaN samples are skipped; ``first`` and ``last`` are
+            the first and last recorded (non-NaN) sample of the bin.
 
         Returns
         -------
         LVData
-            New instance on a uniform ``tos`` grid with bin-centre coordinates.
+            New instance on a uniform ``tos`` grid with bin-centre coordinates;
+            a bin without samples is NaN.
 
         Raises
         ------
         ValueError
-            If *step_s* is not positive.
+            If *step_s* is not positive or *method* is unknown.
         """
         if step_s <= 0:
             raise ValueError("step_s must be > 0")
@@ -570,16 +358,13 @@ class LVData(BaseModel):
         n_bins = int(bin_idx.max()) + 1
         new_tos = tos[0] + (np.arange(n_bins) + 0.5) * step_s
 
-        agg: dict[str, Callable[[np.ndarray], float]] = {
-            "mean": lambda g: g.mean() if g.size else np.nan,
-            "median": lambda g: np.median(g) if g.size else np.nan,
-            "first": lambda g: g[0] if g.size else np.nan,
-            "last": lambda g: g[-1] if g.size else np.nan,
-        }
-        reduce = agg[method]
+        if method not in ("mean", "median", "first", "last"):
+            raise ValueError(f"method must be 'mean', 'median', 'first' or 'last', got {method!r}")
 
         def _bin(values: npt.NDArray) -> npt.NDArray:
-            return np.array([reduce(values[bin_idx == i]) for i in range(n_bins)])
+            # one grouped pass per channel; NaN samples (a channel a file did not record) are skipped
+            grouped = pd.Series(values).groupby(bin_idx).agg(method)
+            return grouped.reindex(range(n_bins)).to_numpy(dtype=float)
 
         return self._apply_per_channel(
             _bin,
@@ -608,14 +393,15 @@ class LVData(BaseModel):
         """
         if window_size < 1:
             raise ValueError("window_size must be >= 1")
-        kernel = np.ones(window_size) / window_size
         return self._apply_per_channel(
-            lambda v: np.convolve(v, kernel, mode="same"),
+            # centred window that shrinks at the edges and skips NaN samples, so the
+            # ends are not pulled towards zero and a NaN gap does not spread
+            lambda v: pd.Series(v).rolling(window_size, center=True, min_periods=1).mean().to_numpy(dtype=float),
             extra_metadata={"smooth_moving_window": window_size},
         )
 
     # ----------------------------------------------------------------
-    # Immutable — naming
+    # Immutable: naming
     # ----------------------------------------------------------------
 
     @records_step
@@ -646,7 +432,9 @@ class LVData(BaseModel):
             species = ds[name].attrs.get("species")
             if species:
                 ds[name].attrs = {**ds[name].attrs, "species": resolved.get_canonical(str(species), unknown)}
-        return LVData(ds=ds, metadata={**self.metadata, "species_convention": resolved.name})
+        metadata = {**self.metadata, "species_convention": resolved.name}
+        ds.attrs = dict(metadata)
+        return LVData(ds=ds, metadata=metadata)
 
     # ----------------------------------------------------------------
     # Export
@@ -708,7 +496,7 @@ class LVData(BaseModel):
         ds.attrs = encode_attrs({k: v for k, v in {**ds.attrs, **self.metadata}.items() if v is not None})
         for name in ds.variables:
             ds[name].attrs = encode_attrs({k: v for k, v in ds[name].attrs.items() if v is not None})
-        ds.to_netcdf(filepath)
+        ds.to_netcdf(filepath, engine="h5netcdf")
         logger.debug("Saved NetCDF → %s", filepath)
 
     # ----------------------------------------------------------------

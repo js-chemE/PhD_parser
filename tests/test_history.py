@@ -12,6 +12,7 @@ import pytest
 
 from phd_parser import GCData, IRData, LVData, MSData, RamanData
 from phd_parser.history import decode_attr, encode_attr, format_history, suppress_recording
+from phd_parser.spectroscopy import SpectroscopyData
 
 AXIS_PER_CM = np.linspace(1000.0, 3000.0, 201)
 MS_FILE = os.path.join(os.path.dirname(__file__), "massspec", "2026-03-26_sk1002_02-react.asc")
@@ -72,7 +73,7 @@ def test_ir_history_and_tracking_survive_netcdf(ir, tmp_path):
         .average_scans_by_tos([60.0, 120.0], number_of_scans=2)  # writes a None attr
     )
     processed.to_netcdf(tmp_path / "ir.nc")
-    back = IRData.from_netcdf(tmp_path / "ir.nc")
+    back = SpectroscopyData.from_netcdf(tmp_path / "ir.nc")
 
     assert back.history[:-1] == processed.history
     assert back.history[-1]["step"] == "from_netcdf"
@@ -89,7 +90,7 @@ def test_raman_history_and_metadata_survive_netcdf(tmp_path):
         tos=np.arange(3.0), metadata={"instrument": "BTC655N", "laser_power": [10, "mW"]},
     ).smooth_moving(3)
     raman.to_netcdf(tmp_path / "raman.nc")
-    back = RamanData.from_netcdf(tmp_path / "raman.nc")
+    back = SpectroscopyData.from_netcdf(tmp_path / "raman.nc")
     assert _steps(back) == ["from_arrays", "smooth_moving", "from_netcdf"]
     assert back.metadata == {"instrument": "BTC655N", "laser_power": [10, "mW"]}
     assert back.excitation_wavelength_nm == 532.0

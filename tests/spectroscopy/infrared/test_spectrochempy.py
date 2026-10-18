@@ -4,6 +4,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
+from phd_parser.spectroscopy import SpectroscopyData
 
 MOCK_DIR_PATH = Path(os.path.dirname(__file__)) / "omnic-test-data"
 MOCK_SINGLE_FILE_PATH = MOCK_DIR_PATH / "Spectrum Index 2718 at 2,46 Hours.spa"
@@ -12,7 +13,7 @@ pytest.importorskip("spectrochempy", reason="spectrochempy not installed")
 
 
 # ----------------------------------------------------------------
-# spectrochempy — raw loading
+# spectrochempy: raw loading
 # ----------------------------------------------------------------
 
 def test_read_omnic_single_file():
@@ -105,7 +106,7 @@ def test_scan_count_agrees_with_phd_parser():
 
 
 # ----------------------------------------------------------------
-# IRData.from_omnic_spa — backend parameter
+# IRData.from_omnic_spa: backend parameter
 # ----------------------------------------------------------------
 
 def test_from_omnic_spa_backend_spectrochempy_single():
@@ -245,15 +246,15 @@ def test_from_omnic_spa_auto_uses_spectrochempy_when_available():
 
 
 # ----------------------------------------------------------------
-# IRData.from_scp
+# SpectroscopyData.from_spectrochempy
 # ----------------------------------------------------------------
 
-def test_from_scp_single_spectrum():
+def test_from_spectrochempy_single_spectrum():
     import spectrochempy as scp
     from phd_parser.spectroscopy.infrared import IRData
 
     nd = scp.read_omnic(MOCK_SINGLE_FILE_PATH)
-    ir = IRData.from_scp(nd)
+    ir = SpectroscopyData.from_spectrochempy(nd)
 
     # One scan is the one-element case of a series, not a special 1-D layout.
     assert ir.ndim == 2
@@ -264,37 +265,37 @@ def test_from_scp_single_spectrum():
     assert ir.values.shape[1] == ir.wavenumber.size
 
 
-def test_from_scp_multi_scan():
+def test_from_spectrochempy_multi_scan():
     import spectrochempy as scp
     from phd_parser.spectroscopy.infrared import IRData
 
     files = sorted(MOCK_DIR_PATH.glob("*.spa"))
     nd = scp.read_omnic(*files)
-    ir = IRData.from_scp(nd)
+    ir = SpectroscopyData.from_spectrochempy(nd)
 
     assert ir.ndim == 2
     assert ir.shape[0] == len(files)
     assert ir.shape[1] == ir.wavenumber.size
 
 
-def test_from_scp_wavenumber_in_si_units():
+def test_from_spectrochempy_wavenumber_in_si_units():
     import spectrochempy as scp
     from phd_parser.spectroscopy.infrared import IRData
 
     nd = scp.read_omnic(MOCK_SINGLE_FILE_PATH)
-    ir = IRData.from_scp(nd)
+    ir = SpectroscopyData.from_spectrochempy(nd)
 
     # wavenumber stored in m⁻¹; typical mid-IR range ~40 000–400 000 m⁻¹
     assert ir.wavenumber.min() > 1e4
     assert ir.wavenumber.max() < 1e6
 
 
-def test_from_scp_matches_from_omnic_spa():
+def test_from_spectrochempy_matches_from_omnic_spa():
     import spectrochempy as scp
     from phd_parser.spectroscopy.infrared import IRData
 
     nd = scp.read_omnic(MOCK_SINGLE_FILE_PATH)
-    ir_scp = IRData.from_scp(nd)
+    ir_scp = SpectroscopyData.from_spectrochempy(nd)
     ir_omnic = IRData.from_omnic_spa(MOCK_SINGLE_FILE_PATH, backend="omnic")
 
     sort_scp = np.argsort(ir_scp.wavenumber_per_cm)
@@ -308,14 +309,48 @@ def test_from_scp_matches_from_omnic_spa():
     assert ir_scp.data_type == ir_omnic.data_type
 
 
-def test_from_scp_delta_time_seconds():
+def test_from_spectrochempy_delta_time_seconds():
     import spectrochempy as scp
     from phd_parser.spectroscopy.infrared import IRData
 
     files = sorted(MOCK_DIR_PATH.glob("*.spa"))
     nd = scp.read_omnic(*files)
-    ir = IRData.from_scp(nd, delta_time_seconds=30.0)
+    ir = SpectroscopyData.from_spectrochempy(nd, delta_time_seconds=30.0)
 
     assert ir.tos is not None
     assert ir.tos[0] == pytest.approx(0.0)
     np.testing.assert_allclose(np.diff(ir.tos), 30.0)
+
+
+
+def test_backend_keeps_file_order_when_text_and_numeric_order_differ(tmp_path):
+    """SpectroChemPy sorts file names as text ("Index 10" before "Index 9"); the spectra must still land on their own times."""
+    import shutil
+
+    from phd_parser.spectroscopy import IRData
+
+    sources = sorted(MOCK_DIR_PATH.glob("*.spa"))
+    for number, source in enumerate(sources, start=6):          # 6 .. 17: one- and two-digit indices
+        shutil.copy(source, tmp_path / f"Spectrum Index {number} at 0,0{number // 10} Hours.spa")
+    scp_read = IRData.from_omnic_spa(tmp_path, backend="spectrochempy")
+    plain_read = IRData.from_omnic_spa(tmp_path, backend="omnic")
+    np.testing.assert_allclose(scp_read.tos, plain_read.tos)
+    np.testing.assert_allclose(scp_read.sort().values, plain_read.sort().values, rtol=1e-6)
+    assert np.all(np.diff(scp_read.tos) >= 0)
+
+
+
+def test_backend_refuses_a_pairing_it_cannot_verify(tmp_path, monkeypatch):
+    """If a row is not the spectrum of the file it is paired with, the read fails instead of mispairing times."""
+    import shutil
+
+    from phd_parser.spectroscopy import IRData
+    from phd_parser.spectroscopy.infrared import spectrochempy as backend
+
+    sources = sorted(MOCK_DIR_PATH.glob("*.spa"))
+    for number, source in enumerate(sources, start=6):
+        shutil.copy(source, tmp_path / f"Spectrum Index {number} at 0,0{number // 10} Hours.spa")
+    # force a wrong pairing: the rows handed out in reverse of the files they are said to belong to
+    monkeypatch.setattr(backend, "_scp_row_order", lambda nd, files: list(range(len(files)))[::-1])
+    with pytest.raises(RuntimeError, match="not the one stored in that file"):
+        IRData.from_omnic_spa(tmp_path, backend="spectrochempy")

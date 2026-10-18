@@ -3,6 +3,7 @@ import pytest
 
 from phd_parser.spectroscopy.infrared import IRData
 from phd_parser.spectroscopy.infrared import modulation
+from phd_parser.spectroscopy import SpectroscopyData
 
 WAVENUMBER_PER_CM = np.linspace(1000.0, 3000.0, 41)
 PERIOD = 600.0
@@ -83,7 +84,7 @@ def test_fold_raises_when_nothing_left():
 
 def test_correct_drift_removes_ramp_and_keeps_modulation():
     ir, starts, amplitude = make_modulated(drift_per_s=1e-3)
-    corrected = modulation.correct_drift(ir, starts, PERIOD, order=1)
+    corrected = ir.correct_drift(starts, PERIOD, order=1)
     averaged = modulation.average_cycles(modulation.fold_cycles(corrected, starts, PERIOD, n_discard=0))
     # the averaged period keeps its shape; only a constant level is left from the ramp
     expected = lagged_response(averaged.tos, 45.0)[:, None] * amplitude[None, :]
@@ -99,7 +100,7 @@ def test_correct_drift_removes_ramp_and_keeps_modulation():
 
 def test_mask_wavenumber_ranges_sets_nan_only_inside():
     ir, _, _ = make_modulated(n_cycles=2)
-    masked = modulation.mask_wavenumber_ranges(ir, [(2400, 2200)])
+    masked = ir.mask_wavenumber_ranges([(2400, 2200)])
     inside = (WAVENUMBER_PER_CM >= 2200) & (WAVENUMBER_PER_CM <= 2400)
     assert np.isnan(masked.values[:, inside]).all()
     np.testing.assert_array_equal(masked.values[:, ~inside], ir.values[:, ~inside])
@@ -113,9 +114,9 @@ def test_find_and_drop_spike_scans():
     spikes = [100, 101, 350]
     values[spikes] += 0.2
     spiky = IRData.from_arrays(WAVENUMBER_PER_CM, values, tos=ir.tos, data_type="absorbance")
-    flagged = modulation.find_spike_scans(spiky)
+    flagged = spiky.find_spike_scans()
     assert set(np.where(flagged)[0]) == set(spikes)
-    cleaned = modulation.drop_scans(spiky, flagged)
+    cleaned = spiky.drop_scans(flagged)
     assert cleaned.shape[0] == ir.shape[0] - 3
     assert cleaned.ds.attrs["n_scans_dropped"] == 3
 
@@ -125,7 +126,7 @@ def one_period(signal_of_t, n_points=1200, period=PERIOD):
     time = np.arange(n_points) * period / n_points
     values = signal_of_t(time)[:, None] * np.ones(WAVENUMBER_PER_CM.size)[None, :]
     ir = IRData.from_arrays(WAVENUMBER_PER_CM, values, tos=time, data_type="absorbance")
-    return IRData(ds=ir.ds.assign_attrs(modulation_period=period))
+    return SpectroscopyData(ds=ir.ds.assign_attrs(modulation_period=period))
 
 
 def test_demodulate_recovers_known_phase_lag_and_amplitude():
@@ -141,7 +142,7 @@ def test_demodulate_recovers_known_phase_lag_and_amplitude():
 
     # A_k(phi) = a cos(phi + lag): the k = 1 peak sits at -70 = 290 deg with height 0.8
     k1 = demodulated.sel(harmonic=1).isel(wavenumber=0)
-    assert float(k1.phase[k1.argmax()]) == 290.0
+    assert float(k1.phase[int(np.argmax(k1.data))]) == 290.0
     np.testing.assert_allclose(k1.values, 0.8 * np.cos(np.deg2rad(k1.phase + lag_deg)), atol=1e-12)
     k2 = demodulated.sel(harmonic=2).isel(wavenumber=0)
     np.testing.assert_allclose(k2.values, 0.3 * np.cos(np.deg2rad(k2.phase + lag2_deg)), atol=1e-12)
@@ -173,7 +174,7 @@ def test_demodulate_ignores_constant_offset_and_keeps_nan():
     ir = one_period(lambda t: 5.0 + np.sin(omega * t))
     values = ir.values.copy()
     values[:, 3] = np.nan
-    ir = IRData(ds=ir.ds.assign(data=(ir.ds["data"].dims, values)))
+    ir = SpectroscopyData(ds=ir.ds.assign(data=(ir.ds["data"].dims, values)))
     demodulated = modulation.demodulate(ir)
     assert np.isnan(demodulated.isel(wavenumber=3)).all()
     np.testing.assert_allclose(demodulated.sel(harmonic=1).isel(wavenumber=0).max(), 1.0, atol=1e-12)
@@ -194,3 +195,11 @@ def test_fold_then_demodulate_end_to_end():
     np.testing.assert_allclose(peak["phase_max"].sel(harmonic=2), 360 - 2 * 360 * lag / PERIOD, atol=1e-6)
     np.testing.assert_allclose(peak["amplitude"].sel(harmonic=1), amplitude, rtol=1e-6)
     np.testing.assert_allclose(peak["amplitude"].sel(harmonic=2), 0.3 * amplitude, rtol=1e-6)
+
+
+def test_average_cycles_keeps_the_history_of_the_series():
+    ir, starts, _ = make_modulated(drift_per_s=1e-4)
+    corrected = ir.correct_drift(starts, PERIOD, order=1)
+    period = modulation.average_cycles(modulation.fold_cycles(corrected, starts, PERIOD, n_discard=0))
+    steps = [entry["step"] for entry in period.history]
+    assert steps[:2] == ["from_arrays", "correct_drift"] and steps[-1] == "average_cycles"

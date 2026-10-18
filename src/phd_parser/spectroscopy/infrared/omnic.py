@@ -7,7 +7,6 @@ from typing import Union, Iterable, Dict, Any, Callable, Optional
 import pandas as pd
 
 import numpy as np
-import requests
 
 import logging
 
@@ -26,26 +25,28 @@ def _is_url(x: str) -> bool:
 
 def _open_file(path: Union[str, Path]) -> io.BufferedReader:
     if _is_url(str(path)):
+        import requests  # deferred: only needed for URLs
+
         r = requests.get(path, timeout=10)
         r.raise_for_status()
         return io.BytesIO(r.content)
     return open(Path(path), "rb")
 
 
+_STRUCT_FORMAT = {"uint8": "B", "uint32": "I", "int32": "i", "float32": "f"}
+_NUMPY_DTYPE = {"uint8": "<u1", "uint32": "<u4", "int32": "<i4", "float32": "<f4"}
+
+
 def _read(fid: io.BufferedReader, dtype: str, count: int = 1) -> Union[int, float, np.ndarray]:
-    fmt_map = {
-        "uint8": "B",
-        "uint32": "I",
-        "int32": "i",
-        "float32": "f",
-    }
-    fmt = "<" + fmt_map[dtype] * count
-    size = struct.calcsize(fmt)
-
+    """Read ``count`` little-endian values; a scalar for one, a float64/int64 array otherwise."""
+    size = np.dtype(_NUMPY_DTYPE[dtype]).itemsize * count
     data = fid.read(size)
-    out = struct.unpack(fmt, data)
-
-    return out[0] if count == 1 else np.array(out)
+    if len(data) < size:
+        raise EOFError(f"Unexpected end of file reading {count} x {dtype}")
+    if count == 1:
+        return struct.unpack("<" + _STRUCT_FORMAT[dtype], data)[0]
+    values = np.frombuffer(data, dtype=_NUMPY_DTYPE[dtype])
+    return values.astype(np.float64 if dtype == "float32" else np.int64)
 
 
 def _read_text(fid: io.BufferedReader, pos: int, size: int) -> str:
@@ -160,10 +161,63 @@ def extract_spectrum_tos_1(path: Union[str, Path]) -> int:
 # Core SPA reader
 # =========================
 
+def resolve_spa_files(
+    path: Union[str, Path, Iterable[Union[str, Path]]],
+    sort_key: Optional[Callable[[Path], Any]] = extract_spectrum_id,
+) -> list[Path]:
+    """The ``.spa`` files a path names, in reading order.
+
+    A single file is a one-element list, a directory gives every ``.spa``
+    inside it, and an iterable of paths is taken as is. The files are
+    ordered by ``sort_key`` (by default the ``Spectrum Index N`` of OMNIC's
+    file names); when that key does not tell the files apart, by the
+    acquisition time recorded inside each file.
+
+    Parameters
+    ----------
+    path : str, pathlib.Path or iterable of them
+        A ``.spa`` file, a directory of them, or several files.
+    sort_key : callable or None, optional
+        Key for ordering the files; ``None`` keeps the given order.
+
+    Returns
+    -------
+    list of pathlib.Path
+        Resolved paths.
+
+    Raises
+    ------
+    FileNotFoundError
+        If the path does not exist or names no ``.spa`` file.
+    """
+    if isinstance(path, (str, Path)):
+        single = Path(path)
+        if single.is_dir():
+            files = sorted({f.resolve() for f in single.glob("*.spa")})
+            if not files:
+                raise FileNotFoundError(f"No .spa files found in directory {single}")
+        else:
+            if not single.exists():
+                raise FileNotFoundError(single)
+            files = [single.resolve()]
+    else:
+        files = [Path(f).resolve() for f in path]
+        if not files:
+            raise FileNotFoundError("No .spa files given: the supplied path list is empty")
+
+    if sort_key is None or len(files) < 2:
+        return files
+    keys = [sort_key(f) for f in files]
+    if len(set(keys)) == len(keys):
+        return sorted(files, key=sort_key)
+    logger.info("The file names carry no unique spectrum index; ordering by the recorded acquisition time.")
+    return sorted(files, key=lambda f: (read_spa_datetime(f), f.name))
+
+
 def read_spa_datetime(path: Union[str, Path]) -> datetime:
     """Read only the acquisition timestamp recorded inside a ``.spa`` file.
 
-    This is the authoritative time of a scan — accurate to the second, unlike
+    This is the authoritative time of a scan, accurate to the second, unlike
     the hours encoded in OMNIC's filenames, which are rounded to two decimals
     (0.01 h = 36 s) and restart at zero whenever the experiment is restarted.
     Reads a handful of bytes instead of the whole spectrum, so it is cheap
@@ -283,7 +337,7 @@ def _read_header(fid: io.BufferedReader, pos: int) -> Dict[str, Any]:
         22: ("V", "detector signal"),
     }
 
-    out_units, out_title = ymap.get(ykey)
+    out_units, out_title = ymap.get(ykey, (None, None))
 
     if out_title is None:
         logger.warning(f"Unknown y-axis key {ykey} in header at position {pos}. Defaulting to 'single beam' with no units.")
@@ -334,9 +388,9 @@ def read_spa(
 
     The ``tos`` coordinate (elapsed seconds) is derived in order of priority:
 
-    1. From ``tos_start`` — each spectrum's embedded timestamp minus
+    1. From ``tos_start``, each spectrum's embedded timestamp minus
        ``tos_start``.
-    2. From ``delta_time_seconds`` — uniform spacing ``0, dt, 2*dt, …``.
+    2. From ``delta_time_seconds``, uniform spacing ``0, dt, 2*dt, …``.
     3. Automatically from the first spectrum's timestamp (``tos[0] == 0``).
 
     Parameters
@@ -393,29 +447,7 @@ def read_spa(
             raise ValueError(f"'tos_start' must be a pandas Timestamp or a string, but got {type(tos_start)}")
 
 
-    # ---- normalize ----
-    # A single file is just a one-element series: it takes the same code path so
-    # that tos/tos_start are applied and the returned structure is identical.
-    if isinstance(path, (str, Path)):
-        p = Path(path)
-
-        if p.is_dir():
-            files = list({f.resolve() for f in p.glob("*.spa")})
-            if not files:
-                raise FileNotFoundError(f"No .spa files found in directory {p}")
-        else:
-            if not p.exists():
-                raise FileNotFoundError(p)
-            files = [p.resolve()]
-
-    else:
-        files = [Path(f).resolve() for f in path]
-        if not files:
-            raise FileNotFoundError("No .spa files given: the supplied path list is empty")
-
-    # ---- optional sorting ----
-    if sort_key is not None:
-        files = sorted(files, key=sort_key)
+    files = resolve_spa_files(path, sort_key)
 
     # ---- read ----
     results = [_read_spa_single(f) for f in files]
@@ -482,7 +514,7 @@ def read_spa(
     return {
         "data": {
             "x": x,
-            "tos": tos if tos is not None else None,
+            "tos": tos,
             "v": v,
         },
         "meta": meta,

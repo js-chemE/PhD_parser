@@ -1,7 +1,7 @@
 """Read Thermo OMNIC .spa files via the spectrochempy library.
 
 Returns the same dict structure as :func:`phd_parser.spectroscopy.infrared.omnic.read_spa`
-so :meth:`~phd_parser.spectroscopy.infrared.IRData.from_omnic_spa` can use either backend
+so :meth:`~phd_parser.spectroscopy.SpectroscopyData.from_omnic_spa` can use either backend
 transparently.
 """
 from __future__ import annotations
@@ -43,12 +43,10 @@ def read_spa(
     (``"data"`` / ``"meta"``), so the caller does not need to know which
     backend was used.
 
-    Elapsed-time (tos) values are derived from filenames via
-    :func:`~phd_parser.spectroscopy.infrared.omnic.extract_spectrum_tos` when no explicit
-    timing argument is supplied.  Embedded file timestamps (used by the
-    manual omnic parser) are not exposed by spectrochempy, so spectrochempy
-    timestamps are attempted first and the filename fallback is used when they
-    are unavailable.
+    Elapsed-time (``tos``) values come from the acquisition timestamps
+    SpectroChemPy reads out of each file, or from ``delta_time_seconds``;
+    the hours encoded in OMNIC's file names are a last resort, with a
+    warning, when no timestamp can be read at all.
 
     Parameters
     ----------
@@ -95,33 +93,23 @@ def read_spa(
     if delta_time_seconds is not None and tos_start is not None:
         raise ValueError("Specify either 'delta_time_seconds' or 'tos_start', not both.")
 
-    # ---- resolve files ----
     # A single file is just a one-element series: same code path, same returned
     # structure, so tos/tos_start are applied either way.
-    if isinstance(path, (str, Path)):
-        p = Path(path)
-        if p.is_dir():
-            files = list({f.resolve() for f in p.glob("*.spa")})
-            if not files:
-                raise FileNotFoundError(f"No .spa files found in directory {p}")
-        else:
-            if not p.exists():
-                raise FileNotFoundError(p)
-            files = [p.resolve()]
-    else:
-        files = [Path(f).resolve() for f in path]
-        if not files:
-            raise FileNotFoundError("No .spa files given: the supplied path list is empty")
-
-    if sort_key is not None and len(files) > 1:
-        files = sorted(files, key=sort_key)
+    files = omnic.resolve_spa_files(path, sort_key)
 
     # ---- read via spectrochempy ----
     nd = scp.read_omnic(*files)
 
     # wavenumber: always cm⁻¹, ensure ascending
     x_cm = np.asarray(nd.x.data).ravel()
-    values = np.asarray(nd.data)  # shape (n_files, n_wavenumber) — always 2-D
+    values = np.asarray(nd.data)  # shape (n_files, n_wavenumber), always 2-D
+    # SpectroChemPy returns the spectra in its own order (sorted by file name as text, so
+    # "Index 10" comes before "Index 2"), not in the order the files were given. Put the
+    # rows back into our order, which is the order of the timestamps below.
+    row_order = _scp_row_order(nd, files)
+    if row_order is not None:
+        values = values[row_order]
+    _verify_rows_against_files(files, x_cm, values)
 
     if x_cm[0] > x_cm[-1]:
         x_cm = x_cm[::-1]
@@ -139,7 +127,7 @@ def read_spa(
         tos = np.arange(len(files), dtype=float) * delta_time_seconds
         resolved_tos_start = pd.Timestamp(tos_start) if tos_start is not None else None
     else:
-        acquisition_times = _acquisition_times(nd, files)
+        acquisition_times = _acquisition_times(nd, files, row_order)
         if acquisition_times is not None:
             resolved_tos_start = (
                 pd.Timestamp(tos_start) if tos_start is not None else acquisition_times[0]
@@ -188,10 +176,10 @@ def read_nddataset(
 ) -> dict:
     """Convert a spectrochempy ``NDDataset`` to the standard parser dict.
 
-    Accepts any ``NDDataset`` regardless of how it was created — from a file,
-    from spectrochempy processing, or built programmatically — and returns the
+    Accepts any ``NDDataset`` regardless of how it was created, from a file,
+    from spectrochempy processing, or built programmatically, and returns the
     same ``{"data": ..., "meta": ...}`` structure as :func:`read_spa`, so the
-    result feeds directly into :meth:`~phd_parser.spectroscopy.infrared.IRData.from_scp`.
+    result feeds directly into :meth:`~phd_parser.spectroscopy.SpectroscopyData.from_spectrochempy`.
 
     Parameters
     ----------
@@ -274,20 +262,80 @@ def read_nddataset(
     return result
 
 
-def _acquisition_times(nd, files: list[Path]) -> Optional[list[pd.Timestamp]]:
+def _verify_rows_against_files(files: list[Path], x_cm: np.ndarray, values: np.ndarray, n_checks: int = 3) -> None:
+    """Re-read a few files with the built-in parser and check that each row holds its own file's spectrum.
+
+    The built-in reader takes data and metadata from one file handle, so its
+    pairing cannot be wrong; comparing the first, middle and last row against
+    it catches any reordering a library did on the way.
+
+    Raises
+    ------
+    RuntimeError
+        If a row does not match the spectrum stored in its file.
+    """
+    if len(files) < 2:
+        return
+    positions = sorted({0, len(files) // 2, len(files) - 1})[:n_checks]
+    for position in positions:
+        single = omnic._read_spa_single(files[position])
+        x_single = np.asarray(single["x"], dtype=float).ravel()
+        v_single = np.asarray(single["v"], dtype=float).ravel()
+        # orient the file's axis like the library's (the caller may not have flipped yet)
+        if x_single.size > 1 and x_cm.size > 1 and (x_single[0] > x_single[-1]) != (x_cm[0] > x_cm[-1]):
+            x_single, v_single = x_single[::-1], v_single[::-1]
+        # both axes come from the same float32 header values; SpectroChemPy rebuilds its own grid from them
+        if x_single.size != x_cm.size or not np.allclose(x_single, x_cm, rtol=1e-5, atol=1e-2):
+            raise RuntimeError(
+                f"SpectroChemPy read {files[position].name} on a different wavenumber axis than the file holds."
+            )
+        # both readers decode the same float32 values, so the match is exact up to float64 rounding;
+        # consecutive scans differ by far more than this
+        if not np.allclose(values[position], v_single, rtol=1e-6, atol=1e-7, equal_nan=True):
+            raise RuntimeError(
+                f"The spectrum SpectroChemPy returned for {files[position].name} is not the one stored in that "
+                "file: the library changed the order of the spectra and it could not be recovered. "
+                "Read with backend='omnic' instead."
+            )
+
+
+def _scp_row_order(nd, files: list[Path]) -> Optional[list[int]]:
+    """The row of ``nd.data`` that holds each of ``files``, read from SpectroChemPy's file-name labels.
+
+    ``read_omnic`` labels its y axis with the source path of every spectrum
+    (second label column); that is the only record of the order it used.
+    Returns ``None`` when the labels carry no file names, in which case the
+    rows are assumed to be in the given order.
+    """
+    labels = getattr(getattr(nd, "y", None), "labels", None)
+    if labels is None:
+        return None
+    columns = np.atleast_2d(np.asarray(labels, dtype=object))
+    if columns.shape[0] != len(files) and columns.shape[-1] == len(files):
+        columns = columns.T
+    for column in range(columns.shape[1]):
+        names = [Path(str(item)).name for item in columns[:, column]]
+        if all(name.lower().endswith(".spa") for name in names):
+            row_of = {name: row for row, name in enumerate(names)}
+            if len(row_of) == len(files) and all(f.name in row_of for f in files):
+                return [row_of[f.name] for f in files]
+    return None
+
+
+def _acquisition_times(nd, files: list[Path], row_order: Optional[list[int]] = None) -> Optional[list[pd.Timestamp]]:
     """When each scan was actually recorded, in scan order.
 
     Prefers spectrochempy's own acquisition labels and falls back to the
-    timestamp stored inside each ``.spa`` file — never to the filename, whose
+    timestamp stored inside each ``.spa`` file, never to the filename, whose
     encoded hours are rounded to 36 s and restart at zero for every new series.
     """
     scp_times = _extract_scp_timestamps(nd)
     if scp_times is not None and len(scp_times) == len(files):
-        return scp_times
+        return [scp_times[row] for row in row_order] if row_order is not None else scp_times
 
     try:
         return [pd.Timestamp(omnic.read_spa_datetime(f)) for f in files]
-    except Exception as exc:  # noqa: BLE001 — any unreadable file falls through
+    except Exception as exc:  # noqa: BLE001, any unreadable file falls through
         logger.debug("Could not read acquisition timestamps from the .spa files: %s", exc)
         return None
 

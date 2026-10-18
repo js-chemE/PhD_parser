@@ -41,7 +41,7 @@ def test_sequence_of_wavenumbers_still_gives_two_dimensions(series):
 
 
 def test_single_element_sequence_keeps_the_wavenumber_dimension(series):
-    # A list is a sequence, so the axis is kept — only a scalar squeezes.
+    # A list is a sequence, so the axis is kept: only a scalar squeezes.
     evolution = series.get_evolution([1600])
 
     assert evolution.dims == ("scan", "wavenumber")

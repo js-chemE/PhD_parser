@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import logging
 import re
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional, Sequence, Union
 
@@ -15,14 +13,21 @@ import pandas as pd
 import xarray as xr
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from phd_parser.history import append_history, format_history, get_history, records_step, suppress_recording, to_json_safe
+from phd_parser._selection import EmptyWindow, window_mask
+from phd_parser._time import TimeOriginMixin, TimestampLike, _to_timestamp
+from phd_parser.history import HistoryMixin
+from phd_parser.history import (
+    append_history,
+    decode_attr as _decode_attr,
+    encode_attr as _encode_attr,
+    records_step,
+    suppress_recording,
+    to_json_safe,
+)
 from phd_parser.naming.species.convention import ConventionLike, Unknown, get_convention
 
 logger = logging.getLogger(__name__)
 
-TimestampLike = Union[pd.Timestamp, datetime, np.datetime64, str]
-
-_JSON_PREFIX = "json:"
 _RETENTION_TIME_PREFIX = "retention_time_"
 
 PEAK_COLUMNS: dict[str, str] = {
@@ -41,46 +46,6 @@ PEAK_COLUMNS: dict[str, str] = {
 SPECIES_QUANTITIES: tuple[str, ...] = ("amount", "area", "height")
 
 
-def _encode_attr(value: Any) -> Any:
-    """Make an attribute NetCDF-storable: dicts, non-numeric lists and non-ASCII text become an ASCII JSON string.
-
-    Non-ASCII text matters because without the netCDF4 or h5netcdf package
-    xarray writes NetCDF3 through scipy, which cannot store it ("25 µV").
-    """
-    structured = isinstance(value, dict) or (
-        isinstance(value, (list, tuple))
-        and not all(isinstance(item, (int, float, np.integer, np.floating)) and not isinstance(item, bool) for item in value)
-    )
-    if structured or (isinstance(value, str) and not value.isascii()):
-        return _JSON_PREFIX + json.dumps(value, default=str)
-    return value
-
-
-def _decode_attr(value: Any) -> Any:
-    """Inverse of :func:`_encode_attr`."""
-    if isinstance(value, str) and value.startswith(_JSON_PREFIX):
-        return json.loads(value[len(_JSON_PREFIX):])
-    return value
-
-
-def _to_timedelta(delta: Union[float, pd.Timedelta, str]) -> pd.Timedelta:
-    """Read a plain number as seconds; hand anything else to pandas.Timedelta."""
-    if isinstance(delta, (int, float, np.integer, np.floating)) and not isinstance(delta, bool):
-        return pd.Timedelta(seconds=float(delta))
-    return pd.Timedelta(delta)
-
-
-def _to_timestamp(value: TimestampLike, reference: Optional[pd.Timestamp] = None) -> pd.Timestamp:
-    """Parse a timestamp; a naive value is read as wall-clock time in the reference's timezone."""
-    timestamp = pd.Timestamp(value)
-    if reference is None:
-        return timestamp
-    if timestamp.tzinfo is None and reference.tzinfo is not None:
-        return timestamp.tz_localize(reference.tzinfo)
-    if timestamp.tzinfo is not None and reference.tzinfo is None:
-        logger.warning(f"tos_start {reference} is timezone-naive but {timestamp} is not; comparing wall-clock times.")
-        return timestamp.tz_localize(None)
-    return timestamp
 
 
 def _retention_time_dim(detector: str) -> str:
@@ -96,7 +61,7 @@ def _axis_signature(retention_time: npt.NDArray) -> tuple[float, float]:
     return (round(interval, 9), round(offset, 6))
 
 
-class GCData(BaseModel):
+class GCData(TimeOriginMixin, HistoryMixin, BaseModel):
     """Gas chromatography data: the chromatograms of a series of injections and their analysis.
 
     Immutable wrapper around an ``xr.Dataset``. Every processing method returns
@@ -132,6 +97,11 @@ class GCData(BaseModel):
         ``provenance`` and anything else the vendor converter forwards.
     """
 
+    def _new(self, ds: xr.Dataset) -> "GCData":
+        """A new instance around ``ds``."""
+        return GCData(ds=ds)
+
+
     model_config = ConfigDict(arbitrary_types_allowed=True, validate_assignment=True)
 
     ds: xr.Dataset = Field(description="Dataset with an 'injection' dim and one chromatogram variable per detector.")
@@ -155,21 +125,6 @@ class GCData(BaseModel):
     # ----------------------------------------------------------------
     # Core properties
     # ----------------------------------------------------------------
-
-    @property
-    def history(self) -> list[dict[str, Any]]:
-        """Every processing step that produced this object, oldest first (see :mod:`phd_parser.history`).
-
-        Returns
-        -------
-        list of dict
-            ``{"step", "parameters", "time", "version"}`` per step; saved by ``to_netcdf``.
-        """
-        return get_history(self.ds.attrs)
-
-    def format_history(self) -> str:
-        """Return :attr:`history` as readable text, one numbered step per line."""
-        return format_history(self.history)
 
     @property
     def detectors(self) -> list[str]:
@@ -198,19 +153,6 @@ class GCData(BaseModel):
     def tos(self) -> Optional[npt.NDArray]:
         """Time on stream of every injection in seconds since ``tos_start``, or ``None``."""
         return self.ds.coords["tos"].values if "tos" in self.ds.coords else None
-
-    @property
-    def tos_start(self) -> Optional[pd.Timestamp]:
-        """Absolute timestamp corresponding to ``tos = 0``, or ``None``."""
-        iso = self.ds.attrs.get("tos_start")
-        return pd.Timestamp(iso) if iso else None
-
-    @property
-    def timestamps(self) -> Optional[pd.DatetimeIndex]:
-        """Absolute injection times from ``tos`` and ``tos_start``, or ``None`` if either is missing."""
-        if self.tos is None or self.tos_start is None:
-            return None
-        return pd.DatetimeIndex(self.tos_start + pd.to_timedelta(self.tos, unit="s"))
 
     @property
     def has_analysis(self) -> bool:
@@ -344,6 +286,7 @@ class GCData(BaseModel):
         detectors = self.ds.coords["species_detector"].values
         names = self.ds.coords["species_name"].values
         if detector is not None:
+            self._detector(detector)
             keep = detectors == detector
             columns: Any = list(names[keep])
             values = data.values[:, keep]
@@ -438,83 +381,6 @@ class GCData(BaseModel):
         return GCData(ds=ds)
 
     # ----------------------------------------------------------------
-    # Immutable: time origin (tos_start)
-    # ----------------------------------------------------------------
-
-    @records_step
-    def with_tos_start(self, tos_start: TimestampLike) -> "GCData":
-        """Re-anchor ``tos`` to a new origin, leaving every absolute timestamp unchanged.
-
-        Parameters
-        ----------
-        tos_start : pandas.Timestamp, datetime, numpy.datetime64 or str
-            New absolute origin.
-
-        Returns
-        -------
-        GCData
-            New instance with the new origin and rebased ``tos``. Without a
-            previous origin ``tos`` is kept and anchored to the new one.
-        """
-        new = pd.Timestamp(tos_start)
-        ds = self.ds.copy()
-        old = self.tos_start
-        if old is None:
-            logger.info(f"No previous tos_start: keeping tos as-is and anchoring it to {new}.")
-        elif "tos" in ds.coords:
-            ds = ds.assign_coords(tos=ds.coords["tos"] - (_to_timestamp(new, old) - old).total_seconds())
-        ds.attrs = {**self.ds.attrs, "tos_start": new.isoformat()}
-        return GCData(ds=ds)
-
-    @records_step
-    def set_tos_start(self, tos_start: TimestampLike) -> "GCData":
-        """Replace the origin without touching ``tos``, so every absolute timestamp moves.
-
-        Parameters
-        ----------
-        tos_start : pandas.Timestamp, datetime, numpy.datetime64 or str
-            New absolute origin.
-
-        Returns
-        -------
-        GCData
-            New instance with the new origin and unchanged ``tos``.
-        """
-        ds = self.ds.copy()
-        ds.attrs = {**self.ds.attrs, "tos_start": pd.Timestamp(tos_start).isoformat()}
-        return GCData(ds=ds)
-
-    @records_step
-    def del_tos_start(self) -> "GCData":
-        """Drop the origin, keeping ``tos`` as a purely relative axis."""
-        ds = self.ds.copy()
-        ds.attrs = {key: value for key, value in self.ds.attrs.items() if key != "tos_start"}
-        return GCData(ds=ds)
-
-    @records_step
-    def move_tos_start_by(self, delta: Union[float, pd.Timedelta, str]) -> "GCData":
-        """Move the origin by a relative amount and re-anchor ``tos`` to it.
-
-        Parameters
-        ----------
-        delta : float or pandas.Timedelta or str
-            How far to move the origin; a plain number is seconds.
-
-        Returns
-        -------
-        GCData
-            Equivalent to ``with_tos_start(tos_start + delta)``.
-
-        Raises
-        ------
-        ValueError
-            If no ``tos_start`` is set.
-        """
-        if self.tos_start is None:
-            raise ValueError("No tos_start to move. Anchor the data first with set_tos_start(...).")
-        return self.with_tos_start(self.tos_start + _to_timedelta(delta))
-
-    # ----------------------------------------------------------------
     # Immutable: selection
     # ----------------------------------------------------------------
 
@@ -543,13 +409,18 @@ class GCData(BaseModel):
         return self._select_positions(np.atleast_1d(positions))
 
     @records_step
-    def select_tos_range(self, tos_start_seconds: Optional[float] = None, tos_end_seconds: Optional[float] = None) -> "GCData":
+    def select_tos_range(
+        self, min_s: Optional[float] = None, max_s: Optional[float] = None, empty: EmptyWindow = "warn"
+    ) -> "GCData":
         """Return a new ``GCData`` restricted to a time-on-stream window.
 
         Parameters
         ----------
-        tos_start_seconds, tos_end_seconds : float or None, optional
+        min_s, max_s : float or None, optional
             Inclusive bounds in seconds; ``None`` means unbounded.
+        empty : {"warn", "raise"}, optional
+            What to do when nothing falls inside the window: log it and
+            return the empty selection (default), or raise ``ValueError``.
 
         Returns
         -------
@@ -559,43 +430,12 @@ class GCData(BaseModel):
         Raises
         ------
         ValueError
-            If no ``tos`` is set.
+            If no ``tos`` is set, or if the window is empty and ``empty="raise"``.
         """
         if self.tos is None:
             raise ValueError("Cannot select by tos because no 'tos' coordinate is set.")
-        mask = np.ones(self.n_injections, dtype=bool)
-        if tos_start_seconds is not None:
-            mask &= self.tos >= tos_start_seconds
-        if tos_end_seconds is not None:
-            mask &= self.tos <= tos_end_seconds
+        mask = window_mask(self.tos, min_s, max_s, what="injection", axis="tos", unit="s", empty=empty)
         return self._select_positions(np.flatnonzero(mask))
-
-    @records_step
-    def select_timestamp_range(self, start: Optional[TimestampLike] = None, end: Optional[TimestampLike] = None) -> "GCData":
-        """Return a new ``GCData`` restricted to an absolute time window.
-
-        Parameters
-        ----------
-        start, end : timestamp-like or None, optional
-            Inclusive bounds. Naive values are read as wall-clock time in the
-            timezone of ``tos_start``.
-
-        Returns
-        -------
-        GCData
-            The injections inside the window, with their peaks.
-
-        Raises
-        ------
-        ValueError
-            If no ``tos_start`` is set.
-        """
-        origin = self.tos_start
-        if origin is None:
-            raise ValueError("select_timestamp_range requires a tos_start. Anchor the data first with set_tos_start(...).")
-        lower = None if start is None else (_to_timestamp(start, origin) - origin).total_seconds()
-        upper = None if end is None else (_to_timestamp(end, origin) - origin).total_seconds()
-        return self.select_tos_range(lower, upper)
 
     @records_step
     def select_retention_time_range(self, start_seconds: Optional[float] = None, end_seconds: Optional[float] = None,
@@ -907,12 +747,16 @@ class GCData(BaseModel):
             ds[name].attrs = {key: _encode_attr(value) for key, value in ds[name].attrs.items()}
             scale = ds[name].attrs.get("scale_factor")
             if scale:
+                # never leave "scale_factor" as a variable attribute: xarray's CF decoder
+                # would multiply the values by it on reload
+                ds[name].attrs = {key: value for key, value in ds[name].attrs.items() if key != "scale_factor"}
                 counts = ds[name].values / scale
                 finite = counts[np.isfinite(counts)]
                 if finite.size and np.allclose(finite, np.round(finite), atol=1e-6) and np.abs(finite).max() < 2**31 - 1:
-                    ds[name].attrs = {key: value for key, value in ds[name].attrs.items() if key != "scale_factor"}
                     encoding[name] = {"dtype": "int32", "scale_factor": float(scale), "_FillValue": np.int32(-(2**31))}
-        ds.to_netcdf(filepath, encoding=encoding)
+                else:
+                    ds[name].attrs["counts_scale_factor"] = float(scale)
+        ds.to_netcdf(filepath, engine="h5netcdf", encoding=encoding)
         logger.debug(f"Saved NetCDF -> {filepath}")
 
     @classmethod
@@ -942,6 +786,8 @@ class GCData(BaseModel):
             ds[name].attrs = {key: _decode_attr(value) for key, value in ds[name].attrs.items()}
             if packed.get(name) is not None:
                 ds[name].attrs["scale_factor"] = float(packed[name])
+            elif "counts_scale_factor" in ds[name].attrs:
+                ds[name].attrs["scale_factor"] = float(ds[name].attrs.pop("counts_scale_factor"))
         return cls(ds=ds)
 
     def to_dataframe(self, detector: str) -> pd.DataFrame:

@@ -5,7 +5,6 @@ import pandas as pd
 import logging
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
 
 def _convert_value(value: str) -> Any:
     try:
@@ -15,7 +14,7 @@ def _convert_value(value: str) -> Any:
 
 
 ACCEPTED_FILE_EXTENSIONS = {".txt"}
-COLUME_LINE_START_TOKEN = "Pixel"
+COLUMN_LINE_START_TOKEN = "Pixel"
 
 X_KEYS = Literal["Pixel", "Wavelength", "Wavenumber", "Raman Shift"]
 Y_KEYS = Literal["Dark", "Reference", "Raw data #1", "Dark Subtracted #1", "%TR #1", "Absorbance #1", "Irradiance (lumen) #1"]
@@ -81,7 +80,7 @@ def split_lines(
 
         first_token = stripped.split("\t")[0].strip()
 
-        if first_token.startswith(COLUME_LINE_START_TOKEN):
+        if first_token.startswith(COLUMN_LINE_START_TOKEN):
             column_line = line
             data_start_idx = i + 1
             break
@@ -89,7 +88,7 @@ def split_lines(
         metadata_lines.append(line)
 
     if column_line is None or data_start_idx is None:
-        raise ValueError("Could not find column header row starting with 'K.E.'")
+        raise ValueError("Could not find the column header row starting with 'Pixel'")
 
     data_lines = [
         line for line in lines[data_start_idx:] if line.strip()
@@ -182,7 +181,6 @@ def parse_data_lines(
         for line in data_lines
         if line.strip()
     ]
-    print(rows[:5])
 
     df = pd.DataFrame(rows, columns=columns)
 

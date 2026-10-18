@@ -1,9 +1,8 @@
 import pandas as pd
 import os
-import numpy as np
 from pathlib import Path
 
-from typing import Optional, List, Any, Tuple
+from typing import Optional, Any, Tuple
 
 import logging
 
@@ -225,7 +224,7 @@ def process_log(
        scaled by *seconds_per_unit*.
     5. Drops channels that are absent from :data:`CHANNEL_META` (with a
        warning), unless *keep_unknown_channels* is set.  The LabView export
-       gains a column now and then — e.g. ``"F1 CO PV"`` from 2026-07 on —
+       gains a column now and then, e.g. ``"F1 CO PV"`` from 2026-07 on,
        and an unrecognised one must not break the read.
     6. Looks up per-channel metadata from :data:`CHANNEL_META`.
     7. Converts channel columns that use a comma decimal separator.
@@ -285,7 +284,8 @@ def process_log(
     )
 
     if tzinfo is not None:
-        df["timestamp"] = df["timestamp"].dt.tz_localize(tzinfo)
+        # "infer" resolves the repeated hour of the autumn DST change from the monotonic log
+        df["timestamp"] = df["timestamp"].dt.tz_localize(tzinfo, ambiguous="infer")
 
 
     if tos_start is None:

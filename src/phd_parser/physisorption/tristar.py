@@ -128,7 +128,7 @@ def _parse_block_rows(rows: list[list]) -> dict[str, Any]:
     Some sections caption a table with one or more extra header-like rows
     (e.g. a sample-name row) directly above the real column-header row; of
     any run of consecutive header-like rows, only the last is treated as
-    the real header — the rest become notes.
+    the real header, the rest become notes.
 
     Parameters
     ----------
@@ -176,7 +176,7 @@ def _parse_block_rows(rows: list[list]) -> dict[str, Any]:
             after_next_is_header = i + 2 < n and is_header[i + 2]
             if next_is_header and not after_next_is_header:
                 # Exactly one caption row directly above the real header
-                # (e.g. a sample-name row) — note it, the next row is the
+                # (e.g. a sample-name row): note it, the next row is the
                 # real header. A longer run (e.g. string-typed data rows
                 # that happen to look header-like, as in the Sample log)
                 # is left alone: this row is taken as the real header.
@@ -279,9 +279,9 @@ def read_export(filepath: Union[str, Path]) -> dict[str, Any]:
             ``"header"`` (file/sample/instrument metadata shared by every
             block), ``"summary"`` (the Summary Report section, usually
             only populated when multiple samples were compared),
-            ``"analyses"`` (dict keyed by analysis name — ``"isotherm"``,
+            ``"analyses"`` (dict keyed by analysis name, ``"isotherm"``,
             ``"bet"``, ``"t_plot"``, ``"bjh_adsorption"``,
-            ``"bjh_desorption"`` — each a ``{"report", "plots"}`` dict;
+            ``"bjh_desorption"``: each a ``{"report", "plots"}`` dict;
             ``"report"`` and each entry of ``"plots"`` is a
             ``{"scalars", "table", "notes"}`` dict as produced by
             :func:`_parse_block_rows`), and ``"sample_log"`` (the Sample
@@ -382,7 +382,7 @@ def _extract_bet(section: Optional[dict[str, Any]]) -> Optional[dict[str, Any]]:
     dict or None
         Clean dict of BET scalar results (surface area, fit slope/intercept,
         C constant, monolayer capacity, correlation coefficient, molecular
-        cross-sectional area — with ``*_error``/``*_unit`` siblings where
+        cross-sectional area, with ``*_error``/``*_unit`` siblings where
         applicable), or ``None`` if ``section`` is ``None``.
     """
     if section is None:
@@ -423,7 +423,7 @@ def _extract_isotherm(section: Optional[dict[str, Any]]) -> dict[str, dict[str, 
     dict
         Mapping with keys ``"adsorption"`` and/or ``"desorption"``, each a
         ``{"relative_pressure": ndarray, "quantity_adsorbed": ndarray}``
-        dict (empty dict if ``section`` is ``None`` or has no table) —
+        dict (empty dict if ``section`` is ``None`` or has no table),
         shaped so it can be passed straight into
         ``PhysisorptionData.from_arrays(**branch)``.
     """

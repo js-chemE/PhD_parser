@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
 from functools import cached_property
 from pathlib import Path
 from typing import Any, Literal, Optional, Union, Sequence
@@ -11,7 +10,10 @@ import numpy as np
 import numpy.typing as npt
 import pandas as pd
 import xarray as xr
-from phd_parser.history import format_history, get_history, records_step
+from phd_parser._selection import EmptyWindow, window_mask
+from phd_parser._time import TimeOriginMixin
+from phd_parser.history import HistoryMixin
+from phd_parser.history import records_step
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 import phd_parser.massspec.quadstar as quadstar
@@ -53,40 +55,11 @@ BlockUnit = Literal["A", "mbar", "arbitrary"]
 # channel dims.
 PRIMARY_BLOCK_ID = 0
 
-# Anything pandas.Timestamp can parse into an absolute point in time.
-TimestampLike = Union[pd.Timestamp, datetime, np.datetime64, str]
-
 def _channel_dim(block_id: int) -> str:
     """Name of the channel dim for a given block."""
     return "mz" if block_id == PRIMARY_BLOCK_ID else f"ch_{block_id}"
 
-def _to_timedelta(delta: Union[float, pd.Timedelta, str]) -> pd.Timedelta:
-    """Read a plain number as seconds; hand anything else to pandas.Timedelta."""
-    if isinstance(delta, (int, float, np.integer, np.floating)) and not isinstance(delta, bool):
-        return pd.Timedelta(seconds=float(delta))
-    return pd.Timedelta(delta)
-
-def _to_timestamp(value: TimestampLike, reference: Optional[pd.Timestamp] = None) -> pd.Timestamp:
-    """Parse a timestamp-like value and align its timezone with *reference*.
-
-    A naive value is read as wall-clock time in the reference's timezone; an
-    aware value handed to a naive reference keeps its wall-clock reading and
-    drops the offset.  Both sides tz-aware (or both naive) is left alone.
-    """
-    ts = pd.Timestamp(value)
-    if reference is None:
-        return ts
-    if ts.tzinfo is None and reference.tzinfo is not None:
-        return ts.tz_localize(reference.tzinfo)
-    if ts.tzinfo is not None and reference.tzinfo is None:
-        logger.warning(
-            f"tos_start {reference} is timezone-naive but {ts} is not; "
-            "comparing wall-clock times and ignoring the offset."
-        )
-        return ts.tz_localize(None)
-    return ts
-
-class MSData(BaseModel):
+class MSData(TimeOriginMixin, HistoryMixin, BaseModel):
     """Mass-spectrometry data container backed by an ``xr.Dataset``.
 
     All data and metadata live on the ``ds`` field; there is no separate
@@ -96,21 +69,26 @@ class MSData(BaseModel):
     Layout
     ------
     ds.coords:
-        'cycle' (int, dim coord)          — shared scan index across blocks
-        'tos'   (float s, non-dim coord)  — time on stream along 'cycle' (optional)
+        'cycle' (int, dim coord): shared scan index across blocks
+        'tos' (float s, non-dim coord): time on stream along 'cycle' (optional)
     ds.data_vars (one per datablock, named 'block_{id}'):
         block_0 (m/z): dims = ('cycle', 'mz'),   mz coord in Da
         block_N (aux): dims = ('cycle', 'ch_N'), ch_N coord in block-native units
         Each DataArray's .attrs may hold:
-            'unit'            — e.g. 'A', 'mbar', ...
-            'type'            — e.g. 'MID', 'analog', ...
-            'block_id'        — int, redundant with the name
-            'channel_labels'  — np.ndarray[str] of original column labels
+            'unit': e.g. 'A', 'mbar', ...
+            'type': e.g. 'MID', 'analog', ...
+            'block_id': int, redundant with the name
+            'channel_labels': np.ndarray[str] of original column labels
     ds.attrs:
-        'tos_start'         — ISO-8601 string (optional)
-        'trace_corrections' — list[dict], audit trail (optional)
+        'tos_start': ISO-8601 string (optional)
+        'trace_corrections': list[dict], audit trail (optional)
         plus any file-level metadata forwarded by the parser
     """
+
+    def _new(self, ds: xr.Dataset) -> "MSData":
+        """A new instance around ``ds``."""
+        return MSData(ds=ds)
+
 
     model_config = ConfigDict(
         arbitrary_types_allowed=True,
@@ -163,21 +141,6 @@ class MSData(BaseModel):
     # ----------------------------------------------------------------
     # Core properties
     # ----------------------------------------------------------------
-
-    @property
-    def history(self) -> list[dict[str, Any]]:
-        """Every processing step that produced this object, oldest first (see :mod:`phd_parser.history`).
-
-        Returns
-        -------
-        list of dict
-            ``{"step", "parameters", "time", "version"}`` per step; saved by ``to_netcdf``.
-        """
-        return get_history(self.ds.attrs)
-
-    def format_history(self) -> str:
-        """Return :attr:`history` as readable text, one numbered step per line."""
-        return format_history(self.history)
 
     @property
     def block_ids(self) -> list[int]:
@@ -239,35 +202,6 @@ class MSData(BaseModel):
         if "tos" in self.ds.coords:
             return self.ds.coords["tos"].values
         return None
-
-    @property
-    def tos_start(self) -> Optional[pd.Timestamp]:
-        """Absolute timestamp corresponding to ``tos = 0``.
-
-        Returns
-        -------
-        pandas.Timestamp or None
-            Start timestamp parsed from ``ds.attrs["tos_start"]``, or ``None``
-            if the attribute is absent.
-        """
-        iso = self.ds.attrs.get("tos_start")
-        return pd.to_datetime(iso) if iso else None
-
-    @property
-    def timestamps(self) -> Optional[pd.DatetimeIndex]:
-        """Absolute timestamps reconstructed from ``tos`` and ``tos_start``.
-
-        Returns
-        -------
-        pandas.DatetimeIndex or None
-            Per-cycle wall-clock times, or ``None`` if either ``tos`` or
-            ``tos_start`` is unavailable.
-        """
-        tos = self.tos
-        tos_start = self.tos_start
-        if tos is None or tos_start is None:
-            return None
-        return pd.DatetimeIndex(tos_start + pd.to_timedelta(tos, unit="s"))
 
     # ----------------------------------------------------------------
     # Block / channel access
@@ -436,7 +370,7 @@ class MSData(BaseModel):
     def get_trace(
         self,
         mz: float,
-        method: Literal["nearest", "linear"] = "nearest",
+        method: Literal["nearest", "pad", "backfill"] = "nearest",
         tolerance: Optional[float] = 0.2,
         rolling_window: Optional[int] = None,
         normalize: Optional[Union[bool, tuple[float, float]]] = None,
@@ -456,9 +390,9 @@ class MSData(BaseModel):
             Centered rolling mean over this many cycles, applied before
             normalization.  The underlying data is not modified.
         normalize : bool or tuple[float, float] or None, optional
-            ``None`` / ``False`` — no normalization.
-            ``True``             — scale to [0, 1] using the trace's own min/max.
-            ``(vmin, vmax)``     — scale using the given fixed bounds.
+            ``None`` / ``False``: no normalization.
+            ``True``: scale to [0, 1] using the trace's own min/max.
+            ``(vmin, vmax)``: scale using the given fixed bounds.
 
         Returns
         -------
@@ -474,6 +408,9 @@ class MSData(BaseModel):
         da = self._block(PRIMARY_BLOCK_ID)
         self._check_mz_tolerance(np.asarray([mz], dtype=float), da.coords["mz"].values, tolerance)
         result = da.sel(mz=mz, method=method)
+        if rolling_window is not None:
+            result = result.rolling(cycle=rolling_window, center=True, min_periods=1).mean()
+
         if normalize:
             if isinstance(normalize, tuple):
                 vmin, vmax = float(normalize[0]), float(normalize[1])
@@ -483,15 +420,12 @@ class MSData(BaseModel):
             denom = vmax - vmin
             result = (result - vmin) / denom if denom != 0.0 else xr.zeros_like(result)
 
-        if rolling_window is not None:
-            result = result.rolling(cycle=rolling_window, center=True, min_periods=1).mean()
-
         return result
 
     def get_traces(
         self,
         mz_list: Sequence[float],
-        method: Literal["nearest", "linear"] = "nearest",
+        method: Literal["nearest", "pad", "backfill"] = "nearest",
         tolerance: Optional[float] = None,
         rolling_window: Optional[int] = None,
         normalize: Optional[Union[bool, tuple[float, float]]] = None,
@@ -513,8 +447,8 @@ class MSData(BaseModel):
         rolling_window : int or None, optional
             Centered rolling mean applied per trace before normalization.
         normalize : bool or tuple[float, float] or None, optional
-            ``True``         — each trace normalized independently to [0, 1].
-            ``(vmin, vmax)`` — same fixed scale applied to every trace.
+            ``True``: each trace normalized independently to [0, 1].
+            ``(vmin, vmax)``: same fixed scale applied to every trace.
 
         Returns
         -------
@@ -562,7 +496,7 @@ class MSData(BaseModel):
         self,
         block_id: int,
         channel: float,
-        method: Literal["nearest", "linear"] = "nearest",
+        method: Literal["nearest", "pad", "backfill"] = "nearest",
     ) -> xr.DataArray:
         """Single-channel time trace from any block.
 
@@ -590,141 +524,27 @@ class MSData(BaseModel):
         return da.sel({dim: channel}, method=method)
 
     # ----------------------------------------------------------------
-    # Immutable — time origin (tos_start)
-    # ----------------------------------------------------------------
-
-    @records_step
-    def with_tos_start(self, tos_start: Union[pd.Timestamp, str]) -> "MSData":
-        """Re-anchor ``tos`` to a new origin, leaving every absolute timestamp unchanged.
-
-        Moves the zero of the ``tos`` axis: each value is shifted by minus the
-        distance the origin moved, so ``tos_start + tos`` still resolves to the
-        moment each cycle was actually recorded.  This is what you want when
-        the experiment's reference point changes (e.g. aligning to when gas
-        flow started rather than when the MS did).
-
-        Parameters
-        ----------
-        tos_start : pandas.Timestamp or str
-            New absolute origin.  Strings are parsed by ``pandas.Timestamp``.
-
-        Returns
-        -------
-        MSData
-            New instance with the new origin and rebased ``tos`` values.  If no
-            origin was set before, ``tos`` is left untouched and simply
-            anchored to the new one.
-
-        See Also
-        --------
-        set_tos_start : Replace the origin *without* touching ``tos``.
-        move_tos_start_by : Move the origin by a relative amount.
-        """
-        new_tos_start = pd.Timestamp(tos_start)
-        old_tos_start = self.tos_start
-
-        ds = self.ds.copy()
-        if old_tos_start is None:
-            logger.info(
-                f"No previous tos_start: keeping tos as-is and anchoring it to {new_tos_start}."
-            )
-        elif "tos" in ds.coords:
-            shift_seconds = (new_tos_start - old_tos_start).total_seconds()
-            ds = ds.assign_coords(tos=ds.coords["tos"] - shift_seconds)
-        ds.attrs = {**self.ds.attrs, "tos_start": new_tos_start.isoformat()}
-        return MSData(ds=ds)
-
-    @records_step
-    def set_tos_start(self, tos_start: Union[pd.Timestamp, str]) -> "MSData":
-        """Replace the origin without touching ``tos`` — every absolute timestamp moves.
-
-        Use this to correct a wrong origin: the elapsed times are right, the
-        wall-clock they were anchored to was not.
-
-        Parameters
-        ----------
-        tos_start : pandas.Timestamp or str
-            New absolute origin.  Strings are parsed by ``pandas.Timestamp``.
-
-        Returns
-        -------
-        MSData
-            New instance with the new origin and unchanged ``tos`` values.
-
-        See Also
-        --------
-        with_tos_start : Re-anchor ``tos`` so the absolute timestamps survive.
-        """
-        ds = self.ds.copy()
-        ds.attrs = {**self.ds.attrs, "tos_start": pd.Timestamp(tos_start).isoformat()}
-        return MSData(ds=ds)
-
-    @records_step
-    def del_tos_start(self) -> "MSData":
-        """Drop the origin, keeping ``tos`` as a purely relative axis.
-
-        Returns
-        -------
-        MSData
-            New instance without a ``tos_start``; ``timestamps`` becomes
-            ``None``.  Returns an equivalent instance if none was set.
-        """
-        attrs = dict(self.ds.attrs)
-        attrs.pop("tos_start", None)
-        ds = self.ds.copy()
-        ds.attrs = attrs
-        return MSData(ds=ds)
-
-    @records_step
-    def move_tos_start_by(self, delta: Union[float, pd.Timedelta, str]) -> "MSData":
-        """Move the origin by a relative amount and re-anchor ``tos`` to it.
-
-        Equivalent to ``with_tos_start(tos_start + delta)``: absolute
-        timestamps never change, so moving the origin *later* by ``delta``
-        makes every ``tos`` value *smaller* by ``delta``.  Pass a negative
-        ``delta`` to move the origin earlier and grow the ``tos`` values.
-
-        Parameters
-        ----------
-        delta : float or pandas.Timedelta or str
-            How far to move the origin.  A plain number is read as seconds;
-            anything else is passed to ``pandas.Timedelta`` (e.g. ``"90s"``,
-            ``"1h30min"``).
-
-        Returns
-        -------
-        MSData
-            New instance with the moved origin and rebased ``tos`` values.
-
-        Raises
-        ------
-        ValueError
-            If no ``tos_start`` is set, so there is nothing to move.
-        """
-        if self.tos_start is None:
-            raise ValueError(
-                "No tos_start to move. Anchor the data first with set_tos_start(...)."
-            )
-        return self.with_tos_start(self.tos_start + _to_timedelta(delta))
-
-    # ----------------------------------------------------------------
     # Immutable slicing
     # ----------------------------------------------------------------
 
     @records_step
     def select_tos_range(
         self,
-        tos_start_seconds: Optional[float] = None,
-        tos_end_seconds: Optional[float] = None,
+        min_s: Optional[float] = None,
+        max_s: Optional[float] = None,
+        empty: EmptyWindow = "warn",
     ) -> "MSData":
         """Return a new ``MSData`` restricted to a time-on-stream window.
 
         Parameters
         ----------
-        tos_start_seconds : float or None, optional
+        min_s : float or None, optional
             Lower bound in seconds (inclusive).  ``None`` means no lower bound.
-        tos_end_seconds : float or None, optional
+        max_s : float or None, optional
             Upper bound in seconds (inclusive).  ``None`` means no upper bound.
+        empty : {"warn", "raise"}, optional
+            What to do when nothing falls inside the window: log it and
+            return the empty selection (default), or raise ``ValueError``.
 
         Returns
         -------
@@ -734,7 +554,8 @@ class MSData(BaseModel):
         Raises
         ------
         ValueError
-            If the ``tos`` coordinate is not set on the dataset.
+            If the ``tos`` coordinate is not set on the dataset, or if the
+            window is empty and ``empty="raise"``.
         """
         tos = self.tos
         if tos is None:
@@ -742,57 +563,8 @@ class MSData(BaseModel):
                 "Cannot select by tos because 'tos' coord is not set "
                 "(tos_start was not provided at construction)."
             )
-        mask = np.ones(tos.size, dtype=bool)
-        if tos_start_seconds is not None:
-            mask &= tos >= tos_start_seconds
-        if tos_end_seconds is not None:
-            mask &= tos <= tos_end_seconds
+        mask = window_mask(tos, min_s, max_s, what="cycle", axis="tos", unit="s", empty=empty)
         return MSData(ds=self.ds.isel(cycle=mask))
-
-    @records_step
-    def select_timestamp_range(
-        self,
-        start: Optional[TimestampLike] = None,
-        end: Optional[TimestampLike] = None,
-    ) -> "MSData":
-        """Return a new ``MSData`` restricted to an absolute time window.
-
-        The wall-clock counterpart of ``select_tos_range``: bounds are given as
-        absolute timestamps instead of elapsed seconds, and are converted against
-        ``tos_start`` before the selection is made.  Naive bounds are read as
-        wall-clock time in the timezone of ``tos_start``.
-
-        Parameters
-        ----------
-        start : pandas.Timestamp, datetime, numpy.datetime64, str or None, optional
-            Lower bound (inclusive).  ``None`` means no lower bound.
-        end : pandas.Timestamp, datetime, numpy.datetime64, str or None, optional
-            Upper bound (inclusive).  ``None`` means no upper bound.
-
-        Returns
-        -------
-        MSData
-            New instance containing only cycles within the specified window.
-
-        Raises
-        ------
-        ValueError
-            If the ``tos`` coordinate or ``tos_start`` is not set, so absolute
-            timestamps cannot be resolved.
-
-        See Also
-        --------
-        select_tos_range : Same selection, bounds given in elapsed seconds.
-        """
-        tos_start = self.tos_start
-        if tos_start is None:
-            raise ValueError(
-                "select_timestamp_range requires a tos_start. "
-                "Anchor the data first with set_tos_start(...)."
-            )
-        min_s = None if start is None else (_to_timestamp(start, tos_start) - tos_start).total_seconds()
-        max_s = None if end is None else (_to_timestamp(end, tos_start) - tos_start).total_seconds()
-        return self.select_tos_range(min_s, max_s)
 
     # ----------------------------------------------------------------
     # Immutable baseline / trace correction
@@ -1127,7 +899,7 @@ class MSData(BaseModel):
         filepath : str or Path
             Destination file path.
         """
-        self._with_attrs(_encode_attr).to_netcdf(filepath)
+        self._with_attrs(_encode_attr).to_netcdf(filepath, engine="h5netcdf")
         logger.debug("Saved NetCDF → %s", filepath)
 
     def _with_attrs(self, convert) -> xr.Dataset:
@@ -1324,14 +1096,17 @@ class MSData(BaseModel):
             cycle = df["Cycle"].to_numpy(dtype=int)
         else:
             if filepath.is_dir():
-                logger.info("Directory read — cycles re-indexed as sequential integers.")
+                logger.info("Directory read, cycles re-indexed as sequential integers.")
             else:
-                logger.warning("Cycle column not found — using integer index")
+                logger.warning("Cycle column not found, using integer index")
             cycle = np.arange(len(df), dtype=int)
 
         # ---- tos (time on stream) -----------------------------------
-        if isinstance(tos_start, str):
-            tos_start = pd.to_datetime(tos_start)
+        if tos_start is not None:
+            tos_start = pd.Timestamp(tos_start)
+            if tos_start.tzinfo is None:
+                # the file's timestamps are localised to tz_str: a naive origin means that wall clock
+                tos_start = tos_start.tz_localize(tz_str)
 
         tos: Optional[npt.NDArray] = None
         if tos_start is not None and "Timestamp" in df.columns:
@@ -1340,7 +1115,7 @@ class MSData(BaseModel):
         elif "RelTime[s]" in df.columns:
             tos = df["RelTime[s]"].to_numpy(dtype=float)
             logger.info(
-                "tos_start not provided — using RelTime[s] as tos with t=0 at file start."
+                "tos_start not provided, using RelTime[s] as tos with t=0 at file start."
             )
 
         # ---- per-block channel coords and values --------------------
