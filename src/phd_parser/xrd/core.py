@@ -9,6 +9,8 @@ import pandas as pd
 import xarray as xr
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from phd_parser.xrd.analysis import Lineshape, ReflectionFit, fit_reflection, scherrer
+
 logger = logging.getLogger(__name__)
 
 class XRDData(BaseModel):
@@ -367,13 +369,145 @@ class XRDData(BaseModel):
 
 
     # ----------------------------------------------------------------
-    # Export
+    # Analysis
     # ----------------------------------------------------------------
 
+    def fit_reflection(
+        self,
+        two_theta_deg: float,
+        window_deg: float = 1.5,
+        lineshape: Lineshape = "pseudo_voigt",
+        *,
+        scan: Optional[int] = None,
+    ) -> ReflectionFit:
+        """Fit one reflection with a pseudo-Voigt plus a linear background.
+
+        A thin wrapper of :func:`phd_parser.xrd.analysis.fit_reflection`
+        over this pattern; the data is not changed.
+
+        Parameters
+        ----------
+        two_theta_deg : float
+            Expected position of the reflection in degrees, the window centre.
+        window_deg : float, optional
+            Full width of the fit window in degrees (default is 1.5).
+        lineshape : {"pseudo_voigt", "gaussian", "lorentzian"}, optional
+            The line to fit (default is ``"pseudo_voigt"``).
+        scan : int, optional
+            For 2-D data, the index of the scan to fit. Required then,
+            ignored for a single pattern.
+
+        Returns
+        -------
+        ReflectionFit
+            ``position_deg``, ``fwhm_deg``, ``height``, ``area``, ``eta``
+            and ``background`` of the fit, plus ``model(angle_deg)`` to
+            draw it.
+
+        Raises
+        ------
+        ValueError
+            For 2-D data without ``scan``, an unknown lineshape, or a
+            window holding too few points.
+        """
+        if self.ndim == 2:
+            if scan is None:
+                raise ValueError("2-D data needs the index of the scan to fit (scan=...)")
+            values = self.da.isel(scan=scan).values
+        else:
+            values = self.values
+        return fit_reflection(self.angle, values, two_theta_deg, window_deg=window_deg, lineshape=lineshape)
+
+    def scherrer_size(
+        self,
+        two_theta_deg: float,
+        fwhm_deg: float,
+        *,
+        shape_factor: float = 0.9,
+        wavelength_angstrom: Optional[float] = None,
+        instrumental_fwhm_deg: float = 0.0,
+    ) -> float:
+        """Scherrer crystallite size in nm from a fitted reflection width.
+
+        Parameters
+        ----------
+        two_theta_deg : float
+            Position of the reflection, 2θ in degrees.
+        fwhm_deg : float
+            Observed full width at half maximum in degrees 2θ, e.g.
+            ``fit_reflection(...).fwhm_deg``.
+        shape_factor : float, optional
+            The Scherrer constant ``K`` (default is 0.9).
+        wavelength_angstrom : float, optional
+            X-ray wavelength in Å. Default is ``da.attrs["wavelength_angstrom"]``
+            when the reader set it (Bruker: from the anode), else Cu Kα1,
+            1.5406 Å.
+        instrumental_fwhm_deg : float, optional
+            Instrumental broadening in degrees 2θ, subtracted in
+            quadrature (default is 0, no correction).
+
+        Returns
+        -------
+        float
+            Crystallite size in nm.
+        """
+        if wavelength_angstrom is None:
+            wavelength_angstrom = self.da.attrs.get("wavelength_angstrom") or 1.5406
+        return scherrer(
+            two_theta_deg,
+            fwhm_deg,
+            wavelength_angstrom=float(wavelength_angstrom),
+            shape_factor=shape_factor,
+            instrumental_fwhm_deg=instrumental_fwhm_deg,
+        )
 
     # ----------------------------------------------------------------
     # Constructors
     # ----------------------------------------------------------------
+
+    @classmethod
+    def from_bruker_xy(
+        cls,
+        filepath: Union[str, Path],
+        normalize: bool = False,
+    ) -> "XRDData":
+        """Read a Bruker DIFFRAC.EVA ``.xy`` export (D8 Advance-ECO).
+
+        The header line (operator, anode, scan type, time per step) goes
+        into :attr:`metadata`, see :func:`phd_parser.xrd.bruker.read_xy`;
+        ``wavelength_angstrom`` (Kα1 of the anode), ``source_file`` and
+        ``anode`` go into ``da.attrs`` as well, where ``scherrer_size``
+        finds the wavelength.
+
+        Parameters
+        ----------
+        filepath : str or Path
+            Path to the ``.xy`` file.
+        normalize : bool, optional
+            When ``True``, divide the intensity by its maximum
+            (default is ``False``).
+
+        Returns
+        -------
+        XRDData
+            The pattern, angle ascending.
+        """
+        from phd_parser.xrd.bruker import read_xy
+
+        parsed = read_xy(filepath)
+        angle = parsed["data"]["angle"]
+        values = parsed["data"]["values"]
+        order = np.argsort(angle)
+        angle, values = angle[order], values[order]
+        if normalize:
+            values = values / values.max()
+
+        meta = parsed["meta"]
+        da = cls._build_da(angle=angle, values=values)
+        da.attrs.update(
+            {key: meta[key] for key in ("wavelength_angstrom", "source_file", "anode") if meta.get(key) is not None}
+        )
+        return cls(da=da, metadata=meta)
 
     @classmethod
     def from_e1290(

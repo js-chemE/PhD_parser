@@ -8,6 +8,7 @@ core classes reachable from the package root: ``pp.GCData`` is
 import phd_parser.spectroscopy as spectroscopy
 import phd_parser.xrd as xrd
 import phd_parser.tga as tga
+import phd_parser.tpr as tpr
 import phd_parser.massspec as massspec
 import phd_parser.physisorption as physisorption
 import phd_parser.logging as logging
@@ -25,17 +26,18 @@ from phd_parser.labview import LVData
 from phd_parser.massspec import MSData
 from phd_parser.physisorption import PhysisorptionData
 from phd_parser.tga import TGAData
+from phd_parser.tpr import TPRData
 from phd_parser.xrd import XRDData
 from phd_parser.naming import SpeciesConvention, rename_species
 from phd_parser.pipeline import Pipeline, Step
 
 __all__ = [
     # subpackages
-    "logging", "spectroscopy", "xrd", "tga", "massspec", "physisorption",
+    "logging", "spectroscopy", "xrd", "tga", "tpr", "massspec", "physisorption",
     "labview", "chromatography", "naming", "pipeline",
     # core data containers and the spectroscopy readers
     "GCData", "IRData", "LVData", "MSData", "PhysisorptionData", "RamanData", "SpectroscopyData",
-    "TGAData", "XPSData", "XRDData",
+    "TGAData", "TPRData", "XPSData", "XRDData",
     # naming and pipelines
     "SpeciesConvention", "rename_species", "Pipeline", "Step",
 ]

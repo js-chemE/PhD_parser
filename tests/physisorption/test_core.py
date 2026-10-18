@@ -123,3 +123,27 @@ def test_netcdf_roundtrip(tmp_path):
     np.testing.assert_allclose(reloaded.values, adsorption.values)
     assert reloaded.surface_area_bet == pytest.approx(adsorption.surface_area_bet)
     reloaded.quantity_adsorbed.close()
+
+
+# ----------------------------------------------------------------
+# 2026-07 export variant: capitalised labels, Langmuir and Freundlich blocks
+# ----------------------------------------------------------------
+
+VARIANT_FILE_PATH = os.path.join(os.path.dirname(__file__), "tristar", "2026-N-211.XLS")
+
+
+def test_from_tristar_xls_reads_capitalised_labels():
+    adsorption = PhysisorptionData.from_tristar_xls(VARIANT_FILE_PATH)["adsorption"]
+    assert adsorption.surface_area_bet == pytest.approx(101.2384)
+    assert adsorption.bet["surface_area_error"] == pytest.approx(0.2033)
+    assert adsorption.bet["y_intercept"] == pytest.approx(0.000433)
+    assert adsorption.bet["correlation_coefficient"] == pytest.approx(0.9999619)
+    assert adsorption.sample_name == "SK0002b"
+    assert adsorption.sample_mass_g == pytest.approx(0.1142)
+    assert "Langmuir Report" not in adsorption.report["analyses"]  # not an analysis group, but no warning either
+
+
+def test_header_accessors_on_old_export():
+    adsorption = PhysisorptionData.from_tristar_xls(MOCK_FILE_PATH)["adsorption"]
+    assert adsorption.sample_name == "SK1003"
+    assert adsorption.sample_mass_g == pytest.approx(0.0944)

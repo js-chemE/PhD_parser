@@ -34,6 +34,10 @@ SECTION_TITLES = [
     "Isotherm Log Plot",
     "BET Report",
     "BET Surface Area Plot",
+    "Langmuir Report",
+    "Langmuir Surface Area Plot",
+    "Freundlich Tabular Report",
+    "Freundlich Plot",
     "t-Plot Report",
     "t-Plot",
     "BJH Adsorption Pore Distribution Report",
@@ -354,18 +358,47 @@ def read_export(filepath: Union[str, Path]) -> dict[str, Any]:
     }
 
 
+def scalar(scalars: dict[str, Any], key: str) -> Any:
+    """Look a report scalar up by its label, ignoring case.
+
+    The TriStar software writes the same label with different capitalisation
+    depending on the export ("BET Surface Area" in 2026-07 exports, "BET
+    surface area" in older ones), so an exact lookup silently misses values.
+
+    Parameters
+    ----------
+    scalars : dict
+        The ``"scalars"`` dict of a parsed block.
+    key : str
+        The label to look up, in any capitalisation.
+
+    Returns
+    -------
+    Any
+        The stored entry (a plain value or a ``{"value", "error", "unit"}``
+        dict), or ``None`` when the label is absent.
+    """
+    if key in scalars:
+        return scalars[key]
+    wanted = key.casefold()
+    for name, value in scalars.items():
+        if str(name).casefold() == wanted:
+            return value
+    return None
+
+
 def _scalar_value(scalars: dict[str, Any], key: str) -> Any:
-    v = scalars.get(key)
+    v = scalar(scalars, key)
     return v.get("value") if isinstance(v, dict) else v
 
 
 def _scalar_error(scalars: dict[str, Any], key: str) -> Optional[float]:
-    v = scalars.get(key)
+    v = scalar(scalars, key)
     return v.get("error") if isinstance(v, dict) else None
 
 
 def _scalar_unit(scalars: dict[str, Any], key: str) -> Optional[str]:
-    v = scalars.get(key)
+    v = scalar(scalars, key)
     return v.get("unit") if isinstance(v, dict) else None
 
 

@@ -47,8 +47,9 @@ import pandas as pd
 The core data containers and the spectroscopy readers are available straight
 from the package: `pp.GCData` is `pp.chromatography.GCData`, and likewise
 `SpectroscopyData`, `IRData`, `RamanData`, `LVData`, `MSData`,
-`PhysisorptionData`, `TGAData`, `XRDData` and `rename_species` /
-`SpeciesConvention` from `naming`.
+`PhysisorptionData`, `TGAData`, `TPRData`, `XPSData`, `XRDData`,
+`rename_species` / `SpeciesConvention` from `naming` and `Pipeline` / `Step`
+from `pipeline`.
 
 ```python
 from phd_parser import GCData, IRData, LVData, rename_species
@@ -73,7 +74,7 @@ raw files --> parser module --> (vendor converter) --> core data class --> your 
 
 **1. One subpackage per technique.** `spectroscopy` (with the `infrared`,
 `raman` and `xps` readers inside), `massspec`, `labview`, `xrd`, `tga`,
-`physisorption`, `chromatography`. Inside it sits the core class in `core.py`
+`tpr`, `physisorption`, `chromatography`. Inside it sits the core class in `core.py`
 and one parser module per instrument or software (`omnic.py`, `quadstar.py`,
 `b67box5.py`). Where a technique has several manufacturers, each gets its own
 subfolder (`chromatography/agilent/`), so a second vendor is added next to the
@@ -101,7 +102,7 @@ metadata travel with the numbers. The rules they share:
 
 - **Built by `from_*` classmethods** (`from_ezchrom_rslt`, `from_omnic_spa`, `from_netcdf`), never by hand. Everything after the data arguments is keyword-only.
 - **Immutable.** Every method returns a new object, so the raw object is always still there to compare against.
-- **Shared where it is the same thing.** The time origin (`tos_start`, `timestamps`, the four origin operations, `select_timestamp_range`) and the history accessors are one implementation, mixed into every class (`phd_parser._time`, `phd_parser.history`); `SpectroscopyData` itself is composed of topical mixins (`spectroscopy/_axis.py`, `_selection.py`, `_background.py`, `_baseline.py`, `_signal.py`, `_merge.py`, `_io.py`).
+- **Shared where it is the same thing.** The time origin (`tos_start`, `timestamps`, the four origin operations, `select_timestamp_range`) and the history accessors are one implementation, mixed into every class (`phd_parser._time`, `phd_parser.history`); `SpectroscopyData` itself is composed of topical mixins (`spectroscopy/_axis.py`, `_selection.py`, `_background.py`, `_baseline.py`, `_signal.py`, `_merge.py`, `_io.py`). See *Mixins* below.
 - **SI units in storage.** Seconds, m⁻¹, Pa; convenience properties give the usual lab units.
 - **One time origin.** `tos` in seconds plus one `tos_start` (see below), so every instrument shares the same clock.
 - **Same names for the same operation in every class.** `select_tos_range`, `with_tos_start`, `merge`, `to_netcdf`, `rename_species`. Once one class is known, the others read the same way.
@@ -118,6 +119,68 @@ data goes to its own folder (see *Read once, cache as NetCDF*).
 ---
 
 ## Core concepts
+
+### Mixins: one implementation, shared by every class
+
+A *mixin* is a small class that holds a group of related methods and no data
+of its own. It is never used on its own: a core class lists it among its base
+classes and so gains its methods. Python allows a class to inherit from
+several classes at once, so
+
+```python
+class LVData(TimeOriginMixin, HistoryMixin, BaseModel): ...
+```
+
+is an `LVData` that also has every method of `TimeOriginMixin` (the time
+origin) and of `HistoryMixin` (the processing history), on top of what
+pydantic's `BaseModel` gives.
+
+**Why mixins and not copies.** Setting a time origin works the same for
+LabView, MS, GC and spectroscopy data. Written four times, the four copies
+drift apart: one reads a timezone-naive time as UTC, another drops the zone,
+and the same experiment ends up with three different clocks. Written once as
+a mixin, a fix reaches every class at once, and the method has the same name,
+arguments and behaviour everywhere. Learn `with_tos_start` on one class and
+you know it on all of them.
+
+**What a mixin asks of its host.** A mixin uses a few attributes that the
+class it is mixed into has to provide. That is the contract, and it is short:
+
+| mixin | module | gives | needs from the host | used by |
+|---|---|---|---|---|
+| `TimeOriginMixin` | `phd_parser._time` | `tos_start`, `timestamps`, `with_tos_start`, `set_tos_start`, `del_tos_start`, `move_tos_start_by`, `select_timestamp_range` | `ds`, `tos`, `_new(ds)`, `select_tos_range` | `SpectroscopyData`, `LVData`, `MSData`, `GCData` |
+| `HistoryMixin` | `phd_parser.history` | `history`, `format_history()` | `ds` (the history sits in `ds.attrs["history"]`) | `SpectroscopyData`, `XPSData`, `GCData`, `MSData`, `LVData`, `TPRData` |
+
+A host that keeps the time origin in a second place overrides two hooks
+instead of the methods: `LVData` mirrors `tos_start` into its `metadata` by
+overriding `_tos_start_raw` and `_with_tos_start`. The methods themselves are
+never copied into a class.
+
+**Mixins to split one large class by topic.** `SpectroscopyData` uses the same
+mechanism a second way. It has too many methods for one file, so each topic
+is its own mixin in its own module, and the class is the sum of them:
+
+| module | topic |
+|---|---|
+| `spectroscopy/_axis.py` | the axis in every unit, the Raman names, getters |
+| `spectroscopy/_selection.py` | cutting by axis, scan, `tos`, scan id |
+| `spectroscopy/_background.py` | background and `data_type` conversions |
+| `spectroscopy/_baseline.py` | baseline correction |
+| `spectroscopy/_signal.py` | smoothing, averaging, normalisation, Gram-Schmidt, SNR |
+| `spectroscopy/_merge.py` | `merge` and `merge_all` |
+| `spectroscopy/_io.py` | NetCDF, CSV, SpectroChemPy, RamanSPy |
+
+`spectroscopy/core.py` keeps only the fields, the validators, the
+constructors and the operators. So to find a method, open the module of its
+topic. For a user nothing changes: every method is called on the
+`SpectroscopyData` object as usual.
+
+```python
+lv.with_tos_start(t_reaction)     # from TimeOriginMixin
+ms.with_tos_start(t_reaction)     # the same method, the same rules
+ir.correct_baseline(...)          # from _BaselineMixin, called like any method
+[c.__name__ for c in type(ir).__mro__]   # every class SpectroscopyData is built from
+```
 
 ### Processing history and logging: every object knows how it was made
 
@@ -145,7 +208,7 @@ ir.history[-1]   # {"step": "correct_baseline", "parameters": {...}, "time": "..
 - Every argument is stored, files included, so the first entry says which raw data this came from. Arrays longer than 20 values are summarised (shape, first and last value).
 - `merge` stores the other segment's own history inside its entry, so a merged run still says how each half was made.
 - It lives in `ds.attrs["history"]` and **survives `to_netcdf` / `from_netcdf`**; loading adds a `from_netcdf` entry. A cached file therefore still tells you, months later, which files and which baseline settings produced it.
-- Available on `SpectroscopyData`, `XPSData`, `GCData`, `MSData` and `LVData` (`.history`, `.format_history()`), and `to_spectrochempy()` copies it into the `NDDataset`'s own history. `XRDData`, `TGAData` and `PhysisorptionData` do not record one yet.
+- Available on `SpectroscopyData`, `XPSData`, `GCData`, `MSData`, `LVData` and `TPRData` (`.history`, `.format_history()`), and `to_spectrochempy()` copies it into the `NDDataset`'s own history. `XRDData`, `TGAData` and `PhysisorptionData` do not record one yet.
 
 The older, step-specific records stay where they were and survive storing too:
 `merge_log` (spectroscopy), the baseline parameters `baseline_anchor_range_cm` /
@@ -362,6 +425,82 @@ species names has an immutable `rename_species(convention=None)` that returns
 a renamed copy: `GCData` (the species of the peak table and the amounts) and
 `LVData` (each channel's `species` attribute). Without a convention it uses
 the standard one.
+
+---
+
+## Conventions
+
+The rules the code follows, so that names, units and figures read the same in
+every class. They are the user-facing summary of [`CLAUDE.md`](CLAUDE.md),
+which holds the full contract and the reasons behind each rule.
+
+### Names
+
+- **Full words, no abbreviations**: `relative_pressure`, not `p_rel`; `quantity_adsorbed`, not `q`; `temperature`, not `temp`. The names of techniques stay as they are (`BET`, `BJH`, `XRD`, `IR`, `MS`, `TGA`), because that is what the methods are called.
+- **The unit goes into the name** where it is not obvious: `min_s`, `position_eV`, `sample_weight_mg`, `wavelength_angstrom`, `two_theta_deg`.
+- **A chemical species is a *species***: in variables, dimensions, columns and docstrings (`species`, `peak_species`, `rename_species`). Never *component*, which in the lab also means a part of a setup, and not *compound* either, which survives only where a vendor format uses it.
+- **Fitted XPS lines are *peaks*** (`peak_name`, `peak_position_eV`), never components.
+- **Species names are kept as the instrument wrote them** on read. Renaming is an explicit `rename_species()` step (see *Species naming conventions*).
+
+### Method names
+
+| prefix | meaning | example |
+|---|---|---|
+| `from_*` | constructor, the only way to build an object; everything after the data arguments is keyword-only | `IRData.from_omnic_spa(path, tos_start=...)` |
+| `select_*` | cut out a range; returns a new object | `select_tos_range`, `select_angle_range` |
+| `with_*` | set something *and* recalculate what has to change so the physics is preserved | `with_background` recomputes the values, `with_tos_start` keeps the timestamps |
+| `set_*` | force-assign, recalculate nothing | `set_tos_start`, `set_background` |
+| `del_*` | remove, leave the data alone | `del_background`, `del_tos_start` |
+| `get_*` | read something out; no new object, not recorded | `get_trace`, `get_chromatogram` |
+| `to_*` | export or convert | `to_netcdf`, `to_dataframe`, `to_single_beam` |
+
+Joining two datasets has three names, never mixed up:
+
+- **extend** joins along the energy-related axis (wavenumber, Raman shift, 2θ, m/z), i.e. widens the spectral range.
+- **merge** joins along the *other* axis (scan, time, injection), i.e. appends more scans of the same range (`SpectroscopyData.merge`, `GCData.merge`).
+- **vstack** stacks already 2-D data along a new, additional dimension.
+
+A `method` argument that is handed to xarray's `.sel` offers exactly `"nearest"`, `"pad"` and `"backfill"`. Linear interpolation is a different operation (`.interp`), never one of those options.
+
+### Behaviour
+
+- **Immutable.** Every processing method returns a new object; the input is untouched.
+- **Recorded.** Every `from_*` and every processing method lands in the object's history (classes listed under *Processing history*).
+- **Empty windows warn.** A `select_*_range` that holds no sample logs a warning naming the range of the data and returns an empty object; `empty="raise"` stops instead. It never silently returns everything.
+- **Parsers read, they do not interpret.** No normalising, renaming or unit guessing on read. An unknown column is skipped (or kept) with a warning, never a hard failure.
+- **Time from the instrument.** `tos` in seconds plus one `tos_start`; times come from what the instrument recorded inside the file, never from a file name. A timezone-naive time is read as wall-clock time in the data's own timezone.
+- **Nothing is written next to the raw files.**
+
+### Units and axes
+
+Data is stored in SI units, with convenience properties for the usual lab units.
+
+| class | stored axis | unit |
+|---|---|---|
+| `SpectroscopyData` | `wavenumber` (for Raman the shift, Stokes positive) | m⁻¹; `axis(unit)` reads any other unit |
+| `XPSData` | `binding_energy`, ascending | eV |
+| `XRDData` | `angle` (2θ) | degrees |
+| `TGAData` | temperature, mass | K, mg |
+| `TPRData` | `time`; `temperature` and signals along it | s; °C and mV, as the rig writes them |
+| `LVData`, `MSData`, `GCData` | `tos` | s |
+
+### Text and figures
+
+These apply to comments, docstrings, printed output and every figure.
+
+- **No em dashes.** Use a comma, colon, full stop or a new sentence. En dashes in numeric ranges are fine (`780–900 cm⁻¹`).
+- **Lowercase** axis labels, tick labels and legend entries; capitals only in titles, proper nouns and where grammar asks for them.
+- **Axis labels are `quantity / unit`**: `time / s`, `temperature / K`. A dimensionless quantity gets an en dash: `fraction / –`.
+- **Units in power notation**, not slashes: `m^2 s^-1`, `mol m^-3 s^-1`, `mV s g^-1`.
+- **Chemistry in mhchem** (`$\ce{CO2}$`) wherever math renders (notes, LaTeX). Code and plot labels stay plain text, since matplotlib has no mhchem.
+- **Fonts**: Source Sans 3 for all figure and slide text, Source Serif 4 for print maths and the thesis body; both are bundled in `phd_ui`.
+
+### Code
+
+- NumPy/SciPy-style docstrings on every public class, method, function and property.
+- Optional backends (SpectroChemPy, RamanSPy, `requests`) are imported inside the function that needs them, never at module level.
+- A new core class is re-exported at the package root in the same change.
+- A new reader comes with a small real file under `tests/` and a test that reads it.
 
 ---
 
@@ -584,6 +723,35 @@ area = c1s.integrate(282, 292)
 
 The parsers are `phd_parser.spectroscopy.xps.vamas.read_vamas` (NORM / REGULAR files; mapping and depth profiles raise `NotImplementedError` rather than reading wrong), `avantage.read_avg` and `casaxps.read_export`.
 
+#### Peak fitting without CasaXPS
+
+`XPSData.fit_peaks` does what CasaXPS did by hand and stores the result the
+way a CasaXPS export is stored (`peaks` on top of the background, `envelope`,
+the peak coordinates and `attrs["fit"]`), so `peak_table()` reads a fit made
+here and an imported one alike. The tools live in
+`phd_parser.spectroscopy.xps.fitting`:
+
+- **Lineshapes in CasaXPS notation**, parsed by `parse_lineshape`: `GL(m)` (Gaussian-Lorentzian product), `SGL(m)` (sum) and `LA(α, β, n)` (asymmetric Lorentzian convolved with a Gaussian; α acts on the high binding energy side). CasaXPS does not publish how `n` maps onto the Gaussian width, so the mapping used here is our own (`gaussian_width_scale`, 500).
+- **`PeakSpec`**: start values, bounds and CasaXPS-style constraints to another peak: `position_offset_from`, `area_ratio_to`, `fwhm_equal_to`.
+- **`doublet(...)`** builds both spin-orbit lines at once; `DOUBLETS` holds the nominal splittings and area ratios (Mo 3d 3.13 eV 2:3, Ti 2p 5.7 eV 1:2, Pd 3d 5.26 eV 2:3).
+- **`fit_peaks`** on plain arrays: bounded least squares, with standard errors from the Jacobian.
+
+```python
+from phd_parser.spectroscopy.xps import DOUBLETS, doublet
+
+mo3d = regions["Mo3d Scan"].to_cps().calibrate_binding_energy(284.8, measured_eV=285.3)
+peaks = [
+    *doublet("Mo(VI) 3d", 232.6, lineshape="LA(1.53,243)", **DOUBLETS["Mo 3d"]),
+    *doublet("Mo(V) 3d", 231.3, lineshape="LA(1.53,243)", **DOUBLETS["Mo 3d"]),
+]
+fitted = mo3d.fit_peaks(peaks, background="shirley", min_eV=226, max_eV=240)
+fitted.peak_table()      # position, FWHM, area, area fraction and their errors
+```
+
+The Mo(V) / Mo(VI) split of a broad, charged spectrum is not determined by the
+data alone. Fix the chemical shift and tie the widths (`position_offset_from`,
+`fwhm_equal_to`), or the share wanders with the choice of lineshape.
+
 ---
 
 ### LabView
@@ -656,9 +824,20 @@ co = gc.get_evolution("CO", detector="tcd")      # amount vs injection, with tos
 
 `XRDData` wraps an `xarray.DataArray` with the 2θ angle in degrees throughout. Layouts: `(angle,)` for a single diffractogram and `(scan, angle)` for a series, with optional `tos` and `timestamp` coordinates that every processing step keeps.
 
-- **Constructor**: `from_e1290` (two-column `.xy` file from the E1290 setup)
-- **Accessors**: `angle`, cached `angle_rad`, `theta_deg`, `theta_rad`; `d_spacing(wavelength_angstrom)` and `q_vector(wavelength_angstrom)` via Bragg's law (Cu Kα₁ is 1.5406 Å); `values`, `ndim`, `shape`, `timestamps`
+- **Constructors**: `from_bruker_xy` (Bruker D8 Advance-ECO, the DIFFRAC.EVA `.xy` export with its header line), `from_e1290` (the same two columns without the header; kept for old notebooks, the name is historical)
+- **Accessors**: `angle`, cached `angle_rad`, `theta_deg`, `theta_rad`; `d_spacing(wavelength_angstrom)` and `q_vector(wavelength_angstrom)` via Bragg's law (Cu Kα₁ is 1.5406 Å); `values`, `ndim`, `shape`, `timestamps`, `metadata`
 - **Processing**: `sort`, `select_angle_range`, `smooth_savgol`, `smooth_gaussian` (sigma in degrees), `smooth_moving`
+- **Analysis**: `fit_reflection(two_theta_deg, window_deg, lineshape)` (one pseudo-Voigt, Gaussian or Lorentzian line plus a linear background; returns a `ReflectionFit`), `scherrer_size(two_theta_deg, fwhm_deg, instrumental_fwhm_deg=...)` (crystallite size in nm; the instrumental width is subtracted in quadrature, the wavelength comes from the file's anode and falls back to 1.5406 Å)
+
+```python
+xrd = pp.XRDData.from_bruker_xy(xy_file)                 # anode, operator, time per step in xrd.metadata
+fit = xrd.fit_reflection(25.3, window_deg=1.5)           # anatase (101)
+size_nm = xrd.scherrer_size(fit.position_deg, fit.fwhm_deg, instrumental_fwhm_deg=0.08)
+```
+
+**Reference cards** (`phd_parser.xrd.pdf_card`): ICDD PDF cards exported as tab-separated text are read by `ReferenceCard.from_file` (or `read_pdf_card` for the plain dict). The card number and phase come from the file name (`PDF 78-2486_TiO2-Anatase.txt`). `two_theta(wavelength_angstrom)` recomputes the line positions from the d-spacings for another wavelength, `strongest(n)` picks the strongest lines and `select_two_theta_range` cuts a window, which is what you need to mark reference lines in a plot.
+
+**Bruker DIFFRAC.EVA** (`phd_parser.xrd.bruker.read_xy`): one header line of `Key: "value"` pairs and two columns 2θ / counts. The anode gives the Kα₁ wavelength (`ANODE_WAVELENGTH_ANGSTROM`), which is stored in the attributes next to `source_file` and `anode`.
 
 ---
 
@@ -674,12 +853,43 @@ The parser `phd_parser.tga.e2290.read_export` splits the file into its five tagg
 
 ---
 
+### TPR (temperature-programmed reduction)
+
+`TPRData` wraps an `xarray.Dataset` over `time` in s, with `temperature` in °C
+and the detector signals (`tcd_h2`, `tcd_o2`, and `fid` where the rig had one)
+in mV. The signals keep the sign of the file: on the in-house rig a reduction
+is a *positive* excursion of `tcd_h2`, and `scale(signal, -1)` is the explicit
+flip when you need the other sign.
+
+- **Constructors**: `from_labview_tcd` (the export of the LabVIEW TPR rig; both column layouts, with an FID column until 2026-07-13 and with `date` / `time` columns from 2026-07-23), `from_arrays`, `from_netcdf`
+- **Accessors**: `time`, `temperature`, `signals`, `n_points`, `sample_name`, `sample_weight_mg`, `start_time`, `comment`, `timestamps`, `get_signal`, `integrate(signal, min_s, max_s)`, `heating_rate()`
+- **Processing (immutable, recorded)**: `select_time_range`, `select_temperature_range`, `smooth_moving`, `scale`, `per_gram` (divides by the sample weight), `subtract_baseline(signal, "linear" | "constant", time_window_s=... or anchor_points_s=...)`; every subtracted baseline accumulates in `<signal>_baseline`
+- **Export**: `to_dataframe`, `to_netcdf`
+
+```python
+tpr_raw = pp.TPRData.from_labview_tcd(txt_file)
+tpr = (
+    tpr_raw
+    .subtract_baseline("tcd_h2", "linear", anchor_points_s=[600, 4200])   # before and after the peak
+    .per_gram("tcd_h2")
+)
+consumption = tpr.integrate("tcd_h2")      # mV s g^-1
+```
+
+The TCD is not calibrated for H₂, so a consumption is an area in mV s g⁻¹ and
+compares runs on the same rig, not absolute amounts. The parser
+(`phd_parser.tpr.labview_tcd`, `COLUMN_MAP`) tolerates a decimal comma in the
+sample weight and keeps unknown or unnamed columns as further signals with a
+warning.
+
+---
+
 ### Physisorption (N₂ physisorption / BET)
 
 `PhysisorptionData` is the container for a single isotherm *branch*: relative pressure versus quantity adsorbed (cm³ g⁻¹ STP), wrapped like a single spectrum. A reading that produces both branches returns two instances. The BET fit is modelled directly alongside the curve it was derived from; everything else an instrument reports (t-Plot, BJH, sample log) is preserved verbatim under `.report`.
 
 - **Constructors**: `from_tristar_xls` (Micromeritics TriStar II 3020 multi-report `.XLS`; returns a dict with `"adsorption"` / `"desorption"`), `from_arrays`, `from_netcdf`
-- **Accessors**: `relative_pressure`, `values`, `n_points`, `bet`, `surface_area_bet` (m² g⁻¹), `report`; `get_quantity_adsorbed(target_relative_pressure, method, tolerance)`
+- **Accessors**: `relative_pressure`, `values`, `n_points`, `bet`, `surface_area_bet` (m² g⁻¹), `report`, `header`, `sample_name`, `sample_mass_g`; `get_quantity_adsorbed(target_relative_pressure, method, tolerance)`
 - **Export**: `to_netcdf`
 
 ```python
@@ -689,13 +899,13 @@ adsorption.surface_area_bet                     # BET surface area in m^2 g^-1
 adsorption.report["analyses"]["t_plot"]         # everything else MicroActive reported
 ```
 
-**TriStar II 3020** (`phd_parser.physisorption.tristar.read_export`): parses a MicroActive "print selected reports to Excel" export, where every report is its own block of columns separated by a `"|"` divider, with a generic state machine for `key: value` rows, notes and one data table per block.
+**TriStar II 3020** (`phd_parser.physisorption.tristar.read_export`): parses a MicroActive "print selected reports to Excel" export, where every report is its own block of columns separated by a `"|"` divider, with a generic state machine for `key: value` rows, notes and one data table per block. The report labels change capitalisation between exports ("BET Surface Area" in 2026-07, "BET surface area" earlier), so every lookup goes through `tristar.scalar`, which ignores case.
 
 ---
 
 ## Development
 
-- Conventions (docstrings, naming, the `with_` / `set_` / `del_` trio, time origins, NetCDF, history) are in [`CLAUDE.md`](CLAUDE.md); it is the contract for humans too.
+- The *Conventions* section above is the summary for users. The full contract, with the reasons behind each rule (docstrings, naming, the `with_` / `set_` / `del_` trio, time origins, NetCDF, history), is [`CLAUDE.md`](CLAUDE.md), and it binds humans too. Keep the two in sync.
 - Tests run against real exports under `tests/`; a new reader comes with a small real file and a test that reads it.
 - `uv build` produces the wheel and sdist; the version is in `pyproject.toml` and is recorded in every history entry.
 

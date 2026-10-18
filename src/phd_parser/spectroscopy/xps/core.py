@@ -15,11 +15,13 @@ the two branches of a physisorption isotherm.
 Readers: :meth:`XPSData.from_vamas` (ISO 14976 ``.vms``, the raw export of
 Avantage and what CasaXPS reads), :meth:`XPSData.from_avantage_avg` (Thermo
 Avantage ``.avg`` text dump) and :meth:`XPSData.from_casaxps_export` (the
-tab-separated export of a CasaXPS fit). Every processing step returns a new
-object and is recorded in the history.
+tab-separated export of a CasaXPS fit). :meth:`XPSData.fit_peaks` does the
+CasaXPS curve fit here (``xps/fitting.py``) and stores it the same way.
+Every processing step returns a new object and is recorded in the history.
 """
 
 import logging
+from collections.abc import Sequence
 from datetime import datetime
 from functools import cached_property
 from pathlib import Path
@@ -61,7 +63,10 @@ class XPSData(HistoryMixin, BaseModel):
         ``envelope`` (the sum of a fit) and the 2-D ``peaks`` over
         ``(peak, binding_energy)`` with the coordinates ``peak_name``,
         ``peak_position_eV``, ``peak_fwhm_eV``, ``peak_area`` and
-        ``peak_lineshape`` of a CasaXPS fit. ``ds.attrs`` hold
+        ``peak_lineshape`` of a fit, imported from CasaXPS or made by
+        :meth:`fit_peaks` (which adds ``peak_area_fraction`` and the
+        summary ``ds.attrs['fit']``). The peak curves and the envelope sit on
+        top of the ``background``, as CasaXPS exports them. ``ds.attrs`` hold
         ``technique`` (``'xps'``), ``region``, ``sample``, ``species_label``,
         ``source_energy_eV``, ``data_type`` (``'counts'``, ``'cps'`` or
         ``'arbitrary'``), ``dwell_time_s``, ``n_scans``, ``pass_energy_eV``,
@@ -207,6 +212,49 @@ class XPSData(HistoryMixin, BaseModel):
     def envelope(self) -> Optional[npt.NDArray]:
         """The fit envelope (sum of peaks and background), or ``None``."""
         return self.ds["envelope"].values if "envelope" in self.ds else None
+
+    def peak_table(self) -> pd.DataFrame:
+        """The fitted peaks as one row each, for a CasaXPS import and for :meth:`fit_peaks` alike.
+
+        Returns
+        -------
+        pandas.DataFrame
+            Columns ``name``, ``position_eV``, ``fwhm_eV``, ``area``,
+            ``area_fraction`` (of the summed area), ``height`` (maximum of
+            the peak curve above the background) and ``lineshape``; a fit
+            made here adds ``position_error_eV``, ``fwhm_error_eV`` and
+            ``area_error``.
+
+        Raises
+        ------
+        ValueError
+            If no fit is stored.
+        """
+        if not self.has_fit:
+            raise ValueError("No peak fit stored; run fit_peaks or read a CasaXPS export")
+        coords = self.ds.coords
+        area = np.asarray(coords["peak_area"].values, dtype=float)
+        if "peak_area_fraction" in coords:
+            fraction = np.asarray(coords["peak_area_fraction"].values, dtype=float)
+        else:
+            total = float(np.nansum(area))
+            fraction = area / total if total else np.full_like(area, np.nan)
+        curves = self.ds["peaks"].values
+        offset = self.background if self.has_background else 0.0
+        frame = pd.DataFrame({
+            "name": coords["peak_name"].values,
+            "position_eV": np.asarray(coords["peak_position_eV"].values, dtype=float),
+            "fwhm_eV": np.asarray(coords["peak_fwhm_eV"].values, dtype=float),
+            "area": area,
+            "area_fraction": fraction,
+            "height": np.nanmax(curves - offset, axis=1),
+            "lineshape": coords["peak_lineshape"].values,
+        })
+        fitted = self.ds.attrs.get("fit", {}).get("peaks") if isinstance(self.ds.attrs.get("fit"), dict) else None
+        if fitted and [entry.get("name") for entry in fitted] == list(frame["name"]):
+            for column in ("position_error_eV", "fwhm_error_eV", "area_error"):
+                frame[column] = [np.nan if entry.get(column) is None else float(entry[column]) for entry in fitted]
+        return frame
 
     def integrate(self, min_eV: Optional[float] = None, max_eV: Optional[float] = None) -> float:
         """Area under the spectrum over a binding energy window (trapezoid rule).
@@ -470,6 +518,123 @@ class XPSData(HistoryMixin, BaseModel):
         ds["background"] = xr.DataArray(background, dims=[AXIS], coords={AXIS: ds.coords[AXIS]})
         ds.attrs = {**self.ds.attrs, "background_method": method,
                     "background_window_eV": [min_eV, max_eV]}
+        return self._new(ds)
+
+    @records_step
+    def fit_peaks(
+        self,
+        peaks: Sequence[Any],
+        *,
+        background: Optional[Literal["shirley", "linear"]] = "shirley",
+        min_eV: Optional[float] = None,
+        max_eV: Optional[float] = None,
+        weights: Any = None,
+        **kwargs: Any,
+    ) -> "XPSData":
+        """Fit CasaXPS-style peaks to the region and store the fit the way a CasaXPS export is stored.
+
+        The background is subtracted inside the window (:meth:`subtract_background`),
+        the peaks are fitted to the net signal of the window
+        (:func:`phd_parser.spectroscopy.xps.fitting.fit_peaks`), and the result
+        is stored as CasaXPS exports it: ``data`` stays as it is, the fitted
+        ``background`` is kept, and ``peaks`` and ``envelope`` are drawn on
+        top of the background over the whole axis, so ``data``, ``background``,
+        ``envelope`` and ``peaks`` plot together and ``peaks - background``
+        are the net peaks. ``peak_area`` and the other coordinates are the
+        net quantities. With ``background=None`` the data are fitted as they
+        are (use it after your own :meth:`subtract_background`).
+
+        Parameters
+        ----------
+        peaks : sequence of PeakSpec
+            What to fit, see :class:`~phd_parser.spectroscopy.xps.fitting.PeakSpec`
+            and :func:`~phd_parser.spectroscopy.xps.fitting.doublet`.
+        background : {"shirley", "linear"} or None, optional
+            Background subtracted inside the window before the fit (default
+            is ``"shirley"``); ``None`` subtracts nothing.
+        min_eV, max_eV : float or None, optional
+            The window in binding energy that the background and the fit use;
+            ``None`` leaves that side open.
+        weights : None, "poisson" or numpy.ndarray, optional
+            Residual weights. ``"poisson"`` is ``1 / sqrt(max(data, 1))`` from
+            the data *before* background subtraction, right for counts; an
+            array must have one weight per point of the whole axis.
+        **kwargs
+            Passed on to :func:`~phd_parser.spectroscopy.xps.fitting.fit_peaks`
+            (``max_nfev``).
+
+        Returns
+        -------
+        XPSData
+            New instance with ``envelope``, the 2-D ``peaks`` with the
+            coordinates ``peak_name``, ``peak_position_eV``, ``peak_fwhm_eV``,
+            ``peak_area``, ``peak_area_fraction`` and ``peak_lineshape``,
+            ``analysis_source = 'phd_parser'`` and ``ds.attrs['fit']``, the
+            JSON-safe summary (statistics, per-peak numbers with their
+            standard errors, the specifications, the background used).
+
+        Raises
+        ------
+        ValueError
+            If the window holds fewer points than there are free parameters,
+            or for an invalid specification (see ``fitting.fit_peaks``).
+        """
+        from phd_parser.spectroscopy.xps.fitting import PeakSpec, fit_peaks as fit_peaks_to_arrays
+
+        specs = [spec if isinstance(spec, PeakSpec) else PeakSpec(**dict(spec)) for spec in peaks]
+        source = self if background is None else self.subtract_background(background, min_eV, max_eV)
+        energy = source.binding_energy
+        mask = np.ones(energy.size, dtype=bool)
+        if min_eV is not None:
+            mask &= energy >= min_eV
+        if max_eV is not None:
+            mask &= energy <= max_eV
+        if isinstance(weights, str) and weights == "poisson":
+            weight_array: Any = (1.0 / np.sqrt(np.maximum(self.values, 1.0)))[mask]
+        elif weights is None:
+            weight_array = None
+        else:
+            weight_array = np.asarray(weights, dtype=float)
+            if weight_array.shape != energy.shape:
+                raise ValueError(f"weights must have one value per point of the axis ({energy.size}), got {weight_array.shape}")
+            weight_array = weight_array[mask]
+        result = fit_peaks_to_arrays(energy[mask], source.values[mask], specs, weights=weight_array, **kwargs)
+        if mask.sum() <= result.n_free_parameters:
+            raise ValueError(f"Only {int(mask.sum())} points in the window for {result.n_free_parameters} free parameters")
+
+        offset = source.background if background is not None else np.zeros_like(energy)
+        curves = np.stack([
+            spec.resolved_lineshape.evaluate(energy, peak.position_eV, peak.fwhm_eV, peak.area)
+            for spec, peak in zip(result.specs, result.peaks)
+        ])
+        ds = source.ds.drop_vars([name for name in ("peaks", "envelope", "peak", "peak_name", "peak_position_eV",
+                                                    "peak_fwhm_eV", "peak_area", "peak_area_fraction",
+                                                    "peak_lineshape") if name in source.ds.variables])
+        ds["data"] = xr.DataArray(self.values, dims=[AXIS], coords={AXIS: ds.coords[AXIS]})  # the curves sit on the background
+        ds["envelope"] = xr.DataArray(curves.sum(axis=0) + offset, dims=[AXIS], coords={AXIS: ds.coords[AXIS]})
+        ds["peaks"] = xr.DataArray(
+            curves + offset[np.newaxis, :], dims=["peak", AXIS],
+            coords={
+                "peak": np.arange(len(result.peaks)),
+                AXIS: ds.coords[AXIS],
+                "peak_name": ("peak", np.asarray([peak.name for peak in result.peaks], dtype=str)),
+                "peak_position_eV": ("peak", np.asarray([peak.position_eV for peak in result.peaks], dtype=float)),
+                "peak_fwhm_eV": ("peak", np.asarray([peak.fwhm_eV for peak in result.peaks], dtype=float)),
+                "peak_area": ("peak", np.asarray([peak.area for peak in result.peaks], dtype=float)),
+                "peak_area_fraction": ("peak", np.asarray([peak.area_fraction for peak in result.peaks], dtype=float)),
+                "peak_lineshape": ("peak", np.asarray([peak.lineshape for peak in result.peaks], dtype=str)),
+            },
+        )
+        summary = result.to_dict()
+        summary["background"] = {
+            "method": background,
+            "window_eV": [min_eV, max_eV],
+            "included_in_curves": background is not None,
+            "weights": weights if weights is None or isinstance(weights, str) else "array",
+        }
+        ds.attrs = {**source.ds.attrs, "analysis_source": "phd_parser", "fit": to_json_safe(summary)}
+        if not result.success:
+            logger.warning(f"Peak fit of {self.region!r} did not converge: {result.message}")
         return self._new(ds)
 
     # ----------------------------------------------------------------

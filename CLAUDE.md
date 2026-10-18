@@ -88,6 +88,14 @@ are optional extras (`phd_parser[spectrochempy]`, `[ramanspy]`, `[url]`,
 `[all]`); import them lazily inside the function that needs them, never at
 module level.
 
+## Conventions are mirrored in the README
+
+The rules below (docstrings, naming, method prefixes, units, text and plot
+style) are summarised for users in the *Conventions* section of `README.md`,
+and the mixin design is explained there under *Core concepts / Mixins*. When
+a rule here changes, change the README in the same edit. The README is the
+summary; this file stays the contract.
+
 ## Docstrings
 
 All public classes, methods, functions, and properties must have a NumPy/SciPy-style docstring:
@@ -164,13 +172,14 @@ own method if it is ever needed.
 
 ## Text & plot style conventions
 
-Applies to code comments, docstrings, printed/repr output, and figures (titles, axis labels, tick labels, legends, annotations). The same rule set lives in `me.md` in the Obsidian vault and in the sibling repos' `CLAUDE.md` files (`phd_execute`, `phd_ui`, `phd_models`); keep them in sync if this changes.
+Applies to code comments, docstrings, printed/repr output, and figures (titles, axis labels, tick labels, legends, annotations). The same rule set lives in `me.md` in the Obsidian vault, in the *Conventions* section of `README.md`, and in the sibling repos' `CLAUDE.md` files (`phd_execute`, `phd_ui`, `phd_models`); keep them in sync if this changes.
 
 - No em dashes ("—"). Use a comma, colon, period, or separate sentence instead. En dashes in numeric ranges are fine (`780–900 cm⁻¹`).
 - Capitalize only in headers/titles, proper nouns, or where otherwise grammatically correct. Axis labels, tick labels, legend entries, and other in-plot text are lowercase by default.
 - Axis labels use the format `quantity / unit` (the quantity divided by its unit), e.g. `time / s`, `temperature / K`. If the quantity is dimensionless, use an en dash "–" in place of the unit, e.g. `fraction / –`.
 - Units and exponents use power notation, not slashes: `m^2 s^-1`, `mol m^-3 s^-1`, not `m^2/s`, `mol/m^3/s`. Applies in code, plots, printed output, and LaTeX math. In Obsidian notes, `\frac{}{}` fraction style is fine in math environments; code and plots still use the power form.
 - Chemical species, formulas and reactions use the mhchem `\ce{}` package, always inside math: `$\ce{CO2}$`, `$\ce{Cu^0}$`, `$\ce{Al^3+}$`, `$\ce{CO2 + 3H2 <=> CH3OH + H2O}$`. Applies to Obsidian notes and LaTeX (thesis). Plain text stays only where math cannot render: file names/note titles, wikilinks, frontmatter, and code/plot labels (matplotlib has no mhchem).
+- Fonts: two families, both open and bundled in `phd_ui`: Source Sans 3 and Source Serif 4. Source Sans 3 is used for all figure and slide text, with hierarchy by size and weight, never a second sans. Maths matches the body text it sits beside: Source Serif 4 in print figures and the thesis body, Source Sans 3 italic on slides. Words and units upright, quantities italic. Matplotlib uses mathtext, not usetex. Slides use Source Sans 3 (embedded in the pptx) instead of Segoe UI. Thesis: LuaLaTeX, Source Serif 4 body, Source Sans 3 headings and captions, unicode-math with Source Serif 4 letters over STIX Two Math symbols. Details, preamble and open to-dos: `phd_ui` CLAUDE.md, section *Typography*.
 
 ## Architecture
 
@@ -186,10 +195,12 @@ Each instrument type lives in its own subpackage under `src/phd_parser/`:
 | `xrd` | `XRDData` | `xr.DataArray` |
 | `spectroscopy` | `SpectroscopyData`, the one class for IR and Raman; `IRData` (`infrared/readers.py`) and `RamanData` (`raman/readers.py`) are reader namespaces, not classes; `XPSData` (`xps/core.py`) for photoelectron spectra | `xr.Dataset` |
 | `tga` | `TGAData` | two NumPy arrays |
+| `tpr` | `TPRData` | `xr.Dataset` |
 | `massspec` | `MSData` | `xr.Dataset` |
 | `physisorption` | `PhysisorptionData` | `xr.DataArray` |
 | `chromatography` | `GCData` | `xr.Dataset` |
 | `naming` | *(no data class)*; `species` conventions and `rename_species` | JSON files |
+| `pipeline` | *(no data class)*; `Pipeline` and `Step` | JSON files |
 
 Every subpackage follows the same structure:
 - `core.py`: the Pydantic `BaseModel` wrapper class
@@ -199,7 +210,18 @@ Every subpackage follows the same structure:
 
 **Pydantic `BaseModel` wrappers.** All core classes subclass `pydantic.BaseModel`. The xarray object is stored as a field; field validators handle construction-time checks and never edit the object they are given (copy, then assign attributes).
 
-**Core classes are re-exported at the package root.** `pp.GCData is pp.chromatography.GCData`, and the same for every core class plus `IRData` / `RamanData` (the spectroscopy readers) and `rename_species` / `SpeciesConvention`. A new core class gets its line in `phd_parser/__init__.py` (and in `tests/test_top_level_imports.py`) in the same change.
+**Core classes are re-exported at the package root.** `pp.GCData is pp.chromatography.GCData`, and the same for every core class plus `IRData` / `RamanData` (the spectroscopy readers), `rename_species` / `SpeciesConvention` and `Pipeline` / `Step`. A new core class gets its line in `phd_parser/__init__.py` (and in `tests/test_top_level_imports.py`) in the same change.
+
+**Shared behaviour lives in mixins, never in copies.** A mixin is a plain
+class with methods and no fields, inherited next to `BaseModel`
+(`class LVData(TimeOriginMixin, HistoryMixin, BaseModel)`). Two exist across
+classes: `TimeOriginMixin` (`_time.py`, needs `ds`, `tos`, `_new(ds)`,
+`select_tos_range` from its host) and `HistoryMixin` (`history.py`, needs
+`ds`). `SpectroscopyData` also uses mixins to split itself by topic (see
+*Spectroscopy layout*). A host adapts a mixin through its hooks (e.g.
+`_tos_start_raw`, `_with_tos_start`), never by overriding or copying the
+public methods. When a second class needs a behaviour that one class already
+has, move it into a mixin rather than duplicating it.
 
 **Immutable processing API.** Every processing method (smoothing, baseline correction, normalization, selection) returns a *new* instance rather than mutating `self`. Use chaining: `ir.normalise_max().smooth_savgol()`.
 
@@ -246,8 +268,8 @@ result from recorded steps but should be recorded as one (e.g.
 `metadata` too, via `_with_history`. The history is plain JSON data;
 `to_netcdf` must write it (`encode_attrs` / `decode_attrs`, prefix `json:`),
 and a new class with `to_netcdf` gets a round-trip test of it in
-`tests/test_history.py`. `SpectroscopyData`, `XPSData`, `GCData`, `MSData`
-and `LVData` record; `XRDData`, `TGAData` and `PhysisorptionData` do not yet.
+`tests/test_history.py`. `SpectroscopyData`, `XPSData`, `GCData`, `MSData`,
+`LVData` and `TPRData` record; `XRDData`, `TGAData` and `PhysisorptionData` do not yet.
 
 ### Pipelines
 
@@ -372,7 +394,74 @@ in a notebook.
 
 ### Physisorption isotherm shape
 
-`PhysisorptionData` wraps a *single* isotherm branch, one `xr.DataArray` named `quantity_adsorbed`, dims `("relative_pressure",)`, exactly like a single spectrum or XRD pattern elsewhere in this repo. There is no "branch" concept baked into the type: a reading that produces both adsorption and desorption (e.g. `from_tristar_xls`) returns a `dict[str, PhysisorptionData]` with keys `"adsorption"`/`"desorption"` instead of one dual-branch object. The BET fit (conventionally derived from the adsorption branch) is modelled directly as `.attrs["bet"]`, since every physisorption instrument and analysis method agrees on it. Everything else a parser extracts (t-Plot, BJH, sample log, instrument header) is preserved verbatim under `.attrs["report"]` (JSON-encoded so both survive NetCDF round-trips) rather than given dedicated properties. Parser modules (e.g. `tristar.py`) should still extract as much as the source format offers; the core class only grows new typed accessors when one is actually needed.
+`PhysisorptionData` wraps a *single* isotherm branch, one `xr.DataArray` named `quantity_adsorbed`, dims `("relative_pressure",)`, exactly like a single spectrum or XRD pattern elsewhere in this repo. There is no "branch" concept baked into the type: a reading that produces both adsorption and desorption (e.g. `from_tristar_xls`) returns a `dict[str, PhysisorptionData]` with keys `"adsorption"`/`"desorption"` instead of one dual-branch object. The BET fit (conventionally derived from the adsorption branch) is modelled directly as `.attrs["bet"]`, since every physisorption instrument and analysis method agrees on it. Everything else a parser extracts (t-Plot, BJH, sample log, instrument header) is preserved verbatim under `.attrs["report"]` (JSON-encoded so both survive NetCDF round-trips) rather than given dedicated properties. Parser modules (e.g. `tristar.py`) should still extract as much as the source format offers; the core class only grows new typed accessors when one is actually needed. The report labels change capitalisation between exports ("BET Surface Area" in 2026-07, "BET surface area" earlier), so every lookup goes through `tristar.scalar`, which ignores case; `sample_name`, `sample_mass_g` and `header` are the accessors that exist.
+
+### XRD readers and crystallite size
+
+`XRDData` reads the Bruker D8 Advance-ECO through `from_bruker_xy` (parser
+`xrd/bruker.py`, `read_xy`): the DIFFRAC.EVA `.xy` export, one header line
+of `Key: "value"` pairs (operator, anode, scan type, time per step) and two
+columns 2θ / counts. The header goes into `metadata`; `wavelength_angstrom`
+(Kα1 of the anode, `ANODE_WAVELENGTH_ANGSTROM`), `source_file` and `anode`
+go into `da.attrs`. `from_e1290` / `read_xy_e1290` read the same file
+without its header (kept for the old notebooks; "E1290" is a misnomer, the
+test fixture is one of Julius' own exports). ICDD reference cards exported
+as tab-separated text are read by `xrd/pdf_card.py` (`read_pdf_card`,
+`ReferenceCard`): columns `d_spacing_angstrom, two_theta_deg, intensity, h,
+k, l, comment`, card number and phase parsed from the file name;
+`two_theta(wavelength)` recomputes the card's 2θ from the d-spacings,
+`strongest(n)` picks lines. `xrd/analysis.py` holds the pure functions
+`pseudo_voigt`, `fit_reflection` (one line plus linear background,
+`scipy.optimize.curve_fit`, returns a `ReflectionFit`) and `scherrer`
+(instrumental width subtracted in quadrature); `XRDData.fit_reflection` and
+`XRDData.scherrer_size` wrap them, the latter taking the wavelength from
+`da.attrs` and falling back to 1.5406 Å. Mind that the student's reference
+folder holds a `PDF 76-1807_MoO2.txt` that is byte-identical to the anatase
+card: it is not an MoO2 card.
+
+### TPR layout
+
+`TPRData` (`tpr/core.py`) wraps an `xr.Dataset` over `time` in s with
+`temperature` in °C and the detector signals (`tcd_h2`, `tcd_o2`, `fid`
+when present) in mV, with the file's sign: on the in-house rig a reduction
+is a *positive* excursion of `tcd_h2`, and `scale(signal, -1)` is the
+explicit flip. `tpr/labview_tcd.py` reads the rig's LabVIEW export;
+`COLUMN_MAP` maps the two export layouts (with an FID column until
+2026-07-13, with `date`/`time` columns from 2026-07-23), the sample weight
+tolerates a decimal comma, unknown or unnamed columns are kept with a
+warning. Baselines accumulate in `<signal>_baseline`; `per_gram`,
+`integrate`, `heating_rate` and the two selections follow the conventions
+of the other classes. The TCD is not calibrated for H2, so a consumption is
+an area in mV s g^-1.
+
+### XPS peak fitting
+
+`spectroscopy/xps/fitting.py` does what CasaXPS did by hand: the lineshapes
+`GL(m)` (product), `SGL(m)` (sum) and `LA(α, β, n)` (asymmetric Lorentzian
+convolved with a Gaussian; α acts on the high binding energy side, the
+Gaussian FWHM is `w · n / gaussian_width_scale` with scale 500, our own
+mapping since CasaXPS does not publish one), parsed from the CasaXPS
+notation by `parse_lineshape`; `PeakSpec` with bounds and the constraints
+`position_offset_from`, `area_ratio_to`, `fwhm_equal_to`; `doublet(...)`
+with the nominal splittings in `DOUBLETS` (Mo 3d 3.13 eV 2:3, Ti 2p 5.7 eV
+1:2, Pd 3d 5.26 eV 2:3); `fit_peaks` on arrays (bounded least squares,
+standard errors from the Jacobian). `XPSData.fit_peaks` subtracts the
+background in the window, fits, and stores the result in the layout of a
+CasaXPS export (`peaks` on top of the background, `envelope`, coordinates
+`peak_name`, `peak_position_eV`, `peak_fwhm_eV`, `peak_area`,
+`peak_area_fraction`, `peak_lineshape`, `attrs["fit"]`); `peak_table()`
+reads either source. Fitted peaks are **peaks**, never components. The
+Mo(V)/Mo(VI) split of a broad, charged spectrum is not determined by the
+data: fix the chemical shift and tie the widths, or the share wanders with
+the lineshape.
+
+### Logging survives SpectroChemPy
+
+SpectroChemPy closes every logging handler when it first reads a `.spa`
+file (it calls `logging.shutdown`). `setup_logger` therefore installs a
+`ReopeningFileHandler`, which reopens `phd_parser.log` in append mode when
+that happens; a plain `FileHandler` in write mode stays silent for the rest
+of the run (found 2026-10-18, when every DRIFTS log came out empty).
 
 ## Open work
 

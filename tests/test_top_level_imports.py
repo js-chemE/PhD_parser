@@ -10,6 +10,7 @@ def test_core_classes_at_the_top_level():
     assert pp.PhysisorptionData is pp.physisorption.PhysisorptionData
     assert pp.RamanData is pp.spectroscopy.raman.RamanData
     assert pp.TGAData is pp.tga.TGAData
+    assert pp.TPRData is pp.tpr.TPRData
     assert pp.XRDData is pp.xrd.XRDData
     assert pp.XPSData is pp.spectroscopy.xps.XPSData
     assert pp.rename_species is pp.naming.rename_species

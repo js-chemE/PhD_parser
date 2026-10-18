@@ -9,6 +9,23 @@ LEVELS = {
     "NOTSET": logging.NOTSET,
 }
 
+class ReopeningFileHandler(logging.FileHandler):
+    """A ``FileHandler`` that survives a ``logging.shutdown()`` by someone else.
+
+    SpectroChemPy closes every logging handler when it first reads a file.
+    A closed ``FileHandler`` that was opened in write mode never reopens, so
+    everything the parser logs after the first ``.spa`` read is lost. This
+    handler reopens its file in append mode instead, keeping what was written.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if self.stream is None:
+            self.mode = "a"
+            self._closed = False
+            self.stream = self._open()
+        super().emit(record)
+
+
 def setup_logger(level: int | str = logging.INFO, use_file_handler=True, use_console_handler=False):
     """Configure the ``phd_parser`` package logger.
 
@@ -26,9 +43,9 @@ def setup_logger(level: int | str = logging.INFO, use_file_handler=True, use_con
         case-insensitive.  Defaults to ``logging.INFO``.
     use_file_handler : bool, optional
         When ``True`` (default), attach a
-        :class:`logging.FileHandler` that writes to
+        :class:`ReopeningFileHandler` that writes to
         ``phd_parser.log`` in the current working directory (mode
-        ``'w'``).
+        ``'w'``, reopened in append mode if a library closes it).
     use_console_handler : bool, optional
         When ``True``, attach a :class:`logging.StreamHandler` that
         writes to ``stderr`` (default is ``False``).
@@ -44,7 +61,7 @@ def setup_logger(level: int | str = logging.INFO, use_file_handler=True, use_con
     formatter = logging.Formatter('%(asctime)s %(levelname)-8s %(name)s %(message)s')
 
     if use_file_handler:
-        fh = logging.FileHandler('phd_parser.log', mode='w', encoding='utf-8')
+        fh = ReopeningFileHandler('phd_parser.log', mode='w', encoding='utf-8')
         fh.setFormatter(formatter)
         pkg_logger.addHandler(fh)
 

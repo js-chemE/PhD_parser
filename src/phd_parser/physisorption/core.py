@@ -136,6 +136,26 @@ class PhysisorptionData(BaseModel):
         return _decode_json_attr(self.quantity_adsorbed.attrs.get("bet"))
 
     @property
+    def header(self) -> dict[str, Any]:
+        """The sample and instrument header of the report (sample, operator, file, start, mass), ``{}`` without a report."""
+        header = self.report.get("header") or {}
+        return header.get("scalars", {}) if isinstance(header, dict) else {}
+
+    @property
+    def sample_name(self) -> Optional[str]:
+        """The sample name the instrument recorded, or ``None``."""
+        value = tristar.scalar(self.header, "Sample")
+        return None if value is None else str(value)
+
+    @property
+    def sample_mass_g(self) -> Optional[float]:
+        """The sample mass in g as recorded in the report header, or ``None``."""
+        value = tristar.scalar(self.header, "Sample mass")
+        if isinstance(value, dict):
+            value = value.get("value")
+        return None if value is None else float(value)
+
+    @property
     def surface_area_bet(self) -> Optional[float]:
         """BET specific surface area in m²/g.
 

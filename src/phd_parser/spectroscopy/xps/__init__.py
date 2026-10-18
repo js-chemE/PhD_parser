@@ -12,4 +12,6 @@ import phd_parser.spectroscopy.xps.casaxps as casaxps
 import phd_parser.spectroscopy.xps.vamas as vamas
 from phd_parser.spectroscopy.xps.core import XPSData
 
-__all__ = ["XPSData", "avantage", "casaxps", "vamas"]
+__all__ = ["fitting", "PeakSpec", "doublet", "DOUBLETS", "parse_lineshape", "fit_peaks", "XPSData", "avantage", "casaxps", "vamas"]
+from phd_parser.spectroscopy.xps import fitting
+from phd_parser.spectroscopy.xps.fitting import PeakSpec, doublet, DOUBLETS, parse_lineshape, fit_peaks
