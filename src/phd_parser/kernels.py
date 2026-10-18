@@ -1,7 +1,11 @@
-"""Kernels: simple, parametrised peak shapes over plain arrays.
+"""Kernels: simple, parametrised lineshapes over plain arrays.
 
-One home for every lineshape the parser and the analysis code fit or draw,
-whatever the technique (XPS, XRD, Raman, IR, mock spectra). Nothing here
+A lineshape is the shape of a line or distribution along one axis: a
+spectral band, an XRD reflection, a chromatographic peak, a resonance curve,
+a size distribution, a probability density (an area-scaled kernel with area 1
+is one; the Gaussian is the normal, the Lorentzian the Cauchy distribution).
+This module is the one home for every lineshape the parser and the analysis
+code fit or draw, whatever the technique or axis. Nothing here
 fits anything: the fits live with their technique
 (:func:`phd_parser.spectroscopy.xps.fitting.fit_peaks`,
 :func:`phd_parser.xrd.analysis.fit_reflection`) and evaluate these shapes.
@@ -14,6 +18,23 @@ Lorentzian fraction ``eta``); :func:`pseudo_voigt_area` gives the area.
 Used for XRD reflections and mock spectra. Any of them, or
 ``functools.partial(pseudo_voigt, eta=0.4)``, is a valid kernel for a
 generic multi-peak fit taking ``f(x, center, width, height)``.
+
+**The Lorentzian fraction has two conventions.** ``eta`` weighs the two parts
+at equal *height* by default (CasaXPS ``SGL``, this module's history) or at
+equal *area* with ``fraction="area"`` (most diffraction literature, the
+Thompson-Cox-Hastings formula). :func:`eta_to_area_fraction` and
+:func:`eta_to_height_fraction` convert; the curve is the same, only the
+number differs (height 0.57 is area 0.67).
+
+**The Voigt profile** itself, the convolution of a Gaussian and a Lorentzian,
+is :func:`voigt` (area-scaled, two widths), with :func:`voigt_fwhm` and
+:func:`voigt_to_pseudo_voigt` relating it to the one-width approximations.
+
+**Two asymmetric distributions** outside XPS, both area-scaled:
+:func:`exponentially_modified_gaussian` (a Gaussian convolved with an
+exponential decay, the tailing peak of chromatography) and :func:`log_normal`
+(a quantity whose logarithm is normally distributed, the usual particle- and
+pore-size distribution).
 
 **Area-scaled**, ``f(x, center, fwhm, area, ...)``, written the way CasaXPS
 writes them: :func:`gaussian_lorentzian_product` (``GL(m)``),
@@ -36,15 +57,18 @@ import math
 import re
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Literal, Optional, Union
+from typing import Literal, Optional, Tuple, Union
 
 import numpy as np
 import numpy.typing as npt
 from scipy.signal import fftconvolve
-from scipy.special import erfcx, gammaln
+from scipy.special import erfc, erfcx, gammaln, voigt_profile
 
 __all__ = [
     "gaussian", "lorentzian", "pseudo_voigt", "pseudo_voigt_area",
+    "EtaFraction", "eta_to_area_fraction", "eta_to_height_fraction",
+    "voigt", "voigt_fwhm", "voigt_to_pseudo_voigt",
+    "exponentially_modified_gaussian", "log_normal",
     "gaussian_lorentzian_sum", "gaussian_lorentzian_product", "lorentzian_asymmetric",
     "Lineshape", "LineshapeKind", "parse_lineshape",
     "GAUSSIAN_UNIT_AREA", "LORENTZIAN_UNIT_AREA", "DEFAULT_GAUSSIAN_WIDTH_SCALE",
@@ -56,6 +80,7 @@ LORENTZIAN_UNIT_AREA = math.pi / 2.0  # area of 1 / (1 + 4 u^2), unit height, un
 DEFAULT_GAUSSIAN_WIDTH_SCALE = 500.0
 
 LineshapeKind = Literal["GL", "SGL", "LA"]
+EtaFraction = Literal["height", "area"]
 
 
 # ----------------------------------------------------------------
@@ -113,14 +138,75 @@ def lorentzian(
     return height / (1.0 + ((x - center) / half_width) ** 2)
 
 
+def eta_to_area_fraction(eta: float) -> float:
+    """Convert a Lorentzian fraction weighted at equal height into one weighted at equal area.
+
+    Parameters
+    ----------
+    eta : float
+        Height-weighted Lorentzian fraction, 0 to 1 (``pseudo_voigt``'s default, CasaXPS ``SGL``).
+
+    Returns
+    -------
+    float
+        ``eta L / (eta L + (1 - eta) G)``, with ``L = pi / 2`` and ``G = sqrt(pi / (4 ln 2))``
+        the areas of the unit-height, unit-width Lorentzian and Gaussian.
+    """
+    eta = _check_fraction(eta)
+    lorentzian_part = eta * LORENTZIAN_UNIT_AREA
+    return float(lorentzian_part / (lorentzian_part + (1.0 - eta) * GAUSSIAN_UNIT_AREA))
+
+
+def eta_to_height_fraction(eta_area: float) -> float:
+    """Convert a Lorentzian fraction weighted at equal area into one weighted at equal height.
+
+    Parameters
+    ----------
+    eta_area : float
+        Area-weighted Lorentzian fraction, 0 to 1 (diffraction literature, Thompson-Cox-Hastings).
+
+    Returns
+    -------
+    float
+        ``eta_area G / (eta_area G + (1 - eta_area) L)``, the inverse of :func:`eta_to_area_fraction`.
+    """
+    eta_area = _check_fraction(eta_area)
+    gaussian_part = eta_area * GAUSSIAN_UNIT_AREA
+    return float(gaussian_part / (gaussian_part + (1.0 - eta_area) * LORENTZIAN_UNIT_AREA))
+
+
+def _check_fraction(eta: float) -> float:
+    eta = float(eta)
+    if not 0.0 <= eta <= 1.0:
+        raise ValueError(f"A Lorentzian fraction must lie in [0, 1], got {eta}")
+    return eta
+
+
+def _height_eta(eta: float, fraction: EtaFraction) -> float:
+    """The height-weighted fraction for either convention."""
+    if fraction == "height":
+        return _check_fraction(eta)
+    if fraction == "area":
+        return eta_to_height_fraction(eta)
+    raise ValueError(f"fraction must be 'height' or 'area', got {fraction!r}")
+
+
 def pseudo_voigt(
     x: npt.NDArray[np.float64],
     center: float,
     fwhm: float,
     height: float,
     eta: float = 0.5,
+    *,
+    fraction: EtaFraction = "height",
 ) -> npt.NDArray[np.float64]:
-    """Pseudo-Voigt line: ``eta`` Lorentzian plus ``1 - eta`` Gaussian of one width and height.
+    """Pseudo-Voigt line: a Lorentzian and a Gaussian of one width, scaled to one height.
+
+    ``height * [e L1(x) + (1 - e) G1(x)]`` with ``L1``, ``G1`` of unit height
+    and ``e`` the height-weighted fraction. With ``fraction="area"`` the
+    given ``eta`` is read as the share of the *area* that is Lorentzian and
+    converted first (:func:`eta_to_height_fraction`); the curve for a given
+    shape is the same either way, only the number that names it differs.
 
     Parameters
     ----------
@@ -134,16 +220,19 @@ def pseudo_voigt(
         Value at the maximum.
     eta : float, optional
         Lorentzian fraction, 0 (Gaussian) to 1 (Lorentzian); default 0.5.
+    fraction : {"height", "area"}, optional
+        How ``eta`` weighs the two parts (default ``"height"``).
 
     Returns
     -------
     ndarray of float
         The line at ``x``.
     """
-    return eta * lorentzian(x, center, fwhm, height) + (1.0 - eta) * gaussian(x, center, fwhm, height)
+    weight = _height_eta(eta, fraction)
+    return weight * lorentzian(x, center, fwhm, height) + (1.0 - weight) * gaussian(x, center, fwhm, height)
 
 
-def pseudo_voigt_area(fwhm: float, height: float, eta: float) -> float:
+def pseudo_voigt_area(fwhm: float, height: float, eta: float, *, fraction: EtaFraction = "height") -> float:
     """Integrated area of a pseudo-Voigt line.
 
     Parameters
@@ -154,13 +243,231 @@ def pseudo_voigt_area(fwhm: float, height: float, eta: float) -> float:
         Value at the maximum.
     eta : float
         Lorentzian fraction.
+    fraction : {"height", "area"}, optional
+        How ``eta`` weighs the two parts (default ``"height"``), see :func:`pseudo_voigt`.
 
     Returns
     -------
     float
-        ``height * fwhm * (eta * pi / 2 + (1 - eta) * sqrt(pi / (4 ln 2)))``.
+        ``height * fwhm * (e * pi / 2 + (1 - e) * sqrt(pi / (4 ln 2)))`` with ``e`` the height-weighted fraction.
     """
-    return float(height * fwhm * (eta * LORENTZIAN_UNIT_AREA + (1.0 - eta) * GAUSSIAN_UNIT_AREA))
+    weight = _height_eta(eta, fraction)
+    return float(height * fwhm * (weight * LORENTZIAN_UNIT_AREA + (1.0 - weight) * GAUSSIAN_UNIT_AREA))
+
+
+def voigt(
+    x: npt.NDArray[np.float64],
+    center: float,
+    gaussian_fwhm: float,
+    lorentzian_fwhm: float,
+    area: float,
+) -> npt.NDArray[np.float64]:
+    """Voigt profile: a Gaussian convolved with a Lorentzian, scaled to its area.
+
+    ``V = G ⊛ L`` has no closed form; it is evaluated through the Faddeeva
+    function (``scipy.special.voigt_profile``). The convolution keeps the
+    area, so ``area`` is exact. Unlike the one-width approximations it takes
+    the two physical widths; its own FWHM follows from them (:func:`voigt_fwhm`).
+    Either width may be zero (pure Lorentzian or pure Gaussian).
+
+    Parameters
+    ----------
+    x : ndarray of float
+        Points to evaluate at.
+    center : float
+        Position of the maximum.
+    gaussian_fwhm : float
+        FWHM of the Gaussian part (instrument, inhomogeneous broadening).
+    lorentzian_fwhm : float
+        FWHM of the Lorentzian part (lifetime broadening).
+    area : float
+        Integrated area over all ``x``.
+
+    Returns
+    -------
+    ndarray of float
+        The profile at ``x``.
+
+    Raises
+    ------
+    ValueError
+        If a width is negative or both are zero.
+    """
+    if gaussian_fwhm < 0 or lorentzian_fwhm < 0 or (gaussian_fwhm == 0 and lorentzian_fwhm == 0):
+        raise ValueError(f"Voigt widths must be non-negative and not both zero, got {gaussian_fwhm}, {lorentzian_fwhm}")
+    sigma = gaussian_fwhm / math.sqrt(2.0 * FOUR_LN2)
+    gamma = lorentzian_fwhm / 2.0
+    return area * voigt_profile(np.asarray(x, dtype=float) - center, sigma, gamma)
+
+
+def voigt_fwhm(gaussian_fwhm: float, lorentzian_fwhm: float) -> float:
+    """FWHM of a Voigt profile from its two widths (Olivero & Longbothum 1977).
+
+    Parameters
+    ----------
+    gaussian_fwhm, lorentzian_fwhm : float
+        The widths of the two parts.
+
+    Returns
+    -------
+    float
+        ``0.5346 wL + sqrt(0.2166 wL^2 + wG^2)``, accurate to about 0.02 %.
+    """
+    return float(0.5346 * lorentzian_fwhm + math.sqrt(0.2166 * lorentzian_fwhm**2 + gaussian_fwhm**2))
+
+
+def voigt_to_pseudo_voigt(
+    gaussian_fwhm: float, lorentzian_fwhm: float, *, fraction: EtaFraction = "height"
+) -> Tuple[float, float]:
+    """The pseudo-Voigt that approximates a given Voigt: its width and Lorentzian fraction.
+
+    Thompson, Cox & Hastings (1987): the width is
+    ``f = (wG^5 + 2.69269 wG^4 wL + 2.42843 wG^3 wL^2 + 4.47163 wG^2 wL^3 + 0.07842 wG wL^4 + wL^5)^(1/5)``
+    and the area-weighted fraction ``1.36603 q - 0.47719 q^2 + 0.11116 q^3``
+    with ``q = wL / f``. The result agrees with the Voigt to about 1 % of its
+    height.
+
+    Parameters
+    ----------
+    gaussian_fwhm, lorentzian_fwhm : float
+        The widths of the Voigt's two parts.
+    fraction : {"height", "area"}, optional
+        Convention of the returned fraction (default ``"height"``, what
+        :func:`pseudo_voigt` takes by default).
+
+    Returns
+    -------
+    tuple of float
+        ``(fwhm, eta)``.
+    """
+    wg, wl = float(gaussian_fwhm), float(lorentzian_fwhm)
+    width = (wg**5 + 2.69269 * wg**4 * wl + 2.42843 * wg**3 * wl**2 + 4.47163 * wg**2 * wl**3
+             + 0.07842 * wg * wl**4 + wl**5) ** 0.2
+    q = wl / width
+    eta_area = min(max(1.36603 * q - 0.47719 * q**2 + 0.11116 * q**3, 0.0), 1.0)
+    if fraction == "area":
+        return float(width), float(eta_area)
+    if fraction == "height":
+        return float(width), eta_to_height_fraction(eta_area)
+    raise ValueError(f"fraction must be 'height' or 'area', got {fraction!r}")
+
+
+def exponentially_modified_gaussian(
+    x: npt.NDArray[np.float64],
+    center: float,
+    gaussian_fwhm: float,
+    tau: float,
+    area: float,
+) -> npt.NDArray[np.float64]:
+    """Exponentially modified Gaussian (EMG): a Gaussian convolved with an exponential decay.
+
+    The shape of a peak that is broadened symmetrically (diffusion, the
+    instrument) and then dragged out by a first-order process with time
+    constant ``tau`` (slow desorption, a dead volume, a detector response):
+    the classic tailing peak of chromatography. In statistics it is the
+    density of the sum of a normal and an exponential random variable. With
+    ``mu = center`` and ``sigma`` from ``gaussian_fwhm``::
+
+        EMG(x) = A / (2 tau) exp(sigma^2 / (2 tau^2) - (x - mu) / tau)
+                 erfc[(sigma / tau - (x - mu) / sigma) / sqrt(2)]
+
+    evaluated through ``erfcx`` on the far side so that it neither overflows
+    nor underflows. A negative ``tau`` mirrors the shape (a fronting peak);
+    ``tau = 0`` is the Gaussian. Mean ``mu + tau``, variance
+    ``sigma^2 + tau^2``; the maximum lies between ``mu`` and the mean, and
+    ``gaussian_fwhm`` is the width of the Gaussian part, not of the curve.
+
+    Parameters
+    ----------
+    x : ndarray of float
+        Points to evaluate at.
+    center : float
+        Centre ``mu`` of the Gaussian part (not the maximum of the curve).
+    gaussian_fwhm : float
+        FWHM of the Gaussian part, ``2 sqrt(2 ln 2) sigma``.
+    tau : float
+        Time constant of the exponential, in the units of ``x``; positive tails
+        to high ``x``, negative to low ``x``.
+    area : float
+        Integrated area over all ``x``.
+
+    Returns
+    -------
+    ndarray of float
+        The curve at ``x``.
+
+    Raises
+    ------
+    ValueError
+        If ``gaussian_fwhm`` is not positive.
+    """
+    if gaussian_fwhm <= 0:
+        raise ValueError(f"gaussian_fwhm must be positive, got {gaussian_fwhm}")
+    sigma = gaussian_fwhm / math.sqrt(2.0 * FOUR_LN2)
+    x = np.asarray(x, dtype=float)
+    if tau == 0:
+        return area * np.exp(-0.5 * ((x - center) / sigma) ** 2) / (sigma * math.sqrt(2.0 * math.pi))
+    if tau < 0:
+        return exponentially_modified_gaussian(2.0 * center - x, center, gaussian_fwhm, -tau, area)
+    shifted = (x - center) / sigma
+    z = (sigma / tau - shifted) / math.sqrt(2.0)
+    out = np.empty_like(shifted)
+    left = z >= 0  # erfc small or moderate: the erfcx form is safe
+    out[left] = np.exp(-0.5 * shifted[left] ** 2) * erfcx(z[left])
+    right = ~left  # deep in the tail: the exponent is negative there, the direct form is safe
+    out[right] = np.exp(0.5 * (sigma / tau) ** 2 - shifted[right] * sigma / tau) * erfc(z[right])
+    return area / (2.0 * tau) * out
+
+
+def log_normal(
+    x: npt.NDArray[np.float64],
+    median: float,
+    sigma_ln: float,
+    area: float,
+) -> npt.NDArray[np.float64]:
+    """Log-normal distribution: ``ln x`` is normally distributed.
+
+    The shape of a positive quantity built up by many small *multiplicative*
+    steps (grinding, growth, sintering), as the Gaussian is for additive
+    ones: the usual particle-, crystallite- and pore-size distribution::
+
+        LN(x) = A / (x sigma_ln sqrt(2 pi)) exp[-(ln x - ln median)^2 / (2 sigma_ln^2)]
+
+    for ``x > 0`` and zero elsewhere. Half the area lies below ``median``;
+    the maximum is at ``median exp(-sigma_ln^2)``, the mean at
+    ``median exp(sigma_ln^2 / 2)``; the tail is to large ``x``. On a
+    logarithmic axis it is a Gaussian of standard deviation ``sigma_ln``.
+
+    Parameters
+    ----------
+    x : ndarray of float
+        Points to evaluate at (only ``x > 0`` carries weight).
+    median : float
+        The median, ``exp(mu)`` of the underlying normal distribution.
+    sigma_ln : float
+        Standard deviation of ``ln x``, dimensionless (geometric standard deviation ``exp(sigma_ln)``).
+    area : float
+        Integrated area over all ``x``.
+
+    Returns
+    -------
+    ndarray of float
+        The curve at ``x``.
+
+    Raises
+    ------
+    ValueError
+        If ``median`` or ``sigma_ln`` is not positive.
+    """
+    if median <= 0 or sigma_ln <= 0:
+        raise ValueError(f"median and sigma_ln must be positive, got {median}, {sigma_ln}")
+    x = np.asarray(x, dtype=float)
+    out = np.zeros_like(x)
+    positive = x > 0
+    xp = x[positive]
+    out[positive] = np.exp(-0.5 * (np.log(xp / median) / sigma_ln) ** 2) / (xp * sigma_ln * math.sqrt(2.0 * math.pi))
+    return area * out
+
 
 
 # ----------------------------------------------------------------
@@ -174,6 +481,8 @@ def gaussian_lorentzian_sum(
     fwhm: float,
     area: float,
     lorentzian_fraction: float,
+    *,
+    fraction: EtaFraction = "height",
 ) -> npt.NDArray[np.float64]:
     """CasaXPS ``SGL(m)``: the weighted sum of a Gaussian and a Lorentzian of the same width.
 
@@ -194,6 +503,9 @@ def gaussian_lorentzian_sum(
         Integrated area over all energies.
     lorentzian_fraction : float
         Lorentzian weight ``m`` between 0 (Gaussian) and 1 (Lorentzian).
+    fraction : {"height", "area"}, optional
+        ``"height"`` (default) is CasaXPS's meaning of ``m``; ``"area"`` reads
+        it as the Lorentzian share of the area, see :func:`pseudo_voigt`.
 
     Returns
     -------
@@ -201,7 +513,7 @@ def gaussian_lorentzian_sum(
         The curve, same shape as ``x``.
     """
     reduced = (np.asarray(x, dtype=float) - center) / fwhm
-    weight = float(lorentzian_fraction)
+    weight = _height_eta(lorentzian_fraction, fraction)
     shape = (1.0 - weight) * np.exp(-FOUR_LN2 * reduced**2) + weight / (1.0 + 4.0 * reduced**2)
     unit_area = fwhm * ((1.0 - weight) * GAUSSIAN_UNIT_AREA + weight * LORENTZIAN_UNIT_AREA)
     return area / unit_area * shape

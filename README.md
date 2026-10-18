@@ -76,8 +76,9 @@ raw files --> parser module --> (vendor converter) --> core data class --> your 
 `raman` and `xps` readers inside), `massspec`, `labview`, `xrd`, `tga`,
 `tpr`, `physisorption`, `chromatography`. Peak shapes are not technique
 specific and sit in one top-level module, `phd_parser.kernels` (Gaussian,
-Lorentzian, pseudo-Voigt; CasaXPS `GL`, `SGL`, `LA`), which every fit
-imports. Inside each subpackage sits the core class in `core.py`
+Lorentzian, pseudo-Voigt, Voigt; CasaXPS `GL`, `SGL`, `LA`), which every fit
+imports. The pseudo-Voigt fraction `eta` is height-weighted unless
+`fraction="area"` is passed (the diffraction convention). Inside each subpackage sits the core class in `core.py`
 and one parser module per instrument or software (`omnic.py`, `quadstar.py`,
 `b67box5.py`). Where a technique has several manufacturers, each gets its own
 subfolder (`chromatography/agilent/`), so a second vendor is added next to the

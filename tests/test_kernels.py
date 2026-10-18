@@ -1,6 +1,7 @@
 """Kernels: the height-scaled Gaussian, Lorentzian and pseudo-Voigt, and the CasaXPS GL, SGL and LA."""
 import numpy as np
 import pytest
+from scipy.signal import fftconvolve
 
 from phd_parser import kernels
 from phd_parser.kernels import (
@@ -109,3 +110,104 @@ def test_gl_fwhm_is_the_true_width():
         assert half.max() - half.min() == pytest.approx(1.6, abs=1e-3)
         if m < 1.0:     # a pure Lorentzian keeps ~10 % of its area beyond +-5 eV
             assert np.trapezoid(curve, energy) == pytest.approx(1.0, rel=1e-3)
+
+
+# ----------------------------------------------------------------
+# the fraction convention and the Voigt profile
+# ----------------------------------------------------------------
+
+def test_eta_conversions_are_inverse_and_hit_the_ends():
+    for eta in (0.0, 0.2, 0.574, 0.9, 1.0):
+        assert kernels.eta_to_height_fraction(kernels.eta_to_area_fraction(eta)) == pytest.approx(eta, abs=1e-12)
+    assert kernels.eta_to_area_fraction(0.574) == pytest.approx(0.665, abs=1e-3)
+    with pytest.raises(ValueError):
+        kernels.eta_to_area_fraction(1.2)
+
+
+def test_area_fraction_gives_that_share_of_the_area_to_the_lorentzian():
+    x = np.linspace(-2000.0, 2000.0, 400_001)
+    eta_area = 0.4
+    total = pseudo_voigt(x, 0.0, 1.0, 1.0, eta_area, fraction="area")
+    eta_h = kernels.eta_to_height_fraction(eta_area)
+    lorentzian_part = eta_h * lorentzian(x, 0.0, 1.0, 1.0)
+    assert np.trapezoid(lorentzian_part, x) / np.trapezoid(total, x) == pytest.approx(eta_area, rel=1e-3)
+    assert pseudo_voigt_area(1.0, 1.0, eta_area, fraction="area") == pytest.approx(pseudo_voigt_area(1.0, 1.0, eta_h))
+    sgl = gaussian_lorentzian_sum(x, 0.0, 1.0, 2.0, eta_area, fraction="area")
+    np.testing.assert_allclose(sgl, gaussian_lorentzian_sum(x, 0.0, 1.0, 2.0, eta_h))
+    with pytest.raises(ValueError):
+        pseudo_voigt(x, 0.0, 1.0, 1.0, 0.5, fraction="width")
+
+
+def test_voigt_is_the_convolution_with_exact_area_and_known_width():
+    x = np.linspace(-60.0, 60.0, 240_001)
+    v = kernels.voigt(x, 0.0, 1.0, 1.0, 3.0)
+    g = gaussian(x, 0.0, 1.0, 1.0) / (kernels.GAUSSIAN_UNIT_AREA * 1.0)
+    l = lorentzian(x, 0.0, 1.0, 1.0) / (kernels.LORENTZIAN_UNIT_AREA * 1.0)
+    conv = 3.0 * fftconvolve(g, l, mode="same") * (x[1] - x[0])
+    assert np.abs(conv - v).max() / v.max() < 1e-3
+    above = x[v >= v.max() / 2]
+    assert above.max() - above.min() == pytest.approx(kernels.voigt_fwhm(1.0, 1.0), rel=1e-3)
+    # the limits: no Lorentzian is a Gaussian, no Gaussian a Lorentzian, both scaled to the area
+    np.testing.assert_allclose(kernels.voigt(x, 0.0, 1.0, 0.0, 1.0), g, atol=1e-12)
+    np.testing.assert_allclose(kernels.voigt(x, 0.0, 0.0, 1.0, 1.0), l, atol=1e-12)
+    with pytest.raises(ValueError):
+        kernels.voigt(x, 0.0, 0.0, 0.0, 1.0)
+
+
+def test_voigt_to_pseudo_voigt_is_close_and_reports_both_conventions():
+    x = np.linspace(-40.0, 40.0, 80_001)
+    for wl in (0.25, 1.0, 4.0):
+        width, eta = kernels.voigt_to_pseudo_voigt(1.0, wl)
+        _, eta_area = kernels.voigt_to_pseudo_voigt(1.0, wl, fraction="area")
+        assert eta_area == pytest.approx(kernels.eta_to_area_fraction(eta))
+        v = kernels.voigt(x, 0.0, 1.0, wl, 1.0)
+        pv = gaussian_lorentzian_sum(x, 0.0, width, 1.0, eta)
+        assert np.abs(pv - v).max() / v.max() < 0.02
+
+
+# ----------------------------------------------------------------
+# asymmetric distributions: EMG and log-normal
+# ----------------------------------------------------------------
+
+def test_emg_matches_scipy_and_has_its_moments():
+    from scipy.stats import exponnorm
+    x = np.linspace(-20.0, 60.0, 400_001)
+    fwhm, tau = 1.5, 2.0
+    sigma = fwhm / (2 * np.sqrt(2 * np.log(2)))
+    y = kernels.exponentially_modified_gaussian(x, 3.0, fwhm, tau, 2.5)
+    np.testing.assert_allclose(y, 2.5 * exponnorm.pdf(x, tau / sigma, loc=3.0, scale=sigma), atol=1e-12)
+    area = np.trapezoid(y, x)
+    assert area == pytest.approx(2.5, rel=1e-6)
+    mean = np.trapezoid(x * y, x) / area
+    assert mean == pytest.approx(3.0 + tau, rel=1e-4)
+    assert np.trapezoid((x - mean) ** 2 * y, x) / area == pytest.approx(sigma**2 + tau**2, rel=1e-4)
+    assert 3.0 < x[np.argmax(y)] < mean
+
+
+def test_emg_limits_mirror_and_extremes():
+    x = np.linspace(-30.0, 30.0, 60_001)
+    gauss = kernels.exponentially_modified_gaussian(x, 0.0, 1.0, 0.0, 1.0)
+    np.testing.assert_allclose(gauss, gaussian(x, 0.0, 1.0, 1.0) / kernels.GAUSSIAN_UNIT_AREA, atol=1e-12)
+    np.testing.assert_allclose(kernels.exponentially_modified_gaussian(x, 0.0, 1.0, 1e-4, 1.0), gauss, atol=1e-3)
+    fronting = kernels.exponentially_modified_gaussian(x, 0.0, 1.0, -2.0, 1.0)
+    np.testing.assert_allclose(fronting, kernels.exponentially_modified_gaussian(-x, 0.0, 1.0, 2.0, 1.0))
+    wide = np.linspace(-1e4, 1e4, 20_001)
+    assert np.all(np.isfinite(kernels.exponentially_modified_gaussian(wide, 0.0, 0.01, 50.0, 1.0)))
+    with pytest.raises(ValueError):
+        kernels.exponentially_modified_gaussian(x, 0.0, 0.0, 1.0, 1.0)
+
+
+def test_log_normal_matches_scipy_median_mode_and_mean():
+    from scipy.stats import lognorm
+    x = np.linspace(-1.0, 200.0, 2_000_001)
+    m, s = 4.0, 0.5
+    y = kernels.log_normal(x, m, s, 3.0)
+    np.testing.assert_allclose(y, 3.0 * lognorm.pdf(x, s, scale=m), atol=1e-12)
+    assert np.all(y[x <= 0] == 0)
+    assert np.trapezoid(y, x) == pytest.approx(3.0, rel=1e-6)
+    below = x <= m
+    assert np.trapezoid(y[below], x[below]) == pytest.approx(1.5, rel=1e-4)
+    assert x[np.argmax(y)] == pytest.approx(m * np.exp(-s**2), abs=1e-3)
+    assert np.trapezoid(x * y, x) / 3.0 == pytest.approx(m * np.exp(s**2 / 2), rel=1e-4)
+    with pytest.raises(ValueError):
+        kernels.log_normal(x, 0.0, 0.5, 1.0)

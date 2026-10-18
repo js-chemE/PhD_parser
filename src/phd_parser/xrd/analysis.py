@@ -11,7 +11,7 @@ from typing import Any, Literal, Optional
 import numpy as np
 import numpy.typing as npt
 
-from phd_parser.kernels import gaussian, lorentzian, pseudo_voigt, pseudo_voigt_area
+from phd_parser.kernels import eta_to_area_fraction, gaussian, lorentzian, pseudo_voigt, pseudo_voigt_area
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +23,10 @@ class ReflectionFit:
     """Result of :func:`fit_reflection`: one line plus a linear background.
 
     The background is ``background[0] + background[1] * (x - position_deg)``,
-    so ``background[0]`` is the background level under the maximum.
+    so ``background[0]`` is the background level under the maximum. ``eta``
+    is the Lorentzian fraction weighted at equal height (see
+    :func:`phd_parser.kernels.pseudo_voigt`); :attr:`eta_area` gives it
+    weighted at equal area, the convention of most diffraction papers.
     """
 
     position_deg: float
@@ -36,6 +39,11 @@ class ReflectionFit:
     window_deg: tuple[float, float]
     n_points: int
     standard_errors: dict[str, float] = field(default_factory=dict, repr=False)
+
+    @property
+    def eta_area(self) -> float:
+        """The Lorentzian fraction weighted at equal area."""
+        return eta_to_area_fraction(self.eta)
 
     def model(self, angle_deg: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         """Fitted line plus background at the given angles.
@@ -98,6 +106,7 @@ class ReflectionFit:
             "height": self.height,
             "area": self.area,
             "eta": self.eta,
+            "eta_area": self.eta_area,
             "background": list(self.background),
             "lineshape": self.lineshape,
             "window_deg": list(self.window_deg),
