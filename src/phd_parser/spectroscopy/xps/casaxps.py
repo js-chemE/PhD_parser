@@ -133,23 +133,15 @@ def parse_metadata_lines(lines: List[str]) -> Dict[str, Any]:
             info_counter += 1
             continue
 
-        # --- detect alternating key-value pairs (multi-key line) ---
-        if len(parts) > 2 and all(i % 2 == 0 for i in range(len(parts))):
-            # fallback safety (unlikely case)
-            pass
-
-        # better detection: alternating key-value pattern
-        if len(parts) >= 4:
-            is_alternating = True
-            for i in range(1, len(parts), 2):
-                # values should be convertible OR strings
-                _ = _convert_value(parts[i])
-            if is_alternating:
-                for i in range(0, len(parts) - 1, 2):
-                    key = parts[i]
-                    value = _convert_value(parts[i + 1])
-                    metadata.setdefault(key, []).append(value)
-                continue
+        # --- alternating key-value pairs ("Characteristic Energy eV  1486.68  Acquisition Time s  0.5") ---
+        # only when every even cell is text and every odd cell a number; a peak table row
+        # ("Name  A  B  C", "Position  458.8  464.5  460.5") has text or numbers throughout
+        if len(parts) >= 4 and len(parts) % 2 == 0 and all(
+            isinstance(_convert_value(parts[i]), str) == (i % 2 == 0) for i in range(len(parts))
+        ):
+            for i in range(0, len(parts) - 1, 2):
+                metadata.setdefault(parts[i], []).append(_convert_value(parts[i + 1]))
+            continue
 
         # --- normal key + values ---
         key = parts[0]

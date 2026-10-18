@@ -61,3 +61,17 @@ def test_read_export():
         assert key in metadata, f"Metadata should contain '{key}' key, but it is missing"
     assert not ke_df.empty, "Kinetic energy DataFrame should not be empty"
     assert not be_df.empty, "Binding energy DataFrame should not be empty"
+
+def test_three_peak_table_is_not_read_as_key_value_pairs(tmp_path):
+    from phd_parser.spectroscopy.xps.casaxps import parse_metadata_lines
+    meta = parse_metadata_lines([
+        "\tCharacteristic Energy eV\t1.486680e+003\tAcquisition Time s\t5.000000e-001",
+        "Name\t\tTi(IV) 2p3/2\tTi(IV) 2p1/2\tTi 2p\t",
+        "Position\t\t458.78\t464.48\t460.48\t",
+        "FWHM\t\t1.73\t2.48\t1.99\t",
+        "Lineshape\t\tLA(50)\tLA(50)\tLA(50)\t",
+    ])
+    assert meta["Name"] == ["Ti(IV) 2p3/2", "Ti(IV) 2p1/2", "Ti 2p"]
+    assert meta["Position"] == [458.78, 464.48, 460.48]
+    assert len(meta["peaks"]) == 3 and meta["peaks"][1]["FWHM"] == 2.48
+    assert meta["Characteristic Energy eV"] == [1486.68]

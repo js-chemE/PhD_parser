@@ -459,6 +459,7 @@ class XPSData(HistoryMixin, BaseModel):
         max_eV: Optional[float] = None,
         max_iterations: int = 100,
         tolerance: float = 1e-6,
+        average_eV: float = 0.0,
     ) -> "XPSData":
         """Subtract a Shirley or linear background and keep the subtracted curve as ``background``.
 
@@ -479,6 +480,11 @@ class XPSData(HistoryMixin, BaseModel):
         tolerance : float, optional
             Stop when the background changes by less than this fraction of
             its range (default is 1e-6).
+        average_eV : float, optional
+            Each end point of the background is the mean of the data within
+            this many eV of the window edge instead of the single edge value
+            (CasaXPS's "average width"); on a noisy spectrum one point decides
+            the background level otherwise. Default 0 (single points).
 
         Returns
         -------
@@ -505,6 +511,12 @@ class XPSData(HistoryMixin, BaseModel):
         if mask.sum() < 2:
             raise ValueError(f"Fewer than two points in [{min_eV}, {max_eV}] eV")
         window_energy, window_values = energy_sorted[mask], values_sorted[mask]
+        if average_eV > 0:
+            window_values = window_values.copy()
+            low_edge = window_energy <= window_energy[0] + average_eV
+            high_edge = window_energy >= window_energy[-1] - average_eV
+            window_values[0] = float(np.mean(window_values[low_edge]))
+            window_values[-1] = float(np.mean(window_values[high_edge]))
         if method == "linear":
             window_background = np.interp(window_energy, window_energy[[0, -1]], window_values[[0, -1]])
         else:
@@ -517,7 +529,7 @@ class XPSData(HistoryMixin, BaseModel):
         ds["data"] = xr.DataArray(values - background, dims=[AXIS], coords={AXIS: ds.coords[AXIS]})
         ds["background"] = xr.DataArray(background, dims=[AXIS], coords={AXIS: ds.coords[AXIS]})
         ds.attrs = {**self.ds.attrs, "background_method": method,
-                    "background_window_eV": [min_eV, max_eV]}
+                    "background_window_eV": [min_eV, max_eV], "background_average_eV": average_eV}
         return self._new(ds)
 
     @records_step
@@ -529,6 +541,7 @@ class XPSData(HistoryMixin, BaseModel):
         min_eV: Optional[float] = None,
         max_eV: Optional[float] = None,
         weights: Any = None,
+        average_eV: float = 0.0,
         **kwargs: Any,
     ) -> "XPSData":
         """Fit CasaXPS-style peaks to the region and store the fit the way a CasaXPS export is stored.
@@ -555,6 +568,9 @@ class XPSData(HistoryMixin, BaseModel):
         min_eV, max_eV : float or None, optional
             The window in binding energy that the background and the fit use;
             ``None`` leaves that side open.
+        average_eV : float, optional
+            End-point averaging of the background, see :meth:`subtract_background`
+            (default 0).
         weights : None, "poisson" or numpy.ndarray, optional
             Residual weights. ``"poisson"`` is ``1 / sqrt(max(data, 1))`` from
             the data *before* background subtraction, right for counts; an
@@ -582,7 +598,7 @@ class XPSData(HistoryMixin, BaseModel):
         from phd_parser.spectroscopy.xps.fitting import PeakSpec, fit_peaks as fit_peaks_to_arrays
 
         specs = [spec if isinstance(spec, PeakSpec) else PeakSpec(**dict(spec)) for spec in peaks]
-        source = self if background is None else self.subtract_background(background, min_eV, max_eV)
+        source = self if background is None else self.subtract_background(background, min_eV, max_eV, average_eV=average_eV)
         energy = source.binding_energy
         mask = np.ones(energy.size, dtype=bool)
         if min_eV is not None:

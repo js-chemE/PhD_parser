@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from phd_parser.spectroscopy.xps import XPSData
+from phd_parser.spectroscopy.xps import fitting
 from phd_parser.spectroscopy.xps.fitting import (
     DOUBLETS,
     Lineshape,
@@ -76,7 +77,7 @@ def test_parse_lineshape_round_trips_the_casaxps_notation():
     assert parse_lineshape("gl(30)") == Lineshape("GL", lorentzian_fraction=0.3)
     la = parse_lineshape("LA(1.53,243)")
     assert la.kind == "LA" and la.alpha == la.beta == 1.53 and la.gaussian_width_index == 243
-    for bad in ("Voigt(30)", "GL(30,40)", "LA(1)", "GL(130)", "LA(0.4,1,10)"):
+    for bad in ("Voigt(30)", "GL(30,40)", "LA(0.5)", "GL(130)", "LA(0.4,1,10)"):
         with pytest.raises(ValueError):
             parse_lineshape(bad)
 
@@ -224,3 +225,57 @@ def test_netcdf_round_trip_keeps_the_fit(tmp_path):
     # a refit replaces the stored peaks instead of piling up coordinates
     again = back.fit_peaks(specs, min_eV=226, max_eV=240)
     assert again.ds["peaks"].shape == (2, again.n_points) and again.history[-1]["step"] == "fit_peaks"
+
+
+# ----------------------------------------------------------------
+# ranged relations, width ratio, LA(a), information criteria, end-point averaging
+# ----------------------------------------------------------------
+
+def test_la_with_one_number_is_la_a_a_0():
+    shape = fitting.parse_lineshape("LA(50)")
+    assert shape.alpha == shape.beta == 50 and shape.gaussian_width_index == 0 and shape.casaxps == "LA(50)"
+    energy = np.linspace(-10, 10, 4001)
+    assert np.trapezoid(shape.evaluate(energy, 0.0, 1.5, 2.0), energy) == pytest.approx(2.0, rel=1e-3)
+
+
+def test_ranged_offset_and_width_ratio_are_recovered():
+    energy = np.linspace(450, 472, 1101)
+    truth = (fitting.gaussian_lorentzian_product(energy, 458.6, 1.2, 100.0, 0.3)
+             + fitting.gaussian_lorentzian_product(energy, 458.6 + 5.72, 1.2 * 1.45, 50.0, 0.3))
+    specs = [
+        fitting.PeakSpec("2p3/2", 458.4, 1.0),
+        fitting.PeakSpec("2p1/2", 464.0, 1.0, position_offset_from=("2p3/2", (5.5, 5.9)),
+                         area_ratio_to=("2p3/2", 0.5), fwhm_ratio_to=("2p3/2", (1.0, 2.0))),
+    ]
+    result = fitting.fit_peaks(energy, truth, specs)
+    second = {p.name: p for p in result.peaks}["2p1/2"]
+    first = {p.name: p for p in result.peaks}["2p3/2"]
+    assert second.position_eV - first.position_eV == pytest.approx(5.72, abs=1e-3)
+    assert second.fwhm_eV / first.fwhm_eV == pytest.approx(1.45, rel=1e-3)
+    assert result.n_free_parameters == 5
+
+
+def test_bic_prefers_the_true_number_of_peaks():
+    rng = np.random.default_rng(1)
+    energy = np.linspace(225, 240, 751)
+    truth = fitting.gaussian_lorentzian_product(energy, 232.6, 1.4, 100.0, 0.3) + rng.normal(0, 0.05, energy.size)
+    one = fitting.fit_peaks(energy, truth, [fitting.PeakSpec("a", 232.5, 1.2)])
+    two = fitting.fit_peaks(energy, truth, [fitting.PeakSpec("a", 232.5, 1.2), fitting.PeakSpec("b", 230.0, 1.2, area=1.0)])
+    assert one.bic < two.bic
+
+
+def test_relation_range_must_be_ordered():
+    with pytest.raises(ValueError):
+        fitting.PeakSpec("b", 1.0, position_offset_from=("a", (2.0, 1.0)))
+    with pytest.raises(ValueError):
+        fitting.PeakSpec("b", 1.0, fwhm_equal_to="a", fwhm_ratio_to=("a", 1.5))
+
+
+def test_end_point_averaging_damps_a_noisy_edge():
+    energy = np.linspace(0, 10, 501)
+    values = 10 + 5 * np.exp(-((energy - 5) ** 2)) + np.where(energy > 9.99, 3.0, 0.0)   # one hot point at the high end
+    data = XPSData.from_arrays(energy, values, source_energy_eV=1486.68)
+    single = data.subtract_background("linear")
+    averaged = data.subtract_background("linear", average_eV=0.5)
+    assert single.background[-1] == pytest.approx(13.0)
+    assert averaged.background[-1] < 10.2
