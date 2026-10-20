@@ -1,3 +1,14 @@
+> [!CAUTION]
+> ## ⛔ This repository is archived and no longer maintained
+>
+> **PhD Parser has moved to the Urakawa group.** It is developed further,
+> and can be read and accessed, as
+> **[urakawa-group/lab-data-parser](https://github.com/urakawa-group/lab-data-parser)**
+> in the **[Urakawa group organisation](https://github.com/urakawa-group)**.
+>
+> Do not open issues or pull requests here, and do not install from this
+> repository. Everything in it is out of date.
+
 # PhD Parser
 
 Helper functions to read and process data from the instruments of the Urakawa
@@ -7,9 +18,6 @@ with as much metadata as the files offer. It does not model, fit or plot; that
 is what `phd_models`, `phd_ui` and `phd_execute` are for.
 
 ![Scientific Data Processing Pipeline](docs/static/data-processing.png)
-
-> [!WARNING]
-> This repo is under active development and the API still changes.
 
 > [!NOTE]
 > The package reads data and produces no scientific result of its own, so AI
